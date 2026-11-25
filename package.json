@@ -1,0 +1,50 @@
+{
+  "name": "kinokino",
+  "version": "0.4.0",
+  "description": "KinoKino — бесплатный каталог кино без рекламы",
+  "main": "main.js",
+  "author": "KinoKino",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "win.kinokino.desktop",
+    "productName": "KinoKino",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "app/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KinoKino"
+    }
+  },
+  "dependencies": {
+    "hls.js": "^1.5.17"
+  }
+}
