@@ -114,6 +114,50 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
+  Future<void> _probePlayerWindow(InAppWebViewController controller) async {
+    const script = r"""
+      (() => {
+        const videos = Array.from(document.querySelectorAll('video')).map((v) => ({
+          src: v.currentSrc || v.src || '',
+          readyState: v.readyState,
+          networkState: v.networkState,
+          paused: v.paused,
+          width: v.videoWidth,
+          height: v.videoHeight
+        }));
+        const frames = Array.from(document.querySelectorAll('iframe')).map((f) => ({
+          src: f.src || '',
+          width: f.clientWidth,
+          height: f.clientHeight
+        }));
+        const playerFrameCount = frames.filter((f) =>
+          /player|video|embed|stream|kinogo|kodik|alloha|videocdn/i.test(f.src)
+        ).length;
+        return JSON.stringify({
+          url: location.href,
+          title: document.title,
+          readyState: document.readyState,
+          videoCount: videos.length,
+          videos,
+          iframeCount: frames.length,
+          playerFrameCount,
+          frames
+        });
+      })();
+    """;
+    for (var attempt = 1; attempt <= 8 && mounted; attempt++) {
+      try {
+        final result = await controller.evaluateJavascript(source: script);
+        debugPrint('[KinoKino PLAYER_PROBE] attempt=$attempt $result');
+      } catch (e) {
+        debugPrint('[KinoKino PLAYER_PROBE] attempt=$attempt error=$e');
+      }
+      if (attempt < 8) {
+        await Future<void>.delayed(const Duration(seconds: 3));
+      }
+    }
+  }
+
   Future<bool> _showPlayerWindow(CreateWindowAction action) async {
     if (!mounted || _playerWindowOpened) {
       debugPrint('[KinoKino] ignoring extra popup: ${action.request.url}');
@@ -146,8 +190,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   debugPrint('[KinoKino] actual player popup attached'),
               onLoadStart: (_, url) =>
                   debugPrint('[KinoKino player] loading: $url'),
-              onLoadStop: (_, url) =>
-                  debugPrint('[KinoKino player] loaded: $url'),
+              onLoadStop: (controller, url) {
+                debugPrint('[KinoKino player] loaded: $url');
+                _probePlayerWindow(controller);
+              },
               onReceivedError: (_, request, error) => debugPrint(
                 '[KinoKino player] error main=${request.isForMainFrame}: ${error.description}; ${request.url}',
               ),
