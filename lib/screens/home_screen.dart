@@ -145,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final date = item.releaseDate;
     if (date.length < 4) return 0;
     final year = int.tryParse(date.substring(0, 4)) ?? 0;
-    return year <= DateTime.now().year + 2 ? year : 0;
+    return year <= DateTime.now().year ? year : 0;
   }
 
   void _sortMediaItems(List<MediaItem> items) {
