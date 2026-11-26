@@ -75,10 +75,20 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     } catch (_) {}
     picks = related.values.toList();
     if (picks.isEmpty && details != null) {
-      final section = details['recommendations'] ?? details['similar'];
-      final rows = (section is Map ? section['results'] : null) as List? ?? const [];
-      picks = rows.whereType<Map>().map((e) => MediaItem.fromJson(Map<String, dynamic>.from(e)
-        ..putIfAbsent('media_type', () => _type))).where((e) => e.id != widget.item.id).toList();
+      final fallback = <String, MediaItem>{};
+      for (final key in ['recommendations', 'similar']) {
+        final section = details[key];
+        final rows = (section is Map ? section['results'] : null) as List? ?? const [];
+        for (final row in rows.whereType<Map>()) {
+          final data = Map<String, dynamic>.from(row);
+          data.putIfAbsent('media_type', () => _type);
+          final item = MediaItem.fromJson(data);
+          if (item.id != widget.item.id && item.hasRussianTitle) {
+            fallback['${item.mediaType}:${item.id}'] = item;
+          }
+        }
+      }
+      picks = fallback.values.toList();
     }
     if (mounted) setState(() {
       _details = details;
