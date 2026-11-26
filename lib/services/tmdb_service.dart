@@ -32,6 +32,11 @@ class TmdbService {
     return Map<String, dynamic>.from(response.data);
   }
   Future<List<MediaItem>> recommendations(int id, {String type = 'movie'}) => _list('/$type/$id/recommendations');
+  Future<List<MediaItem>> similar(int id, {String type = 'movie'}) => _list('/$type/$id/similar');
+  Future<Map<String, dynamic>> seasonDetails(int id, int seasonNumber) async {
+    final response = await _dio.get('/tv/$id/season/$seasonNumber');
+    return Map<String, dynamic>.from(response.data);
+  }
   Future<Map<String, dynamic>> watchProviders(int id, {String type = 'movie', String region = 'NL'}) async {
     final response = await _dio.get('/$type/$id/watch/providers');
     final results = response.data['results'] as Map? ?? const {};
