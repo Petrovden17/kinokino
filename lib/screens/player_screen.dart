@@ -405,11 +405,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       const SizedBox(height: 16),
                       FilledButton.icon(onPressed: _initialize, icon: const Icon(Icons.refresh), label: const Text('Повторить')),
                       const SizedBox(height: 8),
-                      OutlinedButton.icon(
-                        onPressed: _initialize,
-                        icon: const Icon(Icons.open_in_browser),
-                        label: const Text('Повторить запуск'),
-                      ),
                     ],
                   )))
                 : !ready || c == null
