@@ -25,7 +25,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _value = widget.service.settings;
   }
 
-  Widget _colorChoice(Color color, String label) {\n    final selected = _value.accentColorValue == color.value;\n    return InkWell(\n      borderRadius: BorderRadius.circular(12),\n      onTap: () => _save(_value.copyWith(accentColorValue: color.value)),\n      child: Container(\n        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),\n        decoration: BoxDecoration(\n          color: selected ? color.withValues(alpha: .16) : Colors.white.withValues(alpha: .035),\n          borderRadius: BorderRadius.circular(12),\n          border: Border.all(color: selected ? color : Colors.white24, width: selected ? 1.6 : 1),\n        ),\n        child: Row(mainAxisSize: MainAxisSize.min, children: [\n          Container(width: 18, height: 18, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),\n          const SizedBox(width: 7), Text(label),\n          if (selected) ...[const SizedBox(width: 5), Icon(Icons.check, size: 15, color: color)],\n        ]),\n      ),\n    );\n  }\n\n  Future<void> _save(AppSettings next) async {
+  Widget _colorChoice(Color color, String label) {
+    final selected = _value.accentColorValue == color.value;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => _save(_value.copyWith(accentColorValue: color.value)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? color.withValues(alpha: .16) : Colors.white.withValues(alpha: .035),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: selected ? color : Colors.white24, width: selected ? 1.6 : 1),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 18, height: 18, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 7),
+          Text(label),
+          if (selected) ...[const SizedBox(width: 5), Icon(Icons.check, size: 15, color: color)],
+        ]),
+      ),
+    );
+  }
+
+  Future<void> _save(AppSettings next) async {
     await widget.service.update(next);
     if (mounted) setState(() { _value = next; _notice = 'Настройки сохранены.'; });
   }
