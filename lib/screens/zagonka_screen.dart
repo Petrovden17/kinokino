@@ -126,7 +126,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         const report = (url, hint) => {
           try {
             const parsed = new URL(url, location.href);
-            if (!/^https?:$/.test(parsed.protocol) || parsed.origin === location.origin) return;
+            if (!/^https?:$/.test(parsed.protocol) || parsed.href === location.href) return;
             const key = parsed.href;
             if (sent.has(key)) return;
             const text = (hint || '').toLowerCase();
