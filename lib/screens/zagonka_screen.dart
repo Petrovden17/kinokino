@@ -19,7 +19,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   String? _pageError;
   bool _isFullscreen = false;
   bool _usingFallback = false;
-  String _playerDiagnostics = 'Пока не проверено';
 
   WebUri get _primaryUrl {
     final id = widget.kinopoiskId;
@@ -85,40 +84,96 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
-  Future<void> _inspectPlayers(InAppWebViewController controller) async {
-    try {
-      final result = await controller.evaluateJavascript(source: r"""
-        (() => {
-          const found = [];
-          const add = (kind, value) => {
-            if (!value) return;
-            try {
-              const url = new URL(value, document.baseURI).href;
-              if (!found.some(item => item.url === url)) found.push({kind, url});
-            } catch (_) {}
-          };
-          document.querySelectorAll('iframe').forEach((el, i) => {
-            add('iframe ' + (i + 1), el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy-src'));
+  Future<void> _showPlayerOnly(InAppWebViewController controller) async {
+    // Locate the site's actual player frame and display it as a clean full-screen
+    // surface. The source page is only used to discover the embed URL.
+    await controller.evaluateJavascript(source: r"""
+      (() => {
+        if (window.__kinokinoPlayerOnlyStarted) return;
+        window.__kinokinoPlayerOnlyStarted = true;
+        let attempts = 0;
+        const findAndShow = () => {
+          attempts++;
+          const frames = Array.from(document.querySelectorAll('iframe'));
+          const scored = frames.map(frame => {
+            const attrs = [
+              frame.id, frame.className, frame.title,
+              frame.getAttribute('data-src'), frame.getAttribute('src')
+            ].join(' ').toLowerCase();
+            let parent = frame.parentElement;
+            let depth = 0;
+            let playerContext = false;
+            while (parent && depth++ < 5) {
+              const marker = ((parent.id || '') + ' ' + (parent.className || '')).toLowerCase();
+              if (/player|video|watch|movie|film|embed/.test(marker)) playerContext = true;
+              parent = parent.parentElement;
+            }
+            const rect = frame.getBoundingClientRect();
+            const url = frame.getAttribute('src') ||
+              frame.getAttribute('data-src') ||
+              frame.getAttribute('data-lazy-src') ||
+              frame.getAttribute('data-original');
+            if (!url || /about:blank|doubleclick|googlesyndication|adsystem|banner/i.test(url + attrs)) {
+              return {frame, score: -1, url};
+            }
+            let score = playerContext ? 100 : 0;
+            if (/player|video|watch|movie|film|embed/.test(attrs)) score += 40;
+            if (rect.width > 250 && rect.height > 120) score += 25;
+            if (frame.hasAttribute('allowfullscreen') || frame.hasAttribute('webkitallowfullscreen')) score += 15;
+            if (/ad|banner|promo|social|comment/i.test(attrs)) score -= 100;
+            return {frame, score, url};
+          }).filter(item => item.score >= 0 && item.url)
+            .sort((a, b) => b.score - a.score);
+          if (!scored.length) {
+            const video = document.querySelector('video');
+            if (video && (video.currentSrc || video.src)) {
+              video.style.setProperty('position', 'fixed', 'important');
+              video.style.setProperty('inset', '0', 'important');
+              video.style.setProperty('width', '100vw', 'important');
+              video.style.setProperty('height', '100vh', 'important');
+              video.style.setProperty('z-index', '2147483647', 'important');
+              video.style.setProperty('background', '#000', 'important');
+              document.documentElement.style.cssText = 'margin:0!important;background:#000!important;overflow:hidden!important';
+              document.body.style.cssText = 'margin:0!important;background:#000!important;overflow:hidden!important';
+              Array.from(document.body.children).forEach(node => {
+                if (!node.contains(video)) node.style.setProperty('display', 'none', 'important');
+              });
+              return true;
+            }
+            return false;
+          }
+          const chosen = scored[0];
+          const targetUrl = new URL(chosen.url, document.baseURI).href;
+          const overlay = document.createElement('div');
+          overlay.id = 'kinokino-player-only';
+          overlay.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;background:#000;z-index:2147483647;margin:0;padding:0;overflow:hidden';
+          const player = document.createElement('iframe');
+          player.src = targetUrl;
+          player.allow = 'autoplay; fullscreen; picture-in-picture; encrypted-media; accelerometer; gyroscope';
+          player.setAttribute('allowfullscreen', 'true');
+          player.setAttribute('webkitallowfullscreen', 'true');
+          player.referrerPolicy = 'strict-origin-when-cross-origin';
+          player.style.cssText = 'display:block;border:0;width:100%;height:100%;background:#000';
+          overlay.appendChild(player);
+          document.documentElement.appendChild(overlay);
+          document.documentElement.style.cssText = 'margin:0!important;padding:0!important;width:100%!important;height:100%!important;overflow:hidden!important;background:#000!important';
+          document.body.style.cssText = 'margin:0!important;padding:0!important;width:100%!important;height:100%!important;overflow:hidden!important;background:#000!important';
+          Array.from(document.body.children).forEach(node => {
+            if (node !== overlay && !node.contains(overlay)) node.style.setProperty('display', 'none', 'important');
           });
-          document.querySelectorAll('video').forEach((el, i) => {
-            add('video ' + (i + 1), el.currentSrc || el.getAttribute('src'));
-            el.querySelectorAll('source').forEach(source => add('video source', source.getAttribute('src')));
-          });
-          document.querySelectorAll('embed, object').forEach((el, i) => add('media ' + (i + 1), el.getAttribute('src') || el.getAttribute('data')));
-          return JSON.stringify(found);
-        })();
-      """);
-      final value = result is String ? result : result?.toString() ?? '';
-      if (!mounted) return;
-      setState(() {
-        _playerDiagnostics = value.isEmpty || value == '[]'
-            ? 'Медиассылки пока не найдены. Нажми «Обновить поиск» после загрузки страницы или запуска видео.'
-            : value;
-      });
-      debugPrint('KINOKINO_PLAYER_DIAGNOSTICS: $_playerDiagnostics');
-    } catch (error) {
-      if (mounted) setState(() => _playerDiagnostics = 'Ошибка чтения страницы: $error');
-    }
+          return true;
+        };
+        if (findAndShow()) return;
+        const timer = setInterval(() => {
+          if (findAndShow() || attempts >= 24) clearInterval(timer);
+        }, 500);
+        const observer = new MutationObserver(() => {
+          if (!document.getElementById('kinokino-player-only')) findAndShow();
+        });
+        observer.observe(document.documentElement, {childList:true,subtree:true,attributes:true,attributeFilter:['src','data-src']});
+        setTimeout(() => observer.disconnect(), 15000);
+      })();
+    """);
   }
 
   Future<void> _hideSiteBranding(InAppWebViewController controller) async {
@@ -201,7 +256,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             },
             onLoadStop: (controller, url) async {
               await _hideSiteBranding(controller);
-              await _inspectPlayers(controller);
+              await _showPlayerOnly(controller);
               if (!mounted) return;
               setState(() => _progress = 1);
             },
@@ -289,7 +344,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            '${widget.title} · ${_usingFallback ? 'Zagonka' : 'FixtyFlux'}',
+                            '${widget.title} · ${_usingFallback ? 'Zagonka' : 'KinoKino'}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -304,63 +359,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     const SizedBox(width: 8),
                     _overlayButton(Icons.fullscreen_exit, 'Выйти из полного экрана', _toggleFullscreen),
                   ],
-                ),
-              ),
-            ),
-          if (!_isFullscreen)
-            Positioned(
-              left: 12,
-              right: 12,
-              bottom: 12,
-              child: SafeArea(
-                top: false,
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.82),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Диагностика видеоплеера',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Обновить поиск',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () {
-                              final controller = _controller;
-                              if (controller != null) _inspectPlayers(controller);
-                            },
-                            icon: const Icon(Icons.refresh, color: Colors.white),
-                          ),
-                          IconButton(
-                            tooltip: 'Скопировать результат',
-                            visualDensity: VisualDensity.compact,
-                            onPressed: () => Clipboard.setData(ClipboardData(text: _playerDiagnostics)),
-                            icon: const Icon(Icons.copy, color: Colors.white),
-                          ),
-                        ],
-                      ),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 92),
-                        child: SingleChildScrollView(
-                          child: SelectableText(
-                            _playerDiagnostics,
-                            style: const TextStyle(color: Colors.white70, fontSize: 11),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ),
