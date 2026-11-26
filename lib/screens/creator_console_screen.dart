@@ -12,7 +12,6 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
   final _creator = CreatorService();
   bool _loading = true;
   bool _checking = false;
-  Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _announcements = [];
   List<Map<String, dynamic>> _accounts = [];
   final _accountSearch = TextEditingController();
@@ -22,7 +21,9 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
   String? _error;
   String? _diagnostics;
   bool _showExtraInfo = false;
-  bool _statsLoaded = false;
+  bool _historyLoading = false;
+  List<Map<String, dynamic>> _watchHistory = [];
+  bool _historyLoaded = false;
 
   @override
   void initState() {
@@ -76,17 +77,25 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
     return date != null && date.isAfter(DateTime.now().toUtc());
   }
 
-  Future<void> _toggleExtraInfo() async {
-    final show = !_showExtraInfo;
-    setState(() => _showExtraInfo = show);
-    if (!show || _statsLoaded) return;
+  void _toggleExtraInfo() {
+    setState(() => _showExtraInfo = !_showExtraInfo);
+  }
+
+  Future<void> _loadWatchHistory() async {
+    if (_historyLoading) return;
+    setState(() => _historyLoading = true);
     try {
-      final stats = await _creator.loadStats();
-      if (mounted) setState(() { _stats = stats; _statsLoaded = true; });
-    } catch (_) {
+      final rows = await _creator.loadWatchHistory();
+      if (mounted) setState(() {
+        _watchHistory = rows;
+        _historyLoaded = true;
+      });
+    } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Подробная статистика пока недоступна.')),
+        SnackBar(content: Text('Не удалось загрузить историю: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _historyLoading = false);
     }
   }
 
@@ -153,7 +162,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
   Future<void> _checkServices() async {
     setState(() { _checking = true; _diagnostics = 'Проверяем сервисы…'; });
     final lines = <String>[];
-    try { await _creator.loadStats(); lines.add('Supabase: работает'); }
+    try { await _creator.isCreator(); lines.add('Supabase: работает'); }
     catch (e) { lines.add('Supabase: ошибка — $e'); }
     try { await TmdbService().trending(); lines.add('TMDB: работает'); }
     catch (e) { lines.add('TMDB: ошибка — $e'); }
@@ -214,12 +223,6 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
     catch (e) { if (mounted) setState(() => _error = 'Не удалось удалить: $e'); }
   }
 
-  Widget _stat(String label, String key, IconData icon) => Card(child: ListTile(
-    leading: Icon(icon), title: Text(label),
-    trailing: Text((_stats[key] ?? '—').toString(),
-      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-  ));
-
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Панель создателя'),
@@ -240,14 +243,9 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
             icon: Icon(_showExtraInfo ? Icons.visibility_off_outlined : Icons.analytics_outlined),
             label: Text(_showExtraInfo ? 'Скрыть подробную информацию' : 'Дополнительная информация'),
           ),
-          const SizedBox(height: 10),
-          const Text('Статистика KinoKino', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          if (_showExtraInfo) _stat('Аккаунты', 'users', Icons.people_outline),
-          _stat('Записи истории', 'watch_history', Icons.history),
-          _stat('Объявления', 'announcements', Icons.campaign_outlined),
-          const SizedBox(height: 12),
           const SizedBox(height: 18),
           if (_showExtraInfo) ...[
+          const Text('Управление аккаунтами', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const Text('Управление аккаунтами', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           TextField(
@@ -307,6 +305,36 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
               child: _accountsLoadingMore
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Text('Загрузить ещё'),
+            )),
+          ],
+          if (_showExtraInfo) ...[
+          const SizedBox(height: 18),
+          const Text('История просмотров пользователей', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _historyLoading ? null : _loadWatchHistory,
+            icon: _historyLoading
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.history),
+            label: Text(_historyLoading ? 'Загружаем историю…' : _historyLoaded ? 'Обновить историю' : 'Показать записи истории'),
+          ),
+          if (_historyLoaded && _watchHistory.isEmpty)
+            const Padding(padding: EdgeInsets.all(12), child: Text('Записей истории пока нет.')),
+          for (final entry in _watchHistory)
+            Card(child: ListTile(
+              leading: const Icon(Icons.play_circle_outline),
+              title: Text(
+                ((entry['media'] as Map?)?['title'] ?? (entry['media'] as Map?)?['name'] ?? 'Медиа #${entry['media_id']}').toString(),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text([
+                entry['media_type'] == 'tv' ? 'Сериал' : 'Фильм',
+                (entry['display_name']?.toString().isNotEmpty == true)
+                  ? entry['display_name'].toString()
+                  : (entry['email']?.toString().isNotEmpty == true ? entry['email'].toString() : 'Пользователь'),
+                _dateLabel(entry['watched_at']),
+                'Прогресс: ${entry['progress_seconds'] ?? 0} сек.',
+              ].join(' • ')),
             )),
           ],
           if (_showExtraInfo) ...[
