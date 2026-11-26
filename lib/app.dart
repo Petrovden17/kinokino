@@ -23,7 +23,9 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
     Future.wait([_profiles.initialize(), _settings.initialize()]).then((_) {
       if (!mounted) return;
       setState(() => _ready = true);
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
+      if (_settings.settings.autoUpdatesEnabled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
+      }
     });
   }
 
