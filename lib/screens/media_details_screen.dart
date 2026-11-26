@@ -205,15 +205,16 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       );
       return null;
     }
+    final resolvedSource = source;
     final approved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Найден вариант серии'),
         content: Text(
-          'Название в архиве: ${source.archiveTitle}\n'
-          'Год в метаданных: ${source.releaseYear}\n'
-          'Длительность: ${source.durationSeconds > 0 ? '${(source.durationSeconds / 60).round()} мин.' : 'не указана'}\n'
-          'Лицензия: ${source.license}',
+          'Название в архиве: ${resolvedSource.archiveTitle}\n'
+          'Год в метаданных: ${resolvedSource.releaseYear}\n'
+          'Длительность: ${resolvedSource.durationSeconds > 0 ? '${(resolvedSource.durationSeconds / 60).round()} мин.' : 'не указана'}\n'
+          'Лицензия: ${resolvedSource.license}',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Не та серия')),
@@ -221,7 +222,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         ],
       ),
     );
-    return approved == true ? source : null;
+    return approved == true ? resolvedSource : null;
   }
 
   bool _searchingPlayback = false;
@@ -339,15 +340,16 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         ));
         return;
       }
+      final playableSource = source;
       final approved = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text(_type == 'tv' ? 'Вариант серии найден' : 'Вариант фильма найден'),
           content: Text(
-            'Название в архиве: ${source.archiveTitle}\n'
-            'Год в метаданных: ${source.releaseYear}\n'
-            'Длительность: ${(source.durationSeconds / 60).round()} мин.\n'
-            'Лицензия: ${source.license}',
+            'Название в архиве: ${playableSource.archiveTitle}\n'
+            'Год в метаданных: ${playableSource.releaseYear}\n'
+            'Длительность: ${playableSource.durationSeconds > 0 ? '${(playableSource.durationSeconds / 60).round()} мин.' : 'не указана'}\n'
+            'Лицензия: ${playableSource.license}',
           ),
           actions: [
             TextButton(
@@ -363,7 +365,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       );
       if (approved != true || !mounted) return;
       await Navigator.push(context, MaterialPageRoute(builder: (_) =>
-        PlayerScreen(streamUrl: source.url.toString(), title: selectedEpisode == null ? _displayTitle : '$_displayTitle · S${(selectedEpisode['season_number'] as num?)?.toInt() ?? 1}E${(selectedEpisode['episode_number'] as num?)?.toInt() ?? 1} — ${selectedEpisode['name'] ?? ''}', variants: source.variants, preferredVideoQuality: widget.preferredVideoQuality, onChooseEpisode: _type == 'tv' ? _chooseEpisode : null, onResolveEpisode: _type == 'tv' ? _resolveEpisodeSource : null)));
+        PlayerScreen(streamUrl: playableSource.url.toString(), title: selectedEpisode == null ? _displayTitle : '$_displayTitle · S${(selectedEpisode['season_number'] as num?)?.toInt() ?? 1}E${(selectedEpisode['episode_number'] as num?)?.toInt() ?? 1} — ${selectedEpisode['name'] ?? ''}', variants: playableSource.variants, preferredVideoQuality: widget.preferredVideoQuality, onChooseEpisode: _type == 'tv' ? _chooseEpisode : null, onResolveEpisode: _type == 'tv' ? _resolveEpisodeSource : null)));
     } catch (e) {
       if (!mounted) return;
       if (cancelToken.isCancelled) return;
