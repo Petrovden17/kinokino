@@ -1,43 +1,98 @@
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart' as p;
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/media_item.dart';
+
+/// Облачная библиотека пользователя. Доступ ограничен RLS-политиками Supabase.
 class LocalDatabase {
-  static Database? _db;
-  static Future<Database> get database async {
-    if (_db != null) return _db!;
-    final path = p.join(await getDatabasesPath(), 'kinokino.db');
-    _db = await openDatabase(path, version: 3,
-      onCreate: (db, version) async {
-        await db.execute('''CREATE TABLE media (
-          id INTEGER PRIMARY KEY, title TEXT NOT NULL, poster_path TEXT,
-          is_favorite INTEGER NOT NULL DEFAULT 0, last_opened TEXT,
-          user_rating REAL, media_type TEXT NOT NULL DEFAULT 'movie'
-        )''');
-      },
-      onUpgrade: (db, oldVersion, newVersion) async {
-        if (oldVersion < 2) await db.execute('ALTER TABLE media ADD COLUMN user_rating REAL');
-        if (oldVersion < 3) await db.execute("ALTER TABLE media ADD COLUMN media_type TEXT NOT NULL DEFAULT 'movie'");
-      });
-    return _db!;
+  static SupabaseClient get _client => Supabase.instance.client;
+  static String get _userId {
+    final id = _client.auth.currentUser?.id;
+    if (id == null) throw StateError('Войди в аккаунт, чтобы открыть библиотеку.');
+    return id;
   }
-  static Future<void> setFavorite(int id, String title, String? poster, bool value, {String mediaType='movie'}) async {
-    final db=await database;
-    await db.rawInsert('''INSERT INTO media(id,title,poster_path,is_favorite,media_type) VALUES(?,?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET title=excluded.title,poster_path=excluded.poster_path,is_favorite=excluded.is_favorite,media_type=excluded.media_type''',
-      [id,title,poster,value?1:0,mediaType]);
+
+  static Map<String, dynamic> _mediaJson(
+    int id, String title, String? poster, String mediaType,
+  ) => {
+    'id': id,
+    'title': title,
+    'posterPath': poster,
+    'mediaType': mediaType,
+  };
+
+  static Map<String, Object?> _libraryRow(Map<String, dynamic> row, {String? ratingField, String? dateField}) {
+    final media = Map<String, dynamic>.from(row['media'] as Map? ?? const {});
+    return {
+      'id': row['media_id'],
+      'title': media['title'] ?? 'Без названия',
+      'poster_path': media['posterPath'],
+      'media_type': row['media_type'] ?? 'movie',
+      'is_favorite': ratingField == null ? 1 : 0,
+      'user_rating': ratingField == null ? null : row[ratingField],
+      'last_opened': dateField == null ? null : row[dateField],
+    };
   }
-  static Future<void> recordOpen(int id,String title,String? poster,{String mediaType='movie'}) async {
-    final db=await database;
-    await db.rawInsert('''INSERT INTO media(id,title,poster_path,last_opened,media_type) VALUES(?,?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET title=excluded.title,poster_path=excluded.poster_path,last_opened=excluded.last_opened,media_type=excluded.media_type''',
-      [id,title,poster,DateTime.now().toIso8601String(),mediaType]);
+
+  static Future<void> setFavorite(
+    int id, String title, String? poster, bool value, {String mediaType = 'movie'}
+  ) async {
+    final userId = _userId;
+    final query = _client.from('favorites');
+    if (value) {
+      await query.upsert({
+        'user_id': userId,
+        'media_id': id,
+        'media_type': mediaType,
+        'media': _mediaJson(id, title, poster, mediaType),
+      }, onConflict: 'user_id,media_id,media_type');
+    } else {
+      await query.delete()
+        .eq('user_id', userId).eq('media_id', id).eq('media_type', mediaType);
+    }
   }
-  static Future<void> setRating(int id,String title,String? poster,double rating,{String mediaType='movie'}) async {
-    final db=await database;
-    await db.rawInsert('''INSERT INTO media(id,title,poster_path,user_rating,media_type) VALUES(?,?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET title=excluded.title,poster_path=excluded.poster_path,user_rating=excluded.user_rating,media_type=excluded.media_type''',
-      [id,title,poster,rating,mediaType]);
+
+  static Future<void> recordOpen(
+    int id, String title, String? poster, {String mediaType = 'movie'}
+  ) async {
+    await _client.from('watch_history').insert({
+      'user_id': _userId,
+      'media_id': id,
+      'media_type': mediaType,
+      'media': _mediaJson(id, title, poster, mediaType),
+      'watched_at': DateTime.now().toUtc().toIso8601String(),
+    });
   }
-  static Future<List<Map<String,Object?>>> favorites() async => (await database).query('media',where:'is_favorite=1',orderBy:'title COLLATE NOCASE');
-  static Future<List<Map<String,Object?>>> history() async => (await database).query('media',where:'last_opened IS NOT NULL',orderBy:'last_opened DESC');
-  static Future<List<Map<String,Object?>>> ratings() async => (await database).query('media',where:'user_rating IS NOT NULL',orderBy:'user_rating DESC');
+
+  static Future<void> setRating(
+    int id, String title, String? poster, double rating, {String mediaType = 'movie'}
+  ) async {
+    await _client.from('ratings').upsert({
+      'user_id': _userId,
+      'media_id': id,
+      'media_type': mediaType,
+      'rating': rating,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }, onConflict: 'user_id,media_id,media_type');
+  }
+
+  static Future<List<Map<String, Object?>>> favorites() async {
+    final rows = await _client.from('favorites').select()
+      .eq('user_id', _userId).order('created_at', ascending: false);
+    return (rows as List).map((e) => _libraryRow(Map<String, dynamic>.from(e as Map))).toList();
+  }
+
+  static Future<List<Map<String, Object?>>> history() async {
+    final rows = await _client.from('watch_history').select()
+      .eq('user_id', _userId).order('watched_at', ascending: false).limit(100);
+    return (rows as List).map((e) => _libraryRow(
+      Map<String, dynamic>.from(e as Map), dateField: 'watched_at',
+    )).toList();
+  }
+
+  static Future<List<Map<String, Object?>>> ratings() async {
+    final rows = await _client.from('ratings').select()
+      .eq('user_id', _userId).order('rating', ascending: false);
+    return (rows as List).map((e) => _libraryRow(
+      Map<String, dynamic>.from(e as Map), ratingField: 'rating',
+    )).toList();
+  }
 }
