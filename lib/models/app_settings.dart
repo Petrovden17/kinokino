@@ -11,6 +11,8 @@ class AppSettings {
     this.accentColorValue = 0xFFFF765E,
     this.animationsEnabled = true,
     this.animationSpeed = 1.0,
+    this.preferredAudioLanguage = 'auto',
+    this.preferredVideoQuality = 'auto',
   });
   final String language;
   final bool notificationsEnabled;
@@ -23,6 +25,8 @@ class AppSettings {
   final int accentColorValue;
   final bool animationsEnabled;
   final double animationSpeed;
+  final String preferredAudioLanguage;
+  final String preferredVideoQuality;
 
   AppSettings copyWith({
     String? language, bool? notificationsEnabled, bool? autoplay,
@@ -41,6 +45,8 @@ class AppSettings {
     accentColorValue: accentColorValue ?? this.accentColorValue,
     animationsEnabled: animationsEnabled ?? this.animationsEnabled,
     animationSpeed: animationSpeed ?? this.animationSpeed,
+    preferredAudioLanguage: preferredAudioLanguage ?? this.preferredAudioLanguage,
+    preferredVideoQuality: preferredVideoQuality ?? this.preferredVideoQuality,
   );
 
   Map<String, Object> toJson() => {
@@ -52,6 +58,8 @@ class AppSettings {
     'accentColorValue': accentColorValue,
     'animationsEnabled': animationsEnabled,
     'animationSpeed': animationSpeed,
+    'preferredAudioLanguage': preferredAudioLanguage,
+    'preferredVideoQuality': preferredVideoQuality,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -66,5 +74,7 @@ class AppSettings {
     accentColorValue: json['accentColorValue'] as int? ?? 0xFFFF765E,
     animationsEnabled: json['animationsEnabled'] as bool? ?? true,
     animationSpeed: (json['animationSpeed'] as num?)?.toDouble() ?? 1.0,
+    preferredAudioLanguage: json['preferredAudioLanguage'] as String? ?? 'auto',
+    preferredVideoQuality: json['preferredVideoQuality'] as String? ?? 'auto',
   );
 }
