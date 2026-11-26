@@ -6,6 +6,7 @@ import '../services/tmdb_service.dart';
 import '../services/profile_service.dart';
 import '../services/settings_service.dart';
 import '../widgets/poster_card.dart';
+import '../core/theme/app_theme.dart';
 import 'profiles_screen.dart';
 import 'settings_screen.dart';
 import 'library_screen.dart';
@@ -138,14 +139,50 @@ class _HomeScreenState extends State<HomeScreen>{
         ),
       ]),
       body:Column(children:[
-        Padding(padding:const EdgeInsets.fromLTRB(16,8,16,10),child:TextField(controller:_search,onSubmitted:_searchMedia,decoration:InputDecoration(hintText:'Поиск фильмов, сериалов и мультфильмов',prefixIcon:const Icon(Icons.search),suffixIcon:IconButton(icon:const Icon(Icons.clear),onPressed:(){_search.clear();_loadTrending();})))),
-        Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:Column(children:[
+        Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 12), child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF293C63), Color(0xFF182A45), Color(0xFF432C45)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withValues(alpha: .09)),
+            boxShadow: [BoxShadow(color: const Color(0xFF182A45).withValues(alpha: .45), blurRadius: 18, offset: const Offset(0, 7))],
+          ),
+          child: Row(children: [
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('ТВОЁ КИНОПРОСТРАНСТВО', style: TextStyle(color: AppTheme.aqua, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.3)),
+              const SizedBox(height: 5),
+              const Text('Время выбрать кино', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
+              const SizedBox(height: 3),
+              Text('Фильмы, сериалы и истории на вечер', style: TextStyle(color: Colors.white.withValues(alpha: .72), fontSize: 11)),
+            ])),
+            const SizedBox(width: 10),
+            Container(width: 54, height: 54,
+              decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: .18), borderRadius: BorderRadius.circular(17)),
+              child: const Icon(Icons.local_movies_rounded, color: AppTheme.gold, size: 30)),
+          ]),
+        )),
+        Padding(padding:const EdgeInsets.fromLTRB(16,0,16,12),child:TextField(controller:_search,onSubmitted:_searchMedia,decoration:InputDecoration(hintText:'Поиск фильмов, сериалов и мультфильмов',prefixIcon:const Icon(Icons.search),suffixIcon:IconButton(icon:const Icon(Icons.clear),onPressed:(){_search.clear();_loadTrending();})))) ,
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 13),
+          decoration: BoxDecoration(
+            color: AppTheme.surface, borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withValues(alpha: .07)),
+          ),
+          child: Column(children:[
           Row(children:[Expanded(child:SingleChildScrollView(scrollDirection:Axis.horizontal,child:SegmentedButton<String>(showSelectedIcon:false,segments:const[ButtonSegment(value:'movie',label:Text('Фильмы')),ButtonSegment(value:'tv',label:Text('Сериалы')),ButtonSegment(value:'animation',label:Text('Мультфильмы')),ButtonSegment(value:'animated_tv',label:Text('Мультсериалы'))],selected:{_type},onSelectionChanged:(v){setState((){_type=v.first;_genreId=(v.first=='animation'||v.first=='animated_tv')?16:null;});_loadGenres();_applyFilters();}))),
             const SizedBox(width:8),PopupMenuButton<String>(tooltip:'Сортировка',icon:const Icon(Icons.sort),onSelected:(v){setState(()=>_sort=v);_applyFilters();},itemBuilder:(_)=>const[PopupMenuItem(value:'popularity.desc',child:Text('Популярные')),PopupMenuItem(value:'vote_average.desc',child:Text('По рейтингу')),PopupMenuItem(value:'primary_release_date.desc',child:Text('Сначала новые')),PopupMenuItem(value:'revenue.desc',child:Text('По сборам'))])]),
           const SizedBox(height:8),Row(children:[
             Expanded(child:DropdownButtonFormField<int?>(value:_genreId,decoration:const InputDecoration(labelText:'Жанр',contentPadding:EdgeInsets.symmetric(horizontal:12,vertical:8)),items:[const DropdownMenuItem<int?>(value:null,child:Text('Все жанры')),..._genres.map((g)=>DropdownMenuItem<int?>(value:g['id'] as int,child:Text(g['name'].toString())))],onChanged:(v){setState(()=>_genreId=v);_applyFilters();})),
             const SizedBox(width:12),Expanded(child:DropdownButtonFormField<double>(value:_minRating,decoration:const InputDecoration(labelText:'Рейтинг от',contentPadding:EdgeInsets.symmetric(horizontal:12,vertical:8)),items:[0.0,5.0,6.0,7.0,8.0,9.0].map((v)=>DropdownMenuItem(value:v,child:Text(v==0?'Любой':'$v+'))).toList(),onChanged:(v){setState(()=>_minRating=v??0);_applyFilters();}))]),
-        ])),
+        ]),
+        ),
+        const SizedBox(height:12),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: Row(children:[const Text('Подборка для тебя', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)), const Spacer(), Icon(Icons.auto_awesome, color: AppTheme.gold, size: 18)])),
         const SizedBox(height:8),
         Expanded(child:_loading?const Center(child:CircularProgressIndicator()):_error!=null?Center(child:Padding(padding:const EdgeInsets.all(24),child:Column(mainAxisSize:MainAxisSize.min,children:[Text(_error!,textAlign:TextAlign.center),const SizedBox(height:12),FilledButton.icon(onPressed:_loadTrending,icon:const Icon(Icons.refresh),label:const Text('Повторить'))]))):_items.isEmpty?const Center(child:Text('Ничего не найдено.')):LayoutBuilder(builder:(context,c){
           final columns=c.maxWidth>1200?6:c.maxWidth>900?5:c.maxWidth>650?4:2;
