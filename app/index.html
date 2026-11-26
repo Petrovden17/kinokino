@@ -2,207 +2,130 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#101114"><title>KinoKino</title>
+<meta name="theme-color" content="#080d18"><title>KinoKino</title>
 <style>
-:root{--bg:#101114;--panel:#191b20;--panel2:#242730;--muted:#a0a3ad;--red:#e53935;--white:#f4f4f6}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--white);font:15px/1.45 Segoe UI,Arial,sans-serif}
-button,input{font:inherit}button{cursor:pointer;color:inherit;border:0}
-.app{display:grid;grid-template-columns:225px 1fr;min-height:100vh}
-.sidebar{background:#141519;border-right:1px solid #272930;padding:24px 16px;position:sticky;top:0;height:100vh}
-.logo{display:flex;align-items:center;gap:10px;font-size:23px;font-weight:800;padding:4px 10px 30px}.logo-mark{width:34px;height:34px;border-radius:10px;background:var(--red);display:grid;place-items:center}
-.nav-label{color:#666b77;font-size:11px;font-weight:700;letter-spacing:1.3px;padding:12px}.nav button{width:100%;text-align:left;padding:12px;border-radius:10px;background:transparent;color:#b9bbc4;margin:2px 0;display:flex;gap:12px;align-items:center}
-.nav button.active,.nav button:hover{background:#282a31;color:#fff}.nav .ico{width:20px;text-align:center}.side-bottom{position:absolute;bottom:22px;left:26px;right:20px;color:#777b86;font-size:12px}
-main{min-width:0;padding:28px 34px 50px;max-width:1600px;width:100%;margin:auto}
-.top{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:30px}
-.search{flex:1;max-width:700px;position:relative}.search input{width:100%;background:#202228;border:1px solid #30333c;border-radius:12px;padding:14px 16px 14px 46px;color:#fff;outline:none}.search input:focus{border-color:#686d79}.search span{position:absolute;left:16px;top:12px;font-size:20px;color:#8d929d}
-.iconbtn{background:#24262d;border-radius:10px;width:42px;height:42px;font-size:19px}.top-actions{display:flex;gap:10px}
-.hero{min-height:250px;border-radius:18px;padding:34px;display:flex;align-items:end;background:linear-gradient(90deg,rgba(10,11,15,.97),rgba(10,11,15,.55) 65%,rgba(10,11,15,.15)),radial-gradient(ellipse at 80% 15%,#6b3030 0,#34202a 28%,#1c202c 60%,#121318 100%);margin-bottom:32px}
-.hero-content{max-width:580px}.eyebrow{color:#ff7773;font-size:12px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase}
-h1{font-size:36px;line-height:1.1;margin:9px 0 10px;letter-spacing:-1px}.hero p{color:#c4c3c8;max-width:470px;margin:0 0 20px}
-.primary{background:var(--red);padding:11px 19px;border-radius:9px;font-weight:700}.primary:hover{background:#f04b47}.ghost{background:#30323a;padding:11px 16px;border-radius:9px;margin-left:8px}
-.section-head{display:flex;align-items:center;justify-content:space-between;margin:28px 0 16px}.section-head h2{font-size:21px;margin:0}.muted{color:var(--muted)}
-.chips{display:flex;gap:9px;flex-wrap:wrap;margin:0 0 22px}.chip{background:#202229;color:#b8bbc4;padding:8px 14px;border-radius:30px;font-size:13px}.chip.active{background:#512321;color:#fff}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:20px}
-.movie{min-width:0;cursor:pointer}.poster{height:224px;border-radius:12px;position:relative;overflow:hidden;display:flex;align-items:end;padding:13px;background:linear-gradient(145deg,var(--c1,#594b59),var(--c2,#171d28));box-shadow:inset 0 -100px 80px -50px #090a0e;background-size:cover;background-position:center}
-.poster:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(0,0,0,.88),transparent 65%)}
-.poster-title{position:relative;z-index:1;font-size:16px;font-weight:900;line-height:1.05;text-shadow:0 2px 6px #000}
-.badge{position:absolute;z-index:2;top:10px;left:10px;background:#17191dcc;border:1px solid #ffffff22;border-radius:5px;padding:3px 6px;font-size:10px}
-.movie-title{font-weight:650;margin:9px 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.movie-meta{color:var(--muted);font-size:12px}
-.empty{color:var(--muted);padding:30px 0}.status{color:#9296a2;font-size:13px;margin:8px 0 16px;min-height:18px}
-.detail,.modal{display:none;position:fixed;inset:0;background:#08090bdc;z-index:10;overflow:auto;padding:30px}
-.detail-box{max-width:900px;margin:5vh auto;background:#1a1c22;border:1px solid #30333b;border-radius:18px;overflow:hidden;display:grid;grid-template-columns:280px 1fr;position:relative}
-.detail-poster{min-height:410px;background:#292c35 center/cover;display:grid;place-items:center;font-size:28px;font-weight:900;text-align:center;padding:20px}
-.detail-info{padding:34px}.detail-info h2{font-size:30px;margin:5px 0}.close{position:absolute;right:14px;top:12px;background:#30323a;border-radius:50%;width:34px;height:34px;font-size:20px;z-index:2}
-.notice{background:#29231d;border:1px solid #59402b;color:#e7c9a4;padding:12px 14px;border-radius:10px;margin-top:22px;font-size:13px}
-.modal-card{max-width:620px;margin:8vh auto;background:#1a1c22;border:1px solid #30333b;border-radius:16px;padding:26px;position:relative}
-.modal-card h2{margin:0 0 8px}.field{display:flex;flex-direction:column;gap:6px;margin:16px 0}.field label{font-size:13px;color:#b7bac4}.field input{width:100%;background:#101216;border:1px solid #363a44;border-radius:9px;padding:12px;color:white;outline:none}.field input:focus{border-color:#777}
-.help{font-size:12px;color:#9296a2}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
-.player-card{max-width:1000px;margin:3vh auto;background:#15171c;border:1px solid #343741;border-radius:16px;padding:18px;position:relative}
-video{width:100%;max-height:70vh;background:#000;border-radius:10px}.player-controls{display:flex;gap:10px;align-items:center;margin-top:12px}.player-controls input{flex:1;min-width:0;background:#242730;border:1px solid #393d48;border-radius:8px;padding:10px;color:#fff}
-.footer{color:#676b75;font-size:11px;margin-top:36px}
-@media(max-width:800px){.app{grid-template-columns:1fr}.sidebar{height:auto;position:relative;padding:12px 14px;border-right:0;border-bottom:1px solid #272930}.logo{padding:4px 6px 10px}.nav-label,.side-bottom{display:none}.nav{display:flex;overflow:auto}.nav button{white-space:nowrap;width:auto}.nav button .ico{display:none}main{padding:18px}.hero{min-height:220px;padding:24px}h1{font-size:29px}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.poster{height:220px}.detail{padding:12px}.detail-box{grid-template-columns:1fr}.detail-poster{min-height:180px}.detail-info{padding:22px}.player-controls{flex-wrap:wrap}.player-controls input{flex-basis:100%}}
+:root{--bg:#080d18;--panel:#101a2b;--panel2:#17243a;--muted:#9aa9c0;--blue:#287bff;--cyan:#45c6ff;--white:#f4f7ff;--line:#243550}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 75% -20%,#172d50 0,transparent 42%),var(--bg);color:var(--white);font:15px/1.5 "Segoe UI",Arial,sans-serif}
+button,input{font:inherit}button{cursor:pointer;color:inherit;border:0;transition:.2s}
+.app{display:grid;grid-template-columns:248px 1fr;min-height:100vh}
+.sidebar{background:rgba(10,17,30,.94);border-right:1px solid var(--line);padding:26px 17px;position:sticky;top:0;height:100vh;backdrop-filter:blur(16px)}
+.logo{display:flex;align-items:center;gap:11px;font-size:24px;font-weight:850;padding:4px 10px 38px;letter-spacing:-.7px}.logo-mark{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--blue),#38c8ff);display:grid;place-items:center;box-shadow:0 7px 25px #287bff55}
+.nav-label{color:#657894;font-size:10px;font-weight:800;letter-spacing:1.7px;padding:12px}.nav button{width:100%;text-align:left;padding:13px;border-radius:12px;background:transparent;color:#aab8ce;margin:3px 0;display:flex;gap:13px;align-items:center}
+.nav button.active,.nav button:hover{background:linear-gradient(100deg,#1d4e91aa,#172b48);color:#fff}.nav .ico{width:20px;text-align:center;color:#65baff;font-size:18px}.side-bottom{position:absolute;bottom:22px;left:26px;right:20px;color:#72829b;font-size:12px}
+main{min-width:0;padding:27px 38px 55px;max-width:1700px;width:100%;margin:auto}
+.top{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:27px}
+.search{flex:1;max-width:760px;position:relative}.search input{width:100%;background:#111d30;border:1px solid #293d5c;border-radius:14px;padding:15px 18px 15px 48px;color:#fff;outline:none}.search input:focus{border-color:#398eff;box-shadow:0 0 0 3px #287bff20}.search span{position:absolute;left:17px;top:11px;font-size:23px;color:#78a9e5}
+.iconbtn{background:#17263d;border:1px solid #2b4263;border-radius:12px;width:46px;height:46px;font-size:20px}.iconbtn:hover,.ghost:hover{background:#223c60}.top-actions{display:flex;gap:10px}
+.hero{min-height:340px;border:1px solid #34517a;border-radius:23px;padding:38px;display:flex;align-items:end;position:relative;overflow:hidden;background:linear-gradient(90deg,rgba(5,12,24,.98) 0%,rgba(5,12,24,.86) 42%,rgba(5,12,24,.2) 100%),radial-gradient(ellipse at 78% 20%,#2477c8 0,#173b68 27%,#111d35 62%,#0b1220 100%);box-shadow:0 20px 60px #0005;margin-bottom:38px}
+.hero:after{content:"";position:absolute;right:5%;top:-35%;width:390px;height:480px;border-radius:50%;background:linear-gradient(145deg,#58c7ff88,#2356bb22 60%,transparent);filter:blur(28px);transform:rotate(-18deg);pointer-events:none}
+.hero-content{max-width:600px;position:relative;z-index:1}.eyebrow{color:#67c7ff;font-size:11px;font-weight:850;letter-spacing:2px;text-transform:uppercase}
+h1{font-size:clamp(36px,4vw,54px);line-height:1.04;margin:12px 0 14px;letter-spacing:-1.8px}.hero p{color:#c1cee0;max-width:480px;margin:0 0 24px;font-size:15px}
+.primary{background:linear-gradient(110deg,#2169e8,#269fe9);padding:12px 20px;border-radius:11px;font-weight:750;box-shadow:0 8px 24px #1769d855}.primary:hover{filter:brightness(1.13);transform:translateY(-1px)}.ghost{background:#1b2c45;border:1px solid #334d70;padding:11px 16px;border-radius:10px;margin-left:8px}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin:30px 0 17px}.section-head h2{font-size:22px;margin:0;letter-spacing:-.4px}.muted{color:var(--muted)}
+.chips{display:flex;gap:9px;flex-wrap:wrap;margin:0 0 22px}.chip{background:#111e31;border:1px solid #263b59;color:#b8c8dd;padding:8px 16px;border-radius:30px;font-size:13px}.chip.active,.chip:hover{background:#1c5db4;border-color:#398eff;color:#fff}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:22px}
+.movie{min-width:0;cursor:pointer;transition:transform .22s}.movie:hover{transform:translateY(-5px)}.poster{height:238px;border-radius:15px;position:relative;overflow:hidden;display:flex;align-items:end;padding:14px;background:linear-gradient(145deg,var(--c1,#294a70),var(--c2,#101b2c));box-shadow:inset 0 -110px 85px -48px #050912,0 8px 22px #0005;background-size:cover;background-position:center;border:1px solid #ffffff12}
+.poster:after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(3,8,17,.92),transparent 67%)}.poster-title{position:relative;z-index:1;font-size:16px;font-weight:900;line-height:1.05;text-shadow:0 2px 6px #000}
+.badge{position:absolute;z-index:2;top:10px;left:10px;background:#071426d9;border:1px solid #8fcaff55;border-radius:6px;padding:4px 7px;font-size:9px;letter-spacing:.8px;color:#bfe4ff}
+.movie-title{font-weight:680;margin:10px 0 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.movie-meta{color:var(--muted);font-size:12px}
+.empty{color:var(--muted);padding:30px 0}.status{color:#9eafc7;font-size:13px;margin:8px 0 16px;min-height:18px}
+.detail,.modal{display:none;position:fixed;inset:0;background:#030711e8;z-index:10;overflow:auto;padding:30px;backdrop-filter:blur(8px)}
+.detail-box{max-width:920px;margin:5vh auto;background:#101b2c;border:1px solid #2c4567;border-radius:20px;overflow:hidden;display:grid;grid-template-columns:290px 1fr;position:relative;box-shadow:0 25px 90px #0009}
+.detail-poster{min-height:420px;background:#1a2a43 center/cover;display:grid;place-items:center;font-size:28px;font-weight:900;text-align:center;padding:20px}
+.detail-info{padding:36px}.detail-info h2{font-size:32px;margin:7px 0}.close{position:absolute;right:14px;top:12px;background:#243955;border-radius:50%;width:36px;height:36px;font-size:20px;z-index:2}
+.notice{background:#152d49;border:1px solid #2d5a89;color:#b9dfff;padding:13px 15px;border-radius:11px;margin-top:22px;font-size:13px}
+.modal-card{max-width:620px;margin:8vh auto;background:#101b2c;border:1px solid #2c4567;border-radius:18px;padding:27px;position:relative}
+.modal-card h2{margin:0 0 8px}.field{display:flex;flex-direction:column;gap:6px;margin:16px 0}.field label{font-size:13px;color:#b7c8df}.field input{width:100%;background:#081321;border:1px solid #304866;border-radius:10px;padding:12px;color:white;outline:none}.field input:focus{border-color:#398eff}
+.help{font-size:12px;color:#9eafc7}.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+.player-card{max-width:1000px;margin:3vh auto;background:#101b2c;border:1px solid #2c4567;border-radius:18px;padding:18px;position:relative}
+video{width:100%;max-height:70vh;background:#000;border-radius:12px}.player-controls{display:flex;gap:10px;align-items:center;margin-top:12px}.player-controls input{flex:1;min-width:0;background:#081321;border:1px solid #304866;border-radius:9px;padding:10px;color:#fff}
+.footer{color:#667c99;font-size:11px;margin-top:40px}
+@media(max-width:850px){.app{grid-template-columns:1fr}.sidebar{height:auto;position:relative;padding:12px 14px;border-right:0;border-bottom:1px solid var(--line)}.logo{padding:4px 6px 10px}.nav-label,.side-bottom{display:none}.nav{display:flex;overflow:auto}.nav button{white-space:nowrap;width:auto}.nav button .ico{display:none}main{padding:18px}.hero{min-height:260px;padding:25px}h1{font-size:34px}.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.poster{height:225px}.detail{padding:12px}.detail-box{grid-template-columns:1fr}.detail-poster{min-height:190px}.detail-info{padding:22px}.player-controls{flex-wrap:wrap}.player-controls input{flex-basis:100%}}
 </style>
 </head>
 <body>
 <div class="app">
 <aside class="sidebar">
  <div class="logo"><div class="logo-mark">▶</div>KinoKino</div>
- <div class="nav-label">МЕНЮ</div>
+ <div class="nav-label">НАВИГАЦИЯ</div>
  <nav class="nav">
   <button class="active" data-tab="home"><span class="ico">⌂</span>Главная</button>
   <button data-tab="popular"><span class="ico">▤</span>Популярное</button>
   <button data-tab="favorites"><span class="ico">♡</span>Избранное <span id="favCount" style="margin-left:auto"></span></button>
   <button data-tab="history"><span class="ico">◷</span>История</button>
  </nav>
- <div class="side-bottom">KinoKino 0.4 · Без рекламы</div>
+ <div class="side-bottom">KinoKino · Твоя коллекция кино</div>
 </aside>
 <main>
  <div class="top">
-  <div class="search"><span>⌕</span><input id="search" placeholder="Поиск фильмов и сериалов..." autocomplete="off"></div>
+  <div class="search"><span>⌕</span><input id="search" placeholder="Найти фильм, сериал или актёра..." autocomplete="off"></div>
   <div class="top-actions"><button id="kpSearchBtn" class="ghost" style="display:none;margin:0" onclick="openKinopoiskQuery()">Кинопоиск ↗</button><button class="iconbtn" title="Настройки" onclick="openSettings()">⚙</button></div>
  </div>
  <section class="hero"><div class="hero-content">
-  <div class="eyebrow">КИНО БЕЗ РЕКЛАМЫ</div><h1>Твоё кино.<br>Твои правила.</h1>
-  <p>Ищи фильмы и сериалы, сохраняй любимое и открывай их страницы. Без баннеров и навязчивых окон.</p>
-  <button class="primary" onclick="document.querySelector('#search').focus()">⌕　Найти фильм</button>
+  <div class="eyebrow">ВАШ ЛИЧНЫЙ КИНОТЕАТР</div><h1>Большие истории.<br>В одном месте.</h1>
+  <p>Открывай новые фильмы и сериалы, собирай избранное и возвращайся к любимым историям. Твой вечер начинается здесь.</p>
+  <button class="primary" onclick="document.querySelector('#search').focus()">⌕　Найти кино</button>
  </div></section>
  <div class="section-head"><h2 id="sectionTitle">Популярное сейчас</h2><small id="count" class="muted"></small></div>
- <div class="chips">
-  <button class="chip active" data-filter="all">Все</button><button class="chip" data-filter="movie">Фильмы</button><button class="chip" data-filter="tv">Сериалы</button>
- </div>
+ <div class="chips"><button class="chip active" data-filter="all">Всё</button><button class="chip" data-filter="movie">Фильмы</button><button class="chip" data-filter="tv">Сериалы</button></div>
  <div id="status" class="status"></div><div class="grid" id="grid"></div>
- <div class="footer">This product uses the TMDB API but is not endorsed or certified by TMDB. Каталог и постеры предоставляются TMDB после добавления API Read Access Token. KinoKino не связан с Кинопоиском или TMDB.</div>
+ <div class="footer">Каталог и постеры предоставляются TMDB после добавления API Read Access Token. KinoKino не связан с Кинопоиском или TMDB. Воспроизводи только видео, на использование которых у тебя есть права.</div>
 </main>
 </div>
-
 <div class="detail" id="detail" onclick="if(event.target===this)closeDetail()">
- <div class="detail-box"><button class="close" onclick="closeDetail()">×</button>
-  <div class="detail-poster" id="dPoster">KINO</div>
-  <div class="detail-info">
-   <div class="eyebrow">КАРТОЧКА</div><h2 id="dTitle"></h2><div class="muted" id="dMeta"></div>
-   <p id="dDesc"></p>
-   <button class="primary" onclick="openPlayer()">▶　СМОТРЕТЬ</button>
-   <button class="ghost" id="favoriteButton" onclick="toggleFavorite()">♡　В избранное</button>
+ <div class="detail-box"><button class="close" onclick="closeDetail()">×</button><div class="detail-poster" id="dPoster">KINO</div>
+  <div class="detail-info"><div class="eyebrow">О ФИЛЬМЕ</div><h2 id="dTitle"></h2><div class="muted" id="dMeta"></div><p id="dDesc"></p>
+   <button class="primary" onclick="openPlayer()">▶　СМОТРЕТЬ</button><button class="ghost" id="favoriteButton" onclick="toggleFavorite()">♡　В избранное</button>
    <p><button class="ghost" onclick="openKinopoiskSearch()">Найти на Кинопоиске ↗</button></p>
    <div class="notice" id="detailNotice">Встроенный плеер воспроизводит прямые ссылки на видео, которыми ты имеешь право пользоваться. Страница фильма не является видеопотоком.</div>
   </div>
  </div>
 </div>
-
 <div class="modal" id="settings" onclick="if(event.target===this)closeSettings()">
- <div class="modal-card"><button class="close" onclick="closeSettings()">×</button>
-  <h2>Настройки каталога</h2><p class="muted">Подключи TMDB, чтобы получать реальные результаты поиска, постеры и описания.</p>
+ <div class="modal-card"><button class="close" onclick="closeSettings()">×</button><h2>Настройки каталога</h2><p class="muted">Подключи TMDB, чтобы получать реальные результаты поиска, постеры и описания.</p>
   <div class="field"><label>TMDB API Read Access Token</label><input id="tmdbToken" type="password" placeholder="Вставь Bearer token"></div>
-  <div class="help">Получить токен можно в настройках аккаунта TMDB → API. Токен хранится локально на этом устройстве. Не отправляй его другим людям.</div>
+  <div class="help">Токен хранится локально на этом устройстве. Не отправляй его другим людям.</div>
   <div class="modal-actions"><button class="ghost" onclick="closeSettings()">Отмена</button><button class="primary" onclick="saveSettings()">Сохранить</button></div>
-  <p class="help"><a href="https://www.themoviedb.org/settings/api" target="_blank" style="color:#ff8985">Открыть настройки API TMDB ↗</a></p>
+  <p class="help"><a href="https://www.themoviedb.org/settings/api" target="_blank" style="color:#75bdff">Открыть настройки API TMDB ↗</a></p>
  </div>
 </div>
-
 <div class="modal" id="player" onclick="if(event.target===this)closePlayer()">
- <div class="player-card"><button class="close" onclick="closePlayer()">×</button>
-  <h2 id="playerTitle">Видеоплеер</h2><p class="muted">Вставь прямую ссылку на разрешённый видеофайл или HLS-поток (.m3u8).</p>
-  <video id="video" controls playsinline></video>
-  <div class="player-controls"><input id="streamUrl" placeholder="https://example.com/video.mp4 или .m3u8"><button class="primary" onclick="loadStream()">Открыть</button></div>
-  <div class="help" id="playerStatus">Поддерживаются MP4/WebM и HLS (при наличии сетевого доступа). Защищённые DRM-потоки не поддерживаются в этом прототипе.</div>
+ <div class="player-card"><button class="close" onclick="closePlayer()">×</button><h2 id="playerTitle">Видеоплеер</h2><p class="muted">Вставь прямую ссылку на разрешённый видеофайл или HLS-поток (.m3u8).</p>
+  <video id="video" controls playsinline></video><div class="player-controls"><input id="streamUrl" placeholder="https://example.com/video.mp4 или .m3u8"><button class="primary" onclick="loadStream()">Открыть</button></div>
+  <div class="help" id="playerStatus">Поддерживаются MP4/WebM и HLS при наличии сетевого доступа. Защищённые DRM-потоки не поддерживаются.</div>
  </div>
 </div>
-
 <script src="../node_modules/hls.js/dist/hls.min.js"></script>
 <script>
-const TMDB='https://api.themoviedb.org/3';
-const IMG='https://image.tmdb.org/t/p/w500';
-let token=localStorage.getItem('kk_tmdb_token')||'';
-let filter='all',tab='home',selected=null,results=[],hls=null;
-let favorites=JSON.parse(localStorage.getItem('kk_favs')||'[]');
-let history=JSON.parse(localStorage.getItem('kk_hist')||'[]');
-let favoriteItems=JSON.parse(localStorage.getItem('kk_fav_items')||'[]');
-let historyItems=JSON.parse(localStorage.getItem('kk_hist_items')||'[]');
-let searchTimer=null;
+const TMDB='https://api.themoviedb.org/3',IMG='https://image.tmdb.org/t/p/w500';
+let token=localStorage.getItem('kk_tmdb_token')||'',filter='all',tab='home',selected=null,results=[],hls=null;
+let favorites=JSON.parse(localStorage.getItem('kk_favs')||'[]'),history=JSON.parse(localStorage.getItem('kk_hist')||'[]');
+let favoriteItems=JSON.parse(localStorage.getItem('kk_fav_items')||'[]'),historyItems=JSON.parse(localStorage.getItem('kk_hist_items')||'[]'),searchTimer=null;
 const demo=[
- {id:'demo1',media_type:'movie',title:'Арахнид',name:'Арахнид',year:'2001',overview:'Демонстрационная карточка. Подключи TMDB, чтобы искать реальные фильмы и получать официальные метаданные и постеры.',poster_path:null,genre:'Фантастика · Ужасы'},
- {id:'demo2',media_type:'movie',title:'Интерстеллар',name:'Интерстеллар',year:'2014',overview:'Пример карточки фильма. Реальные сведения будут загружаться из TMDB после настройки API.',poster_path:null},
- {id:'demo3',media_type:'movie',title:'Начало',name:'Начало',year:'2010',overview:'Пример карточки фильма. Реальные сведения будут загружаться из TMDB после настройки API.',poster_path:null},
- {id:'demo4',media_type:'tv',title:'Очень странные дела',name:'Очень странные дела',year:'2016',overview:'Пример карточки сериала. Реальные сведения будут загружаться из TMDB после настройки API.',poster_path:null}
-];
-function titleOf(m){return m.title||m.name||'Без названия'}
-function yearOf(m){return (m.release_date||m.first_air_date||m.year||'').slice(0,4)}
-function posterOf(m){return m.poster_path?IMG+m.poster_path:''}
-function idKey(m){return String(m.media_type||'movie')+':'+m.id}
+{id:'demo1',media_type:'movie',title:'Арахнид',name:'Арахнид',year:'2001',overview:'Демонстрационная карточка. Подключи TMDB, чтобы получать реальные метаданные и постеры.',poster_path:null},
+{id:'demo2',media_type:'movie',title:'Интерстеллар',name:'Интерстеллар',year:'2014',overview:'Пример карточки фильма. Реальные сведения загружаются из TMDB.',poster_path:null},
+{id:'demo3',media_type:'movie',title:'Начало',name:'Начало',year:'2010',overview:'Пример карточки фильма. Реальные сведения загружаются из TMDB.',poster_path:null},
+{id:'demo4',media_type:'tv',title:'Очень странные дела',name:'Очень странные дела',year:'2016',overview:'Пример карточки сериала. Реальные сведения загружаются из TMDB.',poster_path:null}];
+function titleOf(m){return m.title||m.name||'Без названия'}function yearOf(m){return(m.release_date||m.first_air_date||m.year||'').slice(0,4)}function posterOf(m){return m.poster_path?IMG+m.poster_path:''}function idKey(m){return String(m.media_type||'movie')+':'+m.id}
 function saveLocal(){localStorage.setItem('kk_favs',JSON.stringify(favorites));localStorage.setItem('kk_hist',JSON.stringify(history));localStorage.setItem('kk_fav_items',JSON.stringify(favoriteItems));localStorage.setItem('kk_hist_items',JSON.stringify(historyItems))}
 function setStatus(t){document.querySelector('#status').textContent=t||''}
-function openSettings(){document.querySelector('#tmdbToken').value=token;document.querySelector('#settings').style.display='block'}
-function closeSettings(){document.querySelector('#settings').style.display='none'}
+function openSettings(){document.querySelector('#tmdbToken').value=token;document.querySelector('#settings').style.display='block'}function closeSettings(){document.querySelector('#settings').style.display='none'}
 function saveSettings(){token=document.querySelector('#tmdbToken').value.trim();localStorage.setItem('kk_tmdb_token',token);closeSettings();if(token){setStatus('Подключение к TMDB…');loadPopular()}else{setStatus('TMDB отключён. Поиск откроет Кинопоиск в браузере.');render(demo)}}
 async function api(path){if(!token)throw new Error('Добавь TMDB API Read Access Token в настройках.');const r=await fetch(TMDB+path,{headers:{Authorization:'Bearer '+token,accept:'application/json'}});if(!r.ok){let msg='Ошибка TMDB: '+r.status;try{const j=await r.json();msg=j.status_message||msg}catch{}throw new Error(msg)}return r.json()}
-function render(list){
- results=list||results;
- let source=tab==='favorites'?favoriteItems:tab==='history'?historyItems:results;
- let shown=source.filter(m=>filter==='all'||m.media_type===filter);
- document.querySelector('#favCount').textContent=favorites.length?favorites.length:'';
- document.querySelector('#count').textContent=shown.length+' результатов';
- document.querySelector('#sectionTitle').textContent=tab==='favorites'?'Избранное':tab==='history'?'История':tab==='popular'?'Популярное сейчас':'Результаты поиска';
- document.querySelector('#grid').innerHTML=shown.length?shown.map(m=>{
-  const t=titleOf(m),p=posterOf(m),type=m.media_type==='tv'?'СЕРИАЛ':'ФИЛЬМ';
-  return `<article class="movie" onclick="openMovie('${String(m.id).replace(/'/g,'')}','${m.media_type||'movie'}')"><div class="poster" style="${p?`background-image:linear-gradient(0deg,rgba(0,0,0,.8),transparent 60%),url('${p}')`:''}"><span class="badge">${type}</span>${p?'':`<div class="poster-title">${escapeHtml(t.toUpperCase())}</div>`}</div><div class="movie-title">${escapeHtml(t)}</div><div class="movie-meta">${yearOf(m)||'Год неизвестен'}</div></article>`;
- }).join(''):'<div class="empty">Ничего не найдено. Попробуй изменить запрос.</div>';
-}
+function render(list){results=list||results;let source=tab==='favorites'?favoriteItems:tab==='history'?historyItems:results;let shown=source.filter(m=>filter==='all'||m.media_type===filter);document.querySelector('#favCount').textContent=favorites.length?favorites.length:'';document.querySelector('#count').textContent=shown.length+' результатов';document.querySelector('#sectionTitle').textContent=tab==='favorites'?'Избранное':tab==='history'?'История':tab==='popular'?'Популярное сейчас':'Результаты поиска';
+document.querySelector('#grid').innerHTML=shown.length?shown.map(m=>{const t=titleOf(m),p=posterOf(m),type=m.media_type==='tv'?'СЕРИАЛ':'ФИЛЬМ';return `<article class="movie" onclick="openMovie('${String(m.id).replace(/'/g,'')}','${m.media_type||'movie'}')"><div class="poster" style="${p?`background-image:linear-gradient(0deg,rgba(0,0,0,.8),transparent 60%),url('${p}')`:''}"><span class="badge">${type}</span>${p?'':`<div class="poster-title">${escapeHtml(t.toUpperCase())}</div>`}</div><div class="movie-title">${escapeHtml(t)}</div><div class="movie-meta">${yearOf(m)||'Год неизвестен'}</div></article>`}).join(''):'<div class="empty">Ничего не найдено. Попробуй изменить запрос.</div>'}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-async function loadPopular(){
- if(!token){render(demo);setStatus('Добавь TMDB API Read Access Token в настройках для реального каталога.');return}
- try{const data=await api('/trending/all/week?language=ru-RU');results=(data.results||[]).filter(m=>m.media_type==='movie'||m.media_type==='tv');render(results);setStatus('Популярное за неделю · данные TMDB')}
- catch(e){render(demo);setStatus(e.message)}
-}
-async function searchMovies(q){
- if(!q.trim()){tab='home';await loadPopular();return}
- if(!token){setStatus('Для автоматических результатов добавь TMDB-токен в ⚙. Можно открыть поиск Кинопоиска кнопкой справа.');render(demo.filter(m=>titleOf(m).toLowerCase().includes(q.toLowerCase())));return}
- setStatus('Ищем «'+q+'»…');
- try{const data=await api('/search/multi?query='+encodeURIComponent(q)+'&include_adult=false&language=ru-RU&page=1');results=(data.results||[]).filter(m=>m.media_type==='movie'||m.media_type==='tv');tab='home';render(results);setStatus('Найдено: '+results.length+' · TMDB')}
- catch(e){setStatus(e.message);render([])}
-}
-async function openMovie(id,type){
- let m=results.find(x=>String(x.id)===String(id)&&x.media_type===type)||demo.find(x=>String(x.id)===String(id));
- if(token&&!String(id).startsWith('demo')){try{m=await api('/'+(type==='tv'?'tv':'movie')+'/'+id+'?language=ru-RU&append_to_response=external_ids')}catch(e){setStatus(e.message)}}
- if(!m)return;selected={...m,media_type:type};const t=titleOf(m),p=posterOf(m);
- document.querySelector('#dTitle').textContent=t;
- document.querySelector('#dMeta').textContent=[yearOf(m),type==='tv'?'Сериал':'Фильм',m.vote_average?'★ '+Number(m.vote_average).toFixed(1):''].filter(Boolean).join(' · ');
- document.querySelector('#dDesc').textContent=m.overview||'Описание отсутствует в каталоге.';
- const dp=document.querySelector('#dPoster');dp.textContent=p?'':t.toUpperCase();dp.style.background=p?`#222 url('${p}') center/cover`:'linear-gradient(145deg,#6c3838,#202535)';
- updateFavoriteButton();document.querySelector('#detail').style.display='block';
- const key=idKey(selected);history=[key,...history.filter(x=>x!==key)].slice(0,50);historyItems=[selected,...historyItems.filter(x=>idKey(x)!==key)].slice(0,50);saveLocal();
-}
-function closeDetail(){document.querySelector('#detail').style.display='none'}
-function updateFavoriteButton(){const yes=selected&&favorites.includes(idKey(selected));document.querySelector('#favoriteButton').textContent=yes?'♥　В избранном':'♡　В избранное'}
-function toggleFavorite(){
- if(!selected)return;
- const k=idKey(selected),exists=favorites.includes(k);
- favorites=exists?favorites.filter(x=>x!==k):[...favorites,k];
- favoriteItems=exists?favoriteItems.filter(x=>idKey(x)!==k):[selected,...favoriteItems.filter(x=>idKey(x)!==k)];
- saveLocal();updateFavoriteButton();render();
-}
-function openKinopoiskQuery(){
- const q=document.querySelector('#search').value.trim();
- if(!q)return;
- window.open('https://www.kinopoisk.ru/index.php?kp_query='+encodeURIComponent(q),'_blank');
-}
-function openKinopoiskSearch(){if(!selected)return;const q=titleOf(selected)+' '+yearOf(selected);window.open('https://www.kinopoisk.ru/index.php?kp_query='+encodeURIComponent(q),'_blank')}
+async function loadPopular(){if(!token){render(demo);setStatus('Демо-каталог. Добавь TMDB API Read Access Token в ⚙ для реального каталога.');return}try{const data=await api('/trending/all/week?language=ru-RU');results=(data.results||[]).filter(m=>m.media_type==='movie'||m.media_type==='tv');render(results);setStatus('Популярное за неделю · данные TMDB')}catch(e){render(demo);setStatus(e.message)}}
+async function searchMovies(q){if(!q.trim()){tab='home';await loadPopular();return}if(!token){setStatus('Добавь TMDB-токен в ⚙.');render(demo.filter(m=>titleOf(m).toLowerCase().includes(q.toLowerCase())));return}setStatus('Ищем «'+q+'»…');try{const data=await api('/search/multi?query='+encodeURIComponent(q)+'&include_adult=false&language=ru-RU&page=1');results=(data.results||[]).filter(m=>m.media_type==='movie'||m.media_type==='tv');tab='home';render(results);setStatus('Найдено: '+results.length+' · TMDB')}catch(e){setStatus(e.message);render([])}}
+async function openMovie(id,type){let m=results.find(x=>String(x.id)===String(id)&&x.media_type===type)||demo.find(x=>String(x.id)===String(id));if(token&&!String(id).startsWith('demo')){try{m=await api('/'+(type==='tv'?'tv':'movie')+'/'+id+'?language=ru-RU&append_to_response=external_ids')}catch(e){setStatus(e.message)}}if(!m)return;selected={...m,media_type:type};const t=titleOf(m),p=posterOf(m);document.querySelector('#dTitle').textContent=t;document.querySelector('#dMeta').textContent=[yearOf(m),type==='tv'?'Сериал':'Фильм',m.vote_average?'★ '+Number(m.vote_average).toFixed(1):''].filter(Boolean).join(' · ');document.querySelector('#dDesc').textContent=m.overview||'Описание отсутствует в каталоге.';const dp=document.querySelector('#dPoster');dp.textContent=p?'':t.toUpperCase();dp.style.background=p?`#17243a url('${p}') center/cover`:'linear-gradient(145deg,#2366a8,#111b2c)';updateFavoriteButton();document.querySelector('#detail').style.display='block';const key=idKey(selected);history=[key,...history.filter(x=>x!==key)].slice(0,50);historyItems=[selected,...historyItems.filter(x=>idKey(x)!==key)].slice(0,50);saveLocal()}
+function closeDetail(){document.querySelector('#detail').style.display='none'}function updateFavoriteButton(){const yes=selected&&favorites.includes(idKey(selected));document.querySelector('#favoriteButton').textContent=yes?'♥　В избранном':'♡　В избранное'}
+function toggleFavorite(){if(!selected)return;const k=idKey(selected),exists=favorites.includes(k);favorites=exists?favorites.filter(x=>x!==k):[...favorites,k];favoriteItems=exists?favoriteItems.filter(x=>idKey(x)!==k):[selected,...favoriteItems.filter(x=>idKey(x)!==k)];saveLocal();updateFavoriteButton();render()}
+function openKinopoiskQuery(){const q=document.querySelector('#search').value.trim();if(q)window.open('https://www.kinopoisk.ru/index.php?kp_query='+encodeURIComponent(q),'_blank')}
+function openKinopoiskSearch(){if(selected){const q=titleOf(selected)+' '+yearOf(selected);window.open('https://www.kinopoisk.ru/index.php?kp_query='+encodeURIComponent(q),'_blank')}}
 function openPlayer(){if(!selected)return;document.querySelector('#playerTitle').textContent='Воспроизведение · '+titleOf(selected);document.querySelector('#player').style.display='block';document.querySelector('#streamUrl').value='';document.querySelector('#playerStatus').textContent='Вставь прямую ссылку на видео, которое разрешено воспроизводить.'}
 function closePlayer(){const v=document.querySelector('#video');v.pause();v.removeAttribute('src');v.load();if(hls){hls.destroy();hls=null}document.querySelector('#player').style.display='none'}
-function loadStream(){
- const url=document.querySelector('#streamUrl').value.trim(),v=document.querySelector('#video'),status=document.querySelector('#playerStatus');
- try{const u=new URL(url);if(!['http:','https:'].includes(u.protocol))throw new Error('Нужна ссылка http или https');
-  if(hls){hls.destroy();hls=null}v.pause();v.removeAttribute('src');v.load();
-  if(url.toLowerCase().includes('.m3u8')&&window.Hls&&Hls.isSupported()){hls=new Hls();hls.loadSource(url);hls.attachMedia(v);hls.on(Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));hls.on(Hls.Events.ERROR,(_,d)=>{if(d.fatal)status.textContent='Не удалось загрузить поток: '+d.details});}
-  else if(v.canPlayType('application/vnd.apple.mpegurl')){v.src=url;v.play().catch(()=>{})}
-  else{v.src=url;v.play().catch(()=>{status.textContent='Поток загружен. Нажми Play, если браузер не начал воспроизведение автоматически.'})}
-  status.textContent='Загружаем поток…';
- }catch(e){status.textContent=e.message}
-}
-document.querySelector('#search').addEventListener('input',e=>{
- const q=e.target.value.trim();
- document.querySelector('#kpSearchBtn').style.display=(!token&&q)?'inline-block':'none';
- clearTimeout(searchTimer);searchTimer=setTimeout(()=>searchMovies(q),550);
-});
+function loadStream(){const url=document.querySelector('#streamUrl').value.trim(),v=document.querySelector('#video'),status=document.querySelector('#playerStatus');try{const u=new URL(url);if(!['http:','https:'].includes(u.protocol))throw new Error('Нужна ссылка http или https');if(hls){hls.destroy();hls=null}v.pause();v.removeAttribute('src');v.load();if(url.toLowerCase().includes('.m3u8')&&window.Hls&&Hls.isSupported()){hls=new Hls();hls.loadSource(url);hls.attachMedia(v);hls.on(Hls.Events.MANIFEST_PARSED,()=>v.play().catch(()=>{}));hls.on(Hls.Events.ERROR,(_,d)=>{if(d.fatal)status.textContent='Не удалось загрузить поток: '+d.details})}else if(v.canPlayType('application/vnd.apple.mpegurl')){v.src=url;v.play().catch(()=>{})}else{v.src=url;v.play().catch(()=>{status.textContent='Поток загружен. Нажми Play, если воспроизведение не началось автоматически.'})}status.textContent='Загружаем поток…'}catch(e){status.textContent=e.message}}
+document.querySelector('#search').addEventListener('input',e=>{const q=e.target.value.trim();document.querySelector('#kpSearchBtn').style.display=(!token&&q)?'inline-block':'none';clearTimeout(searchTimer);searchTimer=setTimeout(()=>searchMovies(q),550)});
 document.querySelector('#search').addEventListener('keydown',e=>{if(e.key==='Enter'&&!token)openKinopoiskQuery()});
 document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));b.classList.add('active');filter=b.dataset.filter;render()}));
 document.querySelectorAll('.nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');tab=b.dataset.tab;if(tab==='popular'||tab==='home')loadPopular();else render()}));
