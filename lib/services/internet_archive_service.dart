@@ -114,8 +114,12 @@ class InternetArchiveService {
     final wanted = _normalize(title, expectedYear);
     if (wanted.isEmpty) return null;
     final cleanTitle = title.replaceAll('"', '').trim();
+    final cleanSeriesTitle = (seriesTitle ?? '').replaceAll('"', '').trim();
     final words = cleanTitle.split(RegExp(r'\s+')).where((word) => word.length > 1).toList();
     final tokenQuery = words.isEmpty ? cleanTitle : words.map((word) => 'title:"$word"').join(' AND ');
+    final episodeCode = seasonNumber != null && episodeNumber != null
+        ? 'S${seasonNumber.toString().padLeft(2, '0')}E${episodeNumber.toString().padLeft(2, '0')}'
+        : '';
     const languageMap = {
       'ru': 'rus', 'en': 'eng', 'ja': 'jpn', 'fr': 'fre',
       'de': 'ger', 'es': 'spa', 'ko': 'kor', 'zh': 'chi',
