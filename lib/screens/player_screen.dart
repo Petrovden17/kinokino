@@ -5,10 +5,12 @@ import '../services/legal_source_service.dart';
 import '../services/internet_archive_service.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.streamUrl, required this.title, this.variants = const []});
+  const PlayerScreen({super.key, required this.streamUrl, required this.title, this.variants = const [], this.onChooseEpisode, this.onResolveEpisode});
   final String streamUrl;
   final String title;
   final List<ArchiveVideoVariant> variants;
+  final Future<Map<String, dynamic>?> Function()? onChooseEpisode;
+  final Future<ArchiveVideo?> Function(Map<String, dynamic>)? onResolveEpisode;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -21,11 +23,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _fullscreen = false;
   double _speed = 1;
   late String _activeUrl;
+  late String _activeTitle;
+  late List<ArchiveVideoVariant> _activeVariants;
 
   @override
   void initState() {
     super.initState();
     _activeUrl = widget.streamUrl;
+    _activeTitle = widget.title;
+    _activeVariants = widget.variants;
     _initialize();
   }
 
@@ -98,6 +104,38 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _initialize(autoplay: wasPlaying);
   }
 
+  Future<void> _selectEpisode() async {
+    final choose = widget.onChooseEpisode;
+    final resolve = widget.onResolveEpisode;
+    if (choose == null || resolve == null) return;
+    final episode = await choose();
+    if (episode == null || !mounted) return;
+    setState(() { _busy = true; _error = null; });
+    final source = await resolve(episode);
+    if (!mounted) return;
+    if (source == null) {
+      setState(() => _busy = false);
+      return;
+    }
+    final wasPlaying = _controller?.value.isPlaying ?? true;
+    final previous = _controller;
+    previous?.removeListener(_onChanged);
+    _controller = null;
+    await previous?.dispose();
+    if (!mounted) return;
+    final season = (episode['season_number'] as num?)?.toInt() ?? 1;
+    final number = (episode['episode_number'] as num?)?.toInt() ?? 1;
+    final episodeName = (episode['name'] ?? 'Серия $number').toString();
+    setState(() {
+      _activeUrl = source.url.toString();
+      _activeVariants = source.variants;
+      _activeTitle = '${widget.title} · S${season.toString().padLeft(2, '0')}E${number.toString().padLeft(2, '0')} — $episodeName';
+      _busy = true;
+      _error = null;
+    });
+    await _initialize(autoplay: wasPlaying);
+  }
+
   Future<void> _toggleFullscreen() async {
     final entering = !_fullscreen;
     if (entering) {
@@ -143,7 +181,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: _fullscreen ? null : AppBar(
-        title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text(_activeTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
         backgroundColor: Colors.black,
       ),
       body: SafeArea(
@@ -218,11 +256,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               v.isPlaying ? 'Пауза' : 'Воспроизвести',
                               () => v.isPlaying ? c.pause() : c.play(), size: 42),
                             _control(Icons.forward_10, 'Вперёд 10 секунд', () => _seek(const Duration(seconds: 10)), size: 30),
-                            if (widget.variants.length > 1)
+                            if (_activeVariants.length > 1)
                               PopupMenuButton<ArchiveVideoVariant>(
                                 tooltip: 'Качество видео',
                                 onSelected: _selectQuality,
-                                itemBuilder: (_) => widget.variants.map((variant) =>
+                                itemBuilder: (_) => _activeVariants.map((variant) =>
                                   PopupMenuItem(
                                     value: variant,
                                     child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -245,6 +283,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                     ).label),
                                   ],
                                 )),
+                              ),
+                            if (widget.onChooseEpisode != null && widget.onResolveEpisode != null)
+                              FilledButton.tonalIcon(
+                                onPressed: _selectEpisode,
+                                icon: const Icon(Icons.video_library_outlined),
+                                label: const Text('Серия'),
                               ),
                             PopupMenuButton<double>(
                               tooltip: 'Скорость',
