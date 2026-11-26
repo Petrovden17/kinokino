@@ -62,10 +62,10 @@ jobs:
           if (-not (Test-Path $pluginCmake)) { throw "Windows WebView CMake file not found: $pluginCmake" }
           $pluginSource = [IO.File]::ReadAllText((Resolve-Path $pluginCmake))
           # CMake does not accept DEPENDS in add_custom_command(TARGET ... PRE_BUILD).
-          $pluginPatched = [regex]::Replace($pluginSource, '(?m)^\\s*DEPENDS\\s+\\$\\{NUGET\\}\\s*\\r?\\n', '')
+          $pluginPatched = [regex]::Replace($pluginSource, '(?m)^\s*DEPENDS\s+\$\{NUGET\}\s*\r?\n', '')
           # Keep NuGet packages ready before compiling the actual plugin library.
-          if ($pluginPatched -notmatch 'add_dependencies\\(\\$\\{PLUGIN_NAME\\}\\s+\\$\\{PROJECT_NAME\\}_DEPS\\)') {
-            $libPattern = '(?s)(add_library\\(\\$\\{PLUGIN_NAME\\} SHARED.*?\\r?\\n\\))'
+          if ($pluginPatched -notmatch 'add_dependencies\(\$\{PLUGIN_NAME\}\s+\$\{PROJECT_NAME\}_DEPS\)') {
+            $libPattern = '(?s)(add_library\(\$\{PLUGIN_NAME\} SHARED.*?\))'
             if ($pluginPatched -notmatch $libPattern) { throw 'Could not locate WebView add_library declaration.' }
             $pluginPatched = [regex]::Replace($pluginPatched, $libPattern, '$1' + "`r`nadd_dependencies(`${PLUGIN_NAME} `${PROJECT_NAME}_DEPS)", 1)
           }
@@ -91,7 +91,7 @@ jobs:
             $rootSource = $rootSource.Replace($marker, $marker + "`r`n" + $fallback)
             [IO.File]::WriteAllText((Resolve-Path $rootCmake), $rootSource)
           }
-          if ($pluginPatched -match '(?m)^\\s*DEPENDS\\s+\\$\\{NUGET\\}') { throw 'Invalid DEPENDS argument remains in WebView CMake.' }
+          if ($pluginPatched -match '(?m)^\s*DEPENDS\s+\$\{NUGET\}') { throw 'Invalid DEPENDS argument remains in WebView CMake.' }
       - name: Analyze Dart code
         run: flutter analyze --no-pub --no-fatal-infos
 
