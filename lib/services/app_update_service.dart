@@ -42,10 +42,10 @@ class AppUpdateService {
     await _dio.download(update.downloadUrl, zipPath, options: Options(headers: {'Accept': 'application/octet-stream'}));
     final script = File(scriptPath);
     await script.writeAsString(r'''
-param([int]$TargetPid, [string]$Archive, [string]$InstallDir, [string]$Exe)
+param([string]$Archive, [string]$InstallDir, [string]$Exe)
 $ErrorActionPreference = 'Stop'
 try {
-  while (Get-Process -Id $TargetPid -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }
+  Start-Sleep -Seconds 2
   Expand-Archive -LiteralPath $Archive -DestinationPath $InstallDir -Force
   Start-Process -FilePath $Exe -WorkingDirectory $InstallDir
   Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue
@@ -56,7 +56,7 @@ try {
 ''');
     await Process.start('powershell.exe', [
       '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath,
-      '-TargetPid', Process.pid.toString(), '-Archive', zipPath,
+      '-Archive', zipPath,
       '-InstallDir', installDir, '-Exe', executable,
     ], mode: ProcessStartMode.detached);
     exit(0);
