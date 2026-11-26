@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter/services.dart';
 import '../services/legal_source_service.dart';
 
 class PlayerScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String? _error;
   bool _busy = true;
   double _speed = 1.0;
+  bool _fullscreen = false;
 
   @override
   void initState() {
@@ -76,8 +78,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await c.seekTo(target < Duration.zero ? Duration.zero : (target > duration ? duration : target));
   }
 
+  Future<void> _toggleFullscreen() async {
+    if (_fullscreen) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    }
+    if (mounted) setState(() => _fullscreen = !_fullscreen);
+  }
+
   @override
   void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     _controller?.removeListener(_onPlayerChanged);
     _controller?.dispose();
     super.dispose();
@@ -200,7 +215,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Icon(Icons.volume_down, color: Colors.white70),
+                                Expanded(
+                                  child: Slider(
+                                    value: value.volume.clamp(0.0, 1.0),
+                                    onChanged: (volume) => c.setVolume(volume),
+                                  ),
+                                ),
+                                const Icon(Icons.volume_up, color: Colors.white70),
+                                IconButton(
+                                  tooltip: _fullscreen ? 'Выйти из полноэкранного режима' : 'Полный экран',
+                                  color: Colors.white,
+                                  onPressed: _toggleFullscreen,
+                                  icon: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
                             const Text(
                               'Воспроизводятся только доступные вам легальные видеопотоки.',
                               textAlign: TextAlign.center,
