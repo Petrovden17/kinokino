@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/media_item.dart';
 
 /// Облачная библиотека пользователя. Доступ ограничен RLS-политиками Supabase.
 class LocalDatabase {
