@@ -1,9 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../services/creator_service.dart';
-import '../services/beta_release_service.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../services/profile_service.dart';
@@ -37,8 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _genres = [];
   bool _loading = false;
   bool _isCreator = false;
-  bool _betaLoading = false;
-  Map<String, dynamic>? _betaRelease;
   String? _error;
   String _type = 'all';
   String _sort = 'popularity.desc';
@@ -55,7 +51,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadGenres();
     _loadTrending();
     _loadCreatorAccess();
-    _loadBetaRelease();
   }
 
   Future<void> _loadCreatorAccess() async {
@@ -63,42 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final allowed = await CreatorService().isCreator();
       if (mounted) setState(() => _isCreator = allowed);
     } catch (_) {}
-  }
-
-  Future<void> _loadBetaRelease() async {
-    if (mounted) setState(() => _betaLoading = true);
-    try {
-      final release = await BetaReleaseService().latest();
-      if (mounted) setState(() => _betaRelease = release);
-    } catch (_) {
-      // Beta discovery is optional and must not interrupt catalogue loading.
-    } finally {
-      if (mounted) setState(() => _betaLoading = false);
-    }
-  }
-
-  Future<void> _openBetaWorkflow() async {
-    final uri = Uri.parse('https://github.com/Petrovden17/kinokino/actions/workflows/build-windows.yml');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть GitHub Actions.')),
-      );
-    }
-  }
-
-  Future<void> _openBetaRelease() async {
-    final asset = _betaRelease?['beta_asset'];
-    final url = asset is Map
-        ? (asset['browser_download_url'] ?? '').toString()
-        : '';
-    if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть бета-версию.')),
-      );
-    }
   }
 
   Future<void> _resetFilters() async {
@@ -418,67 +377,6 @@ class _HomeScreenState extends State<HomeScreen> {
     ]),
   );
 
-  Widget _betaPanel() {
-    final release = _betaRelease;
-    final tag = (release?['tag_name'] ?? '').toString();
-    final name = (release?['name'] ?? tag).toString();
-    final notes = (release?['body'] ?? '').toString().trim();
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 2, 16, 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xE52B2447), Color(0xE5121D31)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF9B7BFF).withValues(alpha: .42)),
-      ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Icon(Icons.science_outlined, color: Color(0xFFB9A5FF), size: 26),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Бета-версии KinoKino', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-          const SizedBox(height: 4),
-          Text(_betaLoading
-            ? 'Проверяем новые тестовые сборки…'
-            : release == null
-              ? 'Тестовых сборок пока нет.'
-              : 'Последняя сборка: $name',
-            style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          if (notes.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(notes, maxLines: 2, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white54, fontSize: 11)),
-          ],
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 6, children: [
-            if (release != null)
-              OutlinedButton.icon(
-                onPressed: _isCreator ? _openBetaRelease : null,
-                icon: const Icon(Icons.download_outlined, size: 16),
-                label: Text(_isCreator ? 'Скачать бета-версию' : 'Доступно создателю'),
-              ),
-            if (_isCreator)
-              FilledButton.tonalIcon(
-                onPressed: _openBetaWorkflow,
-                icon: const Icon(Icons.rocket_launch_outlined, size: 16),
-                label: const Text('Собрать в Actions'),
-              ),
-            if (!_isCreator)
-              const Text('Тестирование и загрузка доступны только создателю.',
-                style: TextStyle(color: Colors.white54, fontSize: 11)),
-          ]),
-        ])),
-        IconButton(
-          tooltip: 'Обновить список бета-версий',
-          onPressed: _betaLoading ? null : _loadBetaRelease,
-          icon: const Icon(Icons.refresh_rounded),
-        ),
-      ]),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final profile = widget.profileService.activeProfile;
@@ -548,7 +446,6 @@ class _HomeScreenState extends State<HomeScreen> {
             slivers: [
               SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).top + kToolbarHeight + 8)),
               SliverToBoxAdapter(child: _filters()),
-              SliverToBoxAdapter(child: _betaPanel()),
               SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.fromLTRB(18, 5, 18, 10),
                 child: Row(children: [
