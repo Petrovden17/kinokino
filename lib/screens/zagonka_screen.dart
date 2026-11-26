@@ -3,9 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class ZagonkaScreen extends StatefulWidget {
-  const ZagonkaScreen({super.key, required this.title});
+  const ZagonkaScreen({super.key, required this.title, this.kinopoiskId, this.isSeries = false});
 
   final String title;
+  final int? kinopoiskId;
+  final bool isSeries;
 
   @override
   State<ZagonkaScreen> createState() => _ZagonkaScreenState();
@@ -16,6 +18,24 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   double _progress = 0;
   String? _pageError;
   bool _isFullscreen = false;
+  bool _usingFallback = false;
+
+  WebUri get _primaryUrl {
+    final id = widget.kinopoiskId;
+    if (id == null || id <= 0) return WebUri('https://fixtyflux.cfd/');
+    final kind = widget.isSeries ? 'series' : 'film';
+    return WebUri('https://fixtyflux.cfd/$kind/$id/');
+  }
+
+  Future<void> _switchToFallback() async {
+    if (_usingFallback || !mounted) return;
+    setState(() {
+      _usingFallback = true;
+      _pageError = null;
+      _progress = 0;
+    });
+    await _controller?.loadUrl(urlRequest: URLRequest(url: WebUri('https://8.zagonka.xyz/')));
+  }
 
   Future<void> _setFullscreen(bool enabled) async {
     if (!mounted || _isFullscreen == enabled) return;
@@ -118,7 +138,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         fit: StackFit.expand,
         children: [
           InAppWebView(
-            initialUrlRequest: URLRequest(url: WebUri('https://8.zagonka.xyz/')),
+            initialUrlRequest: URLRequest(url: _primaryUrl),
             initialSettings: InAppWebViewSettings(
               javaScriptEnabled: true,
               mediaPlaybackRequiresUserGesture: false,
@@ -151,9 +171,21 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             onExitFullscreen: (controller) => _setFullscreen(false),
             onReceivedError: (controller, request, error) {
               if (request.isForMainFrame != true || !mounted) return;
-              setState(() {
-                _pageError = 'Не удалось загрузить страницу Zagonka. Проверь подключение и нажми «Обновить».';
-              });
+              if (!_usingFallback) {
+                _switchToFallback();
+              } else {
+                setState(() {
+                  _pageError = 'Не удалось загрузить FixtyFlux и резервную Zagonka. Проверь подключение и нажми «Обновить».';
+                });
+              }
+            },
+            onReceivedHttpError: (controller, request, errorResponse) {
+              if (request.isForMainFrame != true || !mounted) return;
+              if (!_usingFallback && (errorResponse.statusCode ?? 0) >= 400) {
+                _switchToFallback();
+              } else if (_usingFallback && (errorResponse.statusCode ?? 0) >= 400) {
+                setState(() => _pageError = 'Оба источника вернули ошибку загрузки. Нажми «Обновить», чтобы попробовать снова.');
+              }
             },
             onCreateWindow: (controller, action) async => false,
           ),
@@ -183,7 +215,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              widget.title,
+                              '${widget.title} · ${_usingFallback ? 'Zagonka' : 'FixtyFlux'}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -219,7 +251,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Text(
-                            widget.title,
+                            '${widget.title} · ${_usingFallback ? 'Zagonka' : 'FixtyFlux'}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -255,7 +287,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                       tooltip: 'Повторить',
                       onPressed: () {
                         setState(() => _pageError = null);
-                        _controller?.reload();
+                        if (_usingFallback) {
+                          _controller?.loadUrl(urlRequest: URLRequest(url: WebUri('https://8.zagonka.xyz/')));
+                        } else {
+                          _controller?.loadUrl(urlRequest: URLRequest(url: _primaryUrl));
+                        }
                       },
                       icon: const Icon(Icons.refresh, color: Colors.white),
                     ),
