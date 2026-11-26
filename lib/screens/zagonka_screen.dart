@@ -43,7 +43,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   }
 
   Future<void> _openExternalBrowser() async {
-    final opened = await launchUrl(_primaryUrl, mode: LaunchMode.externalApplication);
+    final opened = await launchUrl(Uri.parse(_primaryUrl.toString()), mode: LaunchMode.externalApplication);
     if (!opened && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Не удалось открыть страницу во внешнем браузере.')),
