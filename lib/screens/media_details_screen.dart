@@ -182,9 +182,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final date = (episode['air_date'] ?? '').toString();
     final year = int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? _releaseYear;
     final episodeName = (episode['name'] ?? '').toString().trim();
-    if (episodeName.isEmpty || runtime <= 0 || year <= 0) {
+    if (episodeName.isEmpty || year <= 0) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Для этой серии не хватает названия, года или длительности.')),
+        const SnackBar(content: Text('Для этой серии не хватает названия или года выпуска.')),
       );
       return null;
     }
@@ -206,11 +206,11 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final approved = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Проверь найденную серию'),
+        title: const Text('Найден вариант серии'),
         content: Text(
           'Название в архиве: ${source.archiveTitle}\n'
           'Год в метаданных: ${source.releaseYear}\n'
-          'Длительность: ${(source.durationSeconds / 60).round()} мин.\n'
+          'Длительность: ${source.durationSeconds > 0 ? '${(source.durationSeconds / 60).round()} мин.' : 'не указана'}\n'
           'Лицензия: ${source.license}',
         ),
         actions: [
@@ -273,10 +273,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
     if (expectedYear <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен год выхода. Не буду запускать неподтверждённую версию.')));
-      return;
-    }
-    if (expectedRuntime <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен хронометраж. Не буду запускать непроверенный ролик.')));
       return;
     }
     final cancelToken = CancelToken();
@@ -344,7 +340,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       final approved = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: Text(_type == 'tv' ? 'Проверь найденную серию' : 'Проверь найденное видео'),
+          title: Text(_type == 'tv' ? 'Вариант серии найден' : 'Вариант фильма найден'),
           content: Text(
             'Название в архиве: ${source.archiveTitle}\n'
             'Год в метаданных: ${source.releaseYear}\n'
