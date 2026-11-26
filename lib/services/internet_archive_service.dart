@@ -103,6 +103,7 @@ class InternetArchiveService {
     required int expectedRuntimeMinutes,
     required int expectedYear,
     String? displayTitle,
+    String preferredLanguage = 'auto',
     CancelToken? cancelToken,
   }) async {
     if (expectedRuntimeMinutes <= 0 || expectedYear <= 0) return null;
@@ -111,7 +112,11 @@ class InternetArchiveService {
     final cleanTitle = title.replaceAll('"', '').trim();
     final words = cleanTitle.split(RegExp(r'\s+')).where((word) => word.length > 1).toList();
     final tokenQuery = words.isEmpty ? cleanTitle : words.map((word) => 'title:"$word"').join(' AND ');
+    final languageCode = preferredLanguage == 'ru' ? 'rus'
+        : preferredLanguage == 'original' ? 'eng' : null;
     final queries = <String>[
+      if (languageCode != null)
+        'title:"$cleanTitle" AND year:$expectedYear AND language:$languageCode AND mediatype:movies',
       'title:"$cleanTitle" AND year:$expectedYear AND mediatype:movies',
       '($tokenQuery) AND year:$expectedYear AND mediatype:movies',
     ];
