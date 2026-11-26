@@ -87,7 +87,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _openBetaRelease() async {
-    final url = (_betaRelease?['html_url'] ?? '').toString();
+    final asset = _betaRelease?['beta_asset'];
+    final url = asset is Map
+        ? (asset['browser_download_url'] ?? '').toString()
+        : '';
     if (url.isEmpty) return;
     final uri = Uri.tryParse(url);
     if (uri == null) return;
