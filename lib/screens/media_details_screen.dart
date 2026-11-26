@@ -167,7 +167,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       expectedRuntimeMinutes: runtime,
       expectedYear: year,
       displayTitle: '$_displayTitle · Сезон $season · Серия $number',
-      isSeries: true,
     );
     if (!mounted || source == null) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -180,9 +179,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Проверь найденную серию'),
         content: Text(
-          'Название в архиве: ${source.archiveTitle}\\n'
-          'Год в метаданных: ${source.releaseYear}\\n'
-          'Длительность: ${(source.durationSeconds / 60).round()} мин.\\n'
+          'Название в архиве: ${source.archiveTitle}\n'
+          'Год в метаданных: ${source.releaseYear}\n'
+          'Длительность: ${(source.durationSeconds / 60).round()} мин.\n'
           'Лицензия: ${source.license}',
         ),
         actions: [
@@ -254,7 +253,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         expectedYear: expectedYear,
         displayTitle: _displayTitle,
         cancelToken: cancelToken,
-        isSeries: _type == 'tv',
       );
       if (!mounted || cancelToken.isCancelled) return;
       Navigator.of(context, rootNavigator: true).pop();
