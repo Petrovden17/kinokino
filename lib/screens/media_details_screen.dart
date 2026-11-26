@@ -224,6 +224,33 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
 
   bool _searchingPlayback = false;
 
+  Future<Map<String, dynamic>?> _firstEpisode() async {
+    final seasons = (_details?['seasons'] as List? ?? const [])
+        .whereType<Map>()
+        .where((s) => (s['episode_count'] as num? ?? 0) > 0)
+        .toList()
+      ..sort((a, b) => ((a['season_number'] as num?)?.toInt() ?? 0)
+          .compareTo((b['season_number'] as num?)?.toInt() ?? 0));
+    if (seasons.isEmpty) return null;
+    final seasonNumber = (seasons.first['season_number'] as num?)?.toInt() ?? 1;
+    try {
+      final data = await _tmdb.seasonDetails(widget.item.id, seasonNumber);
+      final episodes = (data['episodes'] as List? ?? const []).whereType<Map>().toList();
+      if (episodes.isEmpty) return null;
+      final ep = Map<String, dynamic>.from(episodes.first);
+      final runtimeList = _details?['episode_run_time'] as List? ?? const [];
+      final defaultRuntime = runtimeList.whereType<num>().isEmpty
+          ? 0 : runtimeList.whereType<num>().first.toInt();
+      return {
+        ...ep,
+        'season_number': seasonNumber,
+        'runtime': (ep['runtime'] as num?)?.toInt() ?? defaultRuntime,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _startPlayback() async {
     if (_searchingPlayback) return;
     String sourceTitle = _playbackSearchTitle;
@@ -231,8 +258,14 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     int expectedYear = _releaseYear;
     Map<String, dynamic>? selectedEpisode;
     if (_type == 'tv') {
-      selectedEpisode = await _chooseEpisode();
-      if (selectedEpisode == null || !mounted) return;
+      selectedEpisode = await _firstEpisode();
+      if (!mounted) return;
+      if (selectedEpisode == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Не удалось загрузить первую серию. Попробуй обновить страницу.'),
+        ));
+        return;
+      }
       sourceTitle = (selectedEpisode['name'] ?? '').toString();
       expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
       final episodeDate = (selectedEpisode['air_date'] ?? '').toString();
