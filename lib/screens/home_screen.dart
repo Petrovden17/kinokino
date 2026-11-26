@@ -125,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen>{
             ),
           ],
         ),
-      ],
+      ]),
       body:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(16,8,16,10),child:TextField(controller:_search,onSubmitted:_searchMedia,decoration:InputDecoration(hintText:'Поиск фильмов, сериалов и мультфильмов',prefixIcon:const Icon(Icons.search),suffixIcon:IconButton(icon:const Icon(Icons.clear),onPressed:(){_search.clear();_loadTrending();})))),
         Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:Column(children:[
