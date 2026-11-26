@@ -10,23 +10,30 @@ class AppUpdateInfo {
 }
 
 class AppUpdateService {
-  static const int currentBuild = int.fromEnvironment('APP_BUILD', defaultValue: 7);
-  static const String releasesApi = 'https://api.github.com/repos/Petrovden17/kinokino/releases/latest';
+  static const int currentBuild = int.fromEnvironment('APP_BUILD', defaultValue: 8);
+  static const String releasesApi = 'https://api.github.com/repos/Petrovden17/kinokino/releases?per_page=30';
   final Dio _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15), receiveTimeout: const Duration(minutes: 5)));
 
   Future<AppUpdateInfo?> checkForUpdate() async {
     if (!Platform.isWindows) return null;
     final response = await _dio.get(releasesApi, options: Options(headers: {'Accept': 'application/vnd.github+json'}));
     final data = response.data;
-    if (data is! Map || data['draft'] == true || data['prerelease'] == true) return null;
-    final tag = (data['tag_name'] ?? '').toString();
-    final match = RegExp(r'^build-(\d+)$').firstMatch(tag);
-    final latestBuild = int.tryParse(match?.group(1) ?? '');
-    if (latestBuild == null || latestBuild <= currentBuild) return null;
-    final assets = data['assets'] as List? ?? const [];
+    if (data is! List) return null;
+    final releases = data.whereType<Map>().where((release) => release['draft'] != true);
+    Map? latestRelease;
+    var latestBuild = -1;
+    for (final release in releases) {
+      final tag = (release['tag_name'] ?? '').toString();
+      final match = RegExp(r'^beta-(\d+)$').firstMatch(tag);
+      final build = int.tryParse(match?.group(1) ?? '');
+      if (build != null && build > latestBuild) { latestBuild = build; latestRelease = release; }
+    }
+    if (latestRelease == null || latestBuild <= currentBuild) return null;
+    final tag = (latestRelease['tag_name'] ?? '').toString();
+    final assets = latestRelease['assets'] as List? ?? const [];
     for (final asset in assets.whereType<Map>()) {
-      if (asset['name'] == 'KinoKino-Windows-x64.zip' && asset['browser_download_url'] != null) {
-        return AppUpdateInfo(tag: tag, downloadUrl: asset['browser_download_url'].toString(), notes: (data['body'] ?? '').toString());
+      if (asset['name'] == 'KinoKino-Beta-Windows-x64.zip' && asset['browser_download_url'] != null) {
+        return AppUpdateInfo(tag: tag, downloadUrl: asset['browser_download_url'].toString(), notes: (latestRelease['body'] ?? '').toString());
       }
     }
     return null;
@@ -39,12 +46,19 @@ class AppUpdateService {
     final temp = await getTemporaryDirectory();
     final zipPath = temp.path + r'\KinoKino-update.zip';
     final scriptPath = temp.path + r'\kinokino-update.ps1';
-    await _dio.download(update.downloadUrl, zipPath,
-      options: Options(headers: {'Accept': 'application/octet-stream'}));
+    await _dio.download(update.downloadUrl, zipPath, options: Options(headers: {'Accept': 'application/octet-stream'}));
     final script = File(scriptPath);
     await script.writeAsString(r'''
 param([string]$Archive, [string]$InstallDir, [string]$Exe, [int]$ParentPid)
 $ErrorActionPreference = 'Stop'
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($identity)
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+  $q = [char]34
+  $argsLine = '-NoProfile -ExecutionPolicy Bypass -File ' + $q + $PSCommandPath + $q + ' -Archive ' + $q + $Archive + $q + ' -InstallDir ' + $q + $InstallDir + $q + ' -Exe ' + $q + $Exe + $q + ' -ParentPid ' + $ParentPid
+  Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList $argsLine
+  exit 0
+}
 $stage = Join-Path $env:TEMP ("KinoKino-stage-" + [guid]::NewGuid().ToString("N"))
 $backup = Join-Path $env:TEMP ("KinoKino-backup-" + [guid]::NewGuid().ToString("N"))
 $installStarted = $false
@@ -57,29 +71,19 @@ try {
   if ($null -eq $newExe) { throw "В архиве отсутствует $exeName" }
   $sourceDir = $newExe.Directory.FullName
   if (-not (Test-Path -LiteralPath $InstallDir)) { throw "Папка приложения не найдена: $InstallDir" }
-
-  try {
-    if (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {
-      Wait-Process -Id $ParentPid -Timeout 90 -ErrorAction Stop
-    }
-  } catch {
-    if (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {
-      throw "KinoKino не завершилось перед установкой. Обновление отменено, файлы не изменены."
-    }
+  if (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {
+    try { Wait-Process -Id $ParentPid -Timeout 90 -ErrorAction Stop }
+    catch { if (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) { throw "KinoKino не завершилось перед установкой. Обновление отменено." } }
   }
-
   Copy-Item -Path (Join-Path $InstallDir '*') -Destination $backup -Recurse -Force
   try {
     Copy-Item -Path (Join-Path $sourceDir '*') -Destination $InstallDir -Recurse -Force
-    if (-not (Test-Path -LiteralPath (Join-Path $InstallDir $exeName))) {
-      throw "После копирования не найден исполняемый файл $exeName"
-    }
+    if (-not (Test-Path -LiteralPath (Join-Path $InstallDir $exeName))) { throw "После копирования не найден исполняемый файл $exeName" }
   } catch {
     Get-ChildItem -LiteralPath $InstallDir -Force | Remove-Item -Recurse -Force
     Copy-Item -Path (Join-Path $backup '*') -Destination $InstallDir -Recurse -Force
     throw
   }
-
   $installStarted = $true
   Start-Process -FilePath $Exe -WorkingDirectory $InstallDir
   Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue
@@ -88,18 +92,11 @@ try {
 } catch {
   Add-Type -AssemblyName PresentationFramework
   [System.Windows.MessageBox]::Show("Не удалось установить обновление KinoKino: $($_.Exception.Message)")
-  if (-not $installStarted -and (Test-Path -LiteralPath $Exe)) {
-    Start-Process -FilePath $Exe -WorkingDirectory $InstallDir
-  }
+  if (-not $installStarted -and (Test-Path -LiteralPath $Exe)) { Start-Process -FilePath $Exe -WorkingDirectory $InstallDir }
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
-}''');
-    await Process.start('powershell.exe', [
-      '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath,
-      '-Archive', zipPath,
-      '-InstallDir', installDir,
-      '-Exe', executable,
-      '-ParentPid', pid.toString(),
-    ], mode: ProcessStartMode.detached);
+}
+''' );
+    await Process.start('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-Archive', zipPath, '-InstallDir', installDir, '-Exe', executable, '-ParentPid', pid.toString()], mode: ProcessStartMode.detached);
     exit(0);
   }
 }
