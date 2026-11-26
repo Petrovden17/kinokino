@@ -318,12 +318,21 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               key: ValueKey('kino-player-window-${action.windowId}'),
               windowId: action.windowId,
               initialSettings: _webSettings,
-              onWebViewCreated: (_) =>
-                  debugPrint('[KinoKino] actual player popup attached'),
+              onWebViewCreated: (controller) {
+                controller.addJavaScriptHandler(
+                  handlerName: 'streamBridge',
+                  callback: (args) {
+                    _handleStreamBridgeCall(args);
+                    return {'accepted': true};
+                  },
+                );
+                debugPrint('[KinoKino] actual player popup attached');
+              },
               onLoadStart: (_, url) =>
                   debugPrint('[KinoKino player] loading: $url'),
-              onLoadStop: (controller, url) {
+              onLoadStop: (controller, url) async {
                 debugPrint('[KinoKino player] loaded: $url');
+                await _installStreamBridge(controller);
                 _probePlayerWindow(controller);
               },
               onReceivedError: (_, request, error) => debugPrint(
