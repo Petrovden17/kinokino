@@ -37,8 +37,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
           return ListView.builder(itemCount: rows.length, itemBuilder: (_, i) {
             final row = rows[i];
             final subtitle = _tab == 'favorites' ? 'В избранном'
-              : _tab == 'ratings' ? 'Твоя оценка: \${row['user_rating']}/10'
-              : 'Последний просмотр: \${row['last_opened'] ?? ''}';
+              : _tab == 'ratings' ? "Твоя оценка: ${row['user_rating']}/10"
+              : "Последний просмотр: ${row['last_opened'] ?? ''}";
             return ListTile(leading: const Icon(Icons.movie_outlined),
               title: Text(row['title'] as String? ?? 'Без названия'),
               subtitle: Text(subtitle));
