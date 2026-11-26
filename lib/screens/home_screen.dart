@@ -24,7 +24,12 @@ class _HomeScreenState extends State<HomeScreen>{
   Future<void> _loadTrending() async {
     setState(()=>_loading=true);_error=null;
     try{
-      final groups=await Future.wait([_tmdb.trending(),_tmdb.popular(type:'movie'),_tmdb.popular(type:'tv'),_tmdb.popular(type:'movie',page:2),_tmdb.popular(type:'tv',page:2)]);
+      final requests=<Future<List<MediaItem>>>[_tmdb.trending()];
+      for(var page=1;page<=5;page++){
+        requests.add(_tmdb.popular(type:'movie',page:page));
+        requests.add(_tmdb.popular(type:'tv',page:page));
+      }
+      final groups=await Future.wait(requests);
       final unique=<String,MediaItem>{};for(final group in groups){for(final item in group){unique['${item.mediaType}:${item.id}']=item;}}
       if(mounted)setState(()=>_items=unique.values.toList());
     }catch(_){if(mounted)setState(()=>_error='Не удалось загрузить каталог. Проверьте подключение к интернету и попробуйте обновить страницу.');}
