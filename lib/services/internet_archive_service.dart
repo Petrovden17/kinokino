@@ -112,8 +112,13 @@ class InternetArchiveService {
     final cleanTitle = title.replaceAll('"', '').trim();
     final words = cleanTitle.split(RegExp(r'\s+')).where((word) => word.length > 1).toList();
     final tokenQuery = words.isEmpty ? cleanTitle : words.map((word) => 'title:"$word"').join(' AND ');
-    final languageCode = preferredLanguage == 'ru' ? 'rus'
-        : preferredLanguage == 'original' ? 'eng' : null;
+    const languageMap = {
+      'ru': 'rus', 'en': 'eng', 'ja': 'jpn', 'fr': 'fre',
+      'de': 'ger', 'es': 'spa', 'ko': 'kor', 'zh': 'chi',
+      'it': 'ita', 'pt': 'por', 'ar': 'ara', 'hi': 'hin',
+    };
+    final languageCode = languageMap[preferredLanguage] ??
+        (preferredLanguage.length == 3 ? preferredLanguage : null);
     final queries = <String>[
       if (languageCode != null)
         'title:"$cleanTitle" AND year:$expectedYear AND language:$languageCode AND mediatype:movies',
