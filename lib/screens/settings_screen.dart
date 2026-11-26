@@ -4,6 +4,7 @@ import '../models/app_settings.dart';
 import '../services/settings_service.dart';
 import '../services/backup_service.dart';
 import '../services/app_update_service.dart';
+import '../services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.service});
@@ -35,6 +36,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) setState(() => _notice = 'Резервная копия настроек создана: ${file.path}');
     } catch (e) {
       if (mounted) setState(() => _notice = 'Не удалось создать копию: $e');
+    }
+  }
+
+  Future<void> _signOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Выйти из аккаунта?'),
+        content: const Text('Синхронизация избранного, оценок и истории доступна после повторного входа.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Выйти')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await AuthService().signOut();
+    } catch (e) {
+      if (mounted) setState(() => _notice = 'Не удалось выйти: $e');
     }
   }
 
