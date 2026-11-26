@@ -106,7 +106,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               supportMultipleWindows: false,
               javaScriptCanOpenWindowsAutomatically: true,
               mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-              useHybridComposition: true,
+              // Texture-layer composition avoids a known class of white WebView surfaces on some Android GPU builds.
+              useHybridComposition: false,
               transparentBackground: false,
               supportZoom: false,
               useWideViewPort: false,
@@ -114,6 +115,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             ),
             onWebViewCreated: (controller) => _controller = controller,
             onLoadStart: (controller, url) {
+              debugPrint('[KinoKino WebView] load start: $url');
               if (!mounted) return;
               setState(() {
                 _pageError = null;
@@ -126,11 +128,21 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             onLoadStop: (controller, url) async {
               if (!mounted) return;
               setState(() => _progress = 1);
+              try {
+                final probe = await controller.evaluateJavascript(source: r'''(() => JSON.stringify({ready:document.readyState,title:document.title,url:location.href,bodyText:(document.body?.innerText||'').slice(0,300),iframes:Array.from(document.querySelectorAll('iframe')).map(x=>x.src).slice(0,8),videos:Array.from(document.querySelectorAll('video')).map(x=>({src:x.currentSrc,ready:x.readyState,error:x.error?.code})).slice(0,4)}))()''');
+                debugPrint('[KinoKino WebView] page probe: $probe');
+              } catch (e) {
+                debugPrint('[KinoKino WebView] page probe failed: $e');
+              }
+            },
+            onConsoleMessage: (controller, message) {
+              debugPrint('[KinoKino WebView console] ${message.message}');
             },
             onEnterFullscreen: (controller) => _setFullscreen(true),
             onExitFullscreen: (controller) => _setFullscreen(false),
             onReceivedError: (controller, request, error) {
               if (request.isForMainFrame != true || !mounted) return;
+              debugPrint('[KinoKino WebView] load error: ${error.description} (${error.type}) ${request.url}');
               setState(() {
                 _pageError = 'Не удалось загрузить страницу KinoKino. Проверь подключение и нажми «Обновить».';
               });
@@ -138,6 +150,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             onReceivedHttpError: (controller, request, errorResponse) {
               if (request.isForMainFrame != true || !mounted) return;
               if ((errorResponse.statusCode ?? 0) >= 400) {
+                debugPrint('[KinoKino WebView] HTTP ${errorResponse.statusCode}: ${request.url}');
                 setState(() => _pageError = 'KinoKino вернул ошибку HTTP ${errorResponse.statusCode}. Нажми «Обновить», чтобы попробовать снова.');
               }
             },
