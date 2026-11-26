@@ -100,7 +100,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               enableMedia: true,
               isElementFullscreenEnabled: true,
               useShouldOverrideUrlLoading: true,
-              supportMultipleWindows: false,
+              supportMultipleWindows: true,
               transparentBackground: false,
               supportZoom: false,
               useWideViewPort: false,
@@ -135,7 +135,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 setState(() => _pageError = 'KinoKino вернул ошибку HTTP ${errorResponse.statusCode}. Нажми «Обновить», чтобы попробовать снова.');
               }
             },
-            onCreateWindow: (controller, action) async => false,
+            // Some embedded players open their stream through window.open.
+            // Keep that navigation inside this WebView instead of blocking it
+            // or sending playback to an external browser.
+            onCreateWindow: (controller, action) async {
+              final targetUrl = action.request.url;
+              if (targetUrl != null) {
+                await controller.loadUrl(urlRequest: URLRequest(url: targetUrl));
+              }
+              return false;
+            },
           ),
           if (_progress > 0 && _progress < 1)
             Align(
