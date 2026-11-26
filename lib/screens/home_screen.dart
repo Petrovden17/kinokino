@@ -190,12 +190,26 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loading = true);
     _error = null;
     try {
-      final r = _type == 'all' && _genreId == null && _minRating == 0 && _sort == 'popularity.desc'
+      var r = _type == 'all' && _genreId == null && _minRating == 0 && _sort == 'popularity.desc'
           ? await _tmdb.trending(page: 1)
           : _type == 'all' ? await _loadAllTypesPage(1)
           : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre,
               sortBy: _sort == 'primary_release_date.desc' && _apiType == 'tv' ? 'first_air_date.desc' : _sort,
               minRating: _minRating == 0 ? null : _minRating);
+      // If the date-sorted discover query is empty, retry the released catalogue
+      // and sort its returned dates locally instead of showing an empty screen.
+      if (r.isEmpty && _sort == 'primary_release_date.desc') {
+        if (_type == 'all') {
+          final pages = await Future.wait([
+            _tmdb.popular(type: 'movie', page: 1),
+            _tmdb.popular(type: 'tv', page: 1),
+          ]);
+          r = [...pages[0], ...pages[1]];
+        } else {
+          r = await _tmdb.popular(type: _apiType, page: 1);
+        }
+      }
+      if (_sort == 'primary_release_date.desc') _sortMediaItems(r);
       if (mounted) setState(() { _items = r; _page = 1; _hasMore = r.isNotEmpty; });
     } catch (_) {
       if (mounted) setState(() => _error = 'Не удалось применить фильтры.');
