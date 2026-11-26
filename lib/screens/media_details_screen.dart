@@ -254,7 +254,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         content: const Row(children: [
           CircularProgressIndicator(),
           SizedBox(width: 16),
-          Expanded(child: Text('Ищем точное совпадение по названию, году и длительности…')),
+          Expanded(child: Text('Подготавливаем просмотр…')),
         ]),
         actions: [
           TextButton.icon(
@@ -318,7 +318,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       if (cancelToken.isCancelled) return;
       if (!dialogClosed) Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось найти видео: $e')),
+        const SnackBar(content: Text('Не удалось подготовить просмотр. Попробуйте открыть легальные варианты просмотра.')),
       );
     } finally {
       if (mounted) setState(() => _searchingPlayback = false);
