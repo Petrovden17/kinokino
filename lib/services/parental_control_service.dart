@@ -1,4 +1,3 @@
-import '../models/media_item.dart';
 import '../models/user_profile.dart';
 import '../models/app_settings.dart';
 
