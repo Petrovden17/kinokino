@@ -145,17 +145,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
             : !ready || c == null
               ? const Center(child: Text('Плеер не инициализирован'))
               : LayoutBuilder(builder: (context, constraints) {
+                  final v = c.value;
                   final wide = constraints.maxWidth > 700;
                   return Center(child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1200),
                     child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                       Expanded(child: Center(child: AspectRatio(
-                        aspectRatio: value!.aspectRatio > 0 ? value.aspectRatio : 16 / 9,
+                        aspectRatio: v.aspectRatio > 0 ? v.aspectRatio : 16 / 9,
                         child: Stack(fit: StackFit.expand, alignment: Alignment.center, children: [
                           VideoPlayer(c),
-                          if (value.isBuffering)
+                          if (v.isBuffering)
                             const Center(child: CircularProgressIndicator()),
-                          if (value.isPlaying)
+                          if (v.isPlaying)
                             Align(alignment: Alignment.center, child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -193,9 +194,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           const SizedBox(height: 4),
                           Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 10, children: [
                             _control(Icons.replay_10, 'Назад 10 секунд', () => _seek(const Duration(seconds: -10)), size: 30),
-                            _control(value.isPlaying ? Icons.pause : Icons.play_arrow,
-                              value.isPlaying ? 'Пауза' : 'Воспроизвести',
-                              () => value.isPlaying ? c.pause() : c.play(), size: 42),
+                            _control(v.isPlaying ? Icons.pause : Icons.play_arrow,
+                              v.isPlaying ? 'Пауза' : 'Воспроизвести',
+                              () => v.isPlaying ? c.pause() : c.play(), size: 42),
                             _control(Icons.forward_10, 'Вперёд 10 секунд', () => _seek(const Duration(seconds: 10)), size: 30),
                             PopupMenuButton<double>(
                               tooltip: 'Скорость',
@@ -209,8 +210,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             ),
                             IconButton(
                               tooltip: 'Громкость',
-                              onPressed: () => c.setVolume(value.volume > 0 ? 0 : 1),
-                              icon: Icon(value.volume > 0 ? Icons.volume_up : Icons.volume_off),
+                              onPressed: () => c.setVolume(v.volume > 0 ? 0 : 1),
+                              icon: Icon(v.volume > 0 ? Icons.volume_up : Icons.volume_off),
                             ),
                             IconButton(
                               tooltip: _fullscreen ? 'Обычный режим' : 'Полный экран',
