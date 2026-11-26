@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({super.key, required this.title, this.kinopoiskId, this.isSeries = false});
@@ -38,6 +39,15 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     } else {
       await SystemChrome.setPreferredOrientations(const []);
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+  }
+
+  Future<void> _openExternalBrowser() async {
+    final opened = await launchUrl(_primaryUrl, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось открыть страницу во внешнем браузере.')),
+      );
     }
   }
 
@@ -141,13 +151,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             onEnterFullscreen: (controller) => _setFullscreen(true),
             onExitFullscreen: (controller) => _setFullscreen(false),
             onReceivedError: (controller, request, error) {
+              debugPrint('[KinoKino WebView] resource error main=${request.isForMainFrame}: ${error.description} (${error.type}) ${request.url}');
               if (request.isForMainFrame != true || !mounted) return;
-              debugPrint('[KinoKino WebView] load error: ${error.description} (${error.type}) ${request.url}');
               setState(() {
                 _pageError = 'Не удалось загрузить страницу KinoKino. Проверь подключение и нажми «Обновить».';
               });
             },
             onReceivedHttpError: (controller, request, errorResponse) {
+              if ((errorResponse.statusCode ?? 0) >= 400) {
+                debugPrint('[KinoKino WebView] HTTP resource ${errorResponse.statusCode} main=${request.isForMainFrame}: ${request.url}');
+              }
               if (request.isForMainFrame != true || !mounted) return;
               if ((errorResponse.statusCode ?? 0) >= 400) {
                 debugPrint('[KinoKino WebView] HTTP ${errorResponse.statusCode}: ${request.url}');
@@ -194,6 +207,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
+                      _overlayButton(Icons.open_in_browser, 'Открыть в браузере', _openExternalBrowser),
+                      const SizedBox(width: 4),
                       _overlayButton(Icons.fullscreen, 'На весь экран', _toggleFullscreen),
                     ],
                   ),
