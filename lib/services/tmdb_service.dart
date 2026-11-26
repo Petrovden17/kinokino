@@ -31,7 +31,7 @@ class TmdbService {
     final response = await _dio.get('/$type/$id', queryParameters: {'append_to_response': 'credits,videos,similar,recommendations'});
     return Map<String, dynamic>.from(response.data);
   }
-  Future<List<MediaItem>> recommendations(int id, {String type = 'movie'}) => _list('/$type/$id/recommendations');
+  Future<Map<String, dynamic>> externalIds(int id, {String type = 'movie'}) async {\n    final response = await _dio.get('/$type/$id/external_ids');\n    return Map<String, dynamic>.from(response.data);\n  }\n  Future<List<MediaItem>> recommendations(int id, {String type = 'movie'}) => _list('/$type/$id/recommendations');
   Future<List<MediaItem>> similar(int id, {String type = 'movie'}) => _list('/$type/$id/similar');
   Future<Map<String, dynamic>> seasonDetails(int id, int seasonNumber) async {
     final response = await _dio.get('/tv/$id/season/$seasonNumber');
