@@ -75,7 +75,7 @@ class InternetArchiveService {
       final uri = Uri.tryParse(urlLine);
       if (uri == null || uri.scheme != 'https' || uri.host != 'archive.org') continue;
       return ArchiveVideo(
-        identifier: uri.pathSegments.length > 2 ? uri.pathSegments[2] : 'public-domain-playlist',
+        identifier: uri.pathSegments.length > 1 ? uri.pathSegments[1] : 'public-domain-playlist',
         title: name,
         creator: 'Internet Archive',
         license: 'Подборка PublicDomainM3U (публичный каталог; проверяйте статус в своей стране)',
