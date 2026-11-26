@@ -50,26 +50,41 @@ class KinopoiskService {
     return results;
   }
 
-  Future<List<Map<String, dynamic>>> _searchWikidata(String query) async {
-    final searchResponse = await _wikidata.get('', queryParameters: {
-      'action': 'wbsearchentities',
-      'search': query,
-      'language': 'ru',
-      'uselang': 'ru',
-      'type': 'item',
-      'limit': 12,
-      'format': 'json',
-    });
-    final searchRows = searchResponse.data is Map
-        ? (searchResponse.data['search'] as List? ?? const [])
-        : const <dynamic>[];
-    final ids = searchRows.whereType<Map>()
-        .map((row) => row['id']?.toString() ?? '')
-        .where((id) => id.startsWith('Q') &&
-            id.length > 1 && int.tryParse(id.substring(1)) != null)
-        .toSet().toList();
-    if (ids.isEmpty) return const [];
+  Future<List<Map<String, dynamic>>> byWikidataId(String entityId) async {
+    final id = entityId.trim();
+    if (!id.startsWith('Q') || id.length < 2 ||
+        int.tryParse(id.substring(1)) == null) return const [];
+    return _entitiesToKinopoisk([id]);
+  }
 
+  Future<List<Map<String, dynamic>>> _searchWikidata(String query) async {
+    final ids = <String>{};
+    for (final language in const ['ru', 'en']) {
+      final response = await _wikidata.get('', queryParameters: {
+        'action': 'wbsearchentities',
+        'search': query,
+        'language': language,
+        'uselang': language,
+        'type': 'item',
+        'limit': 50,
+        'format': 'json',
+      });
+      final rows = response.data is Map
+          ? (response.data['search'] as List? ?? const [])
+          : const <dynamic>[];
+      for (final row in rows.whereType<Map>()) {
+        final id = row['id']?.toString() ?? '';
+        if (id.startsWith('Q') && id.length > 1 &&
+            int.tryParse(id.substring(1)) != null) {
+          ids.add(id);
+        }
+      }
+    }
+    if (ids.isEmpty) return const [];
+    return _entitiesToKinopoisk(ids.toList());
+  }
+
+  Future<List<Map<String, dynamic>>> _entitiesToKinopoisk(List<String> ids) async {
     final entityResponse = await _wikidata.get('', queryParameters: {
       'action': 'wbgetentities',
       'ids': ids.join('|'),
