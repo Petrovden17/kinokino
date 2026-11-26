@@ -12,6 +12,8 @@ class ArchiveVideo {
   const ArchiveVideo({
     required this.identifier,
     required this.title,
+    required this.archiveTitle,
+    required this.releaseYear,
     required this.creator,
     required this.license,
     required this.fileName,
@@ -21,6 +23,8 @@ class ArchiveVideo {
   });
   final String identifier;
   final String title;
+  final String archiveTitle;
+  final int releaseYear;
   final String creator;
   final String license;
   final String fileName;
@@ -192,6 +196,8 @@ class InternetArchiveService {
         return ArchiveVideo(
           identifier: id,
           title: displayTitle?.trim().isNotEmpty == true ? displayTitle!.trim() : archiveTitle,
+          archiveTitle: archiveTitle,
+          releaseYear: archiveYear,
           creator: (metadata['creator'] ?? 'Не указан').toString(),
           license: license,
           fileName: Uri.decodeComponent(chosen.url.pathSegments.last),
