@@ -327,7 +327,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   : const Icon(Icons.record_voice_over_outlined, color: Colors.white),
             ),
           ),
-        if (_activeVariants.length > 1)
+        if (_activeVariants.isNotEmpty)
           PopupMenuButton<ArchiveVideoVariant>(
             tooltip: 'Качество видео',
             onSelected: _selectQuality,
