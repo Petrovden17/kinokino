@@ -149,6 +149,51 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     setState(() => _rating = value);
     await LocalDatabase.setRating(widget.item.id, widget.item.title, widget.item.posterPath, value, mediaType: _type);
   }
+  Future<ArchiveVideo?> _resolveEpisodeSource(Map<String, dynamic> episode) async {
+    final runtime = (episode['runtime'] as num?)?.toInt() ?? 0;
+    final date = (episode['air_date'] ?? '').toString();
+    final year = int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? _releaseYear;
+    final episodeName = (episode['name'] ?? '').toString().trim();
+    if (episodeName.isEmpty || runtime <= 0 || year <= 0) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Для этой серии не хватает названия, года или длительности.')),
+      );
+      return null;
+    }
+    final season = (episode['season_number'] as num?)?.toInt() ?? 1;
+    final number = (episode['episode_number'] as num?)?.toInt() ?? 1;
+    final source = await InternetArchiveService().findLicensedVideo(
+      episodeName,
+      expectedRuntimeMinutes: runtime,
+      expectedYear: year,
+      displayTitle: '$_displayTitle · Сезон $season · Серия $number',
+      isSeries: true,
+    );
+    if (!mounted || source == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Лицензированная запись этой серии не найдена.')),
+      );
+      return null;
+    }
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Проверь найденную серию'),
+        content: Text(
+          'Название в архиве: ${source.archiveTitle}\\n'
+          'Год в метаданных: ${source.releaseYear}\\n'
+          'Длительность: ${(source.durationSeconds / 60).round()} мин.\\n'
+          'Лицензия: ${source.license}',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Не та серия')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Это та серия')),
+        ],
+      ),
+    );
+    return approved == true ? source : null;
+  }
+
   bool _searchingPlayback = false;
 
   Future<void> _startPlayback() async {
@@ -209,6 +254,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         expectedYear: expectedYear,
         displayTitle: _displayTitle,
         cancelToken: cancelToken,
+        isSeries: _type == 'tv',
       );
       if (!mounted || cancelToken.isCancelled) return;
       Navigator.of(context, rootNavigator: true).pop();
@@ -245,7 +291,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       );
       if (approved != true || !mounted) return;
       await Navigator.push(context, MaterialPageRoute(builder: (_) =>
-        PlayerScreen(streamUrl: source.url.toString(), title: _displayTitle, variants: source.variants)));
+        PlayerScreen(streamUrl: source.url.toString(), title: selectedEpisode == null ? _displayTitle : '$_displayTitle · S${(selectedEpisode['season_number'] as num?)?.toInt() ?? 1}E${(selectedEpisode['episode_number'] as num?)?.toInt() ?? 1} — ${selectedEpisode['name'] ?? ''}', variants: source.variants, onChooseEpisode: _type == 'tv' ? _chooseEpisode : null, onResolveEpisode: _type == 'tv' ? _resolveEpisodeSource : null)));
     } catch (e) {
       if (!mounted) return;
       if (cancelToken.isCancelled) return;
