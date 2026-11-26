@@ -35,6 +35,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late List<ArchiveVideoVariant> _activeVariants;
   String _activeAudioLanguage = 'auto';
   bool _changingAudio = false;
+  double? _scrubMs;
 
   ArchiveVideoVariant? _preferredVariant(List<ArchiveVideoVariant> variants, String preference) {
     if (variants.isEmpty || preference == 'auto') return null;
@@ -274,12 +275,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final duration = ready ? value!.duration : Duration.zero;
     final position = ready ? value!.position : Duration.zero;
     final totalMs = duration.inMilliseconds;
-    final currentMs = totalMs <= 0 ? 0.0 : position.inMilliseconds.clamp(0, totalMs).toDouble();
+    final currentMs = totalMs <= 0 ? 0.0 : (_scrubMs ?? position.inMilliseconds.toDouble()).clamp(0, totalMs).toDouble();
     final wide = MediaQuery.sizeOf(context).width > 700;
 
-    Widget controlBar() => Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
+    Widget controlBar() => Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 2,
+      runSpacing: 2,
       children: [
         _control(Icons.replay_10, 'Назад 10 секунд', () => _seek(const Duration(seconds: -10)), size: wide ? 34 : 28),
         _control(value?.isPlaying == true ? Icons.pause : Icons.play_arrow,
@@ -495,18 +498,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
                                           max: totalMs > 0 ? totalMs.toDouble() : 1,
                                           value: totalMs > 0 ? currentMs : 0,
                                           onChanged: totalMs <= 0 ? null : (ms) {
-                                            c.seekTo(Duration(milliseconds: ms.round()));
+                                            setState(() => _scrubMs = ms);
                                             _revealControls();
+                                          },
+                                          onChangeEnd: totalMs <= 0 ? null : (ms) async {
+                                            await c.seekTo(Duration(milliseconds: ms.round()));
+                                            if (mounted) setState(() => _scrubMs = null);
                                           },
                                         ),
                                       ),
-                                      Row(children: [
-                                        Text(_time(position), style: const TextStyle(color: Colors.white70)),
-                                        const Spacer(),
-                                        Flexible(child: controlBar()),
-                                        const Spacer(),
-                                        Text(_time(duration), style: const TextStyle(color: Colors.white70)),
-                                      ]),
+                                      if (MediaQuery.sizeOf(context).width < 560) ...[
+                                        Row(children: [
+                                          Text(_time(_scrubMs == null ? position : Duration(milliseconds: _scrubMs!.round())), style: const TextStyle(color: Colors.white70)),
+                                          const Spacer(),
+                                          Text(_time(duration), style: const TextStyle(color: Colors.white70)),
+                                        ]),
+                                        const SizedBox(height: 4),
+                                        controlBar(),
+                                      ] else
+                                        Row(children: [
+                                          Text(_time(_scrubMs == null ? position : Duration(milliseconds: _scrubMs!.round())), style: const TextStyle(color: Colors.white70)),
+                                          const Spacer(),
+                                          Flexible(child: controlBar()),
+                                          const Spacer(),
+                                          Text(_time(duration), style: const TextStyle(color: Colors.white70)),
+                                        ]),
                                     ]),
                                   ),
                                 ),
