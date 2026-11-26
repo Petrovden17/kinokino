@@ -24,11 +24,13 @@ class MediaItem {
   final List<int> genreIds;
   final String mediaType;
 
+  bool get hasRussianTitle => RegExp(r'[А-Яа-яЁё]').hasMatch(title);
+
   static String _validatedReleaseDate(dynamic value) {
     final date = (value ?? '').toString().trim();
     if (date.length < 4) return '';
     final year = int.tryParse(date.substring(0, 4));
-    if (year == null || year < 1888 || year > DateTime.now().year + 2) return '';
+    if (year == null || year < 1888 || year > DateTime.now().year) return '';
     if (date.length >= 10) {
       final parsed = DateTime.tryParse(date.substring(0, 10));
       if (parsed == null || parsed.year != year) return '';
