@@ -24,7 +24,7 @@ dependencies:
   archive: ^4.0.2
   crypto: ^3.0.6
   supabase_flutter: ^2.0.0
-  flutter_inappwebview_forge: 2.1.76
+  flutter_inappwebview_forge: ^2.1.79
 dev_dependencies:
   flutter_test:
     sdk: flutter
