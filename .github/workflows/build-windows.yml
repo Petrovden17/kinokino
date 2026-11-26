@@ -58,7 +58,6 @@ jobs:
       - name: Patch incompatible Windows WebView CMake command
         shell: pwsh
         run: |
-          $pluginCmake = 'windows\..\flutter\ephemeral\.plugin_symlinks\flutter_inappwebview_forge_windows\windows\CMakeLists.txt'
           $pluginCmake = 'flutter\ephemeral\.plugin_symlinks\flutter_inappwebview_forge_windows\windows\CMakeLists.txt'
           if (-not (Test-Path $pluginCmake)) { throw "Windows WebView plugin CMake file not found: $pluginCmake" }
           $source = [IO.File]::ReadAllText((Resolve-Path $pluginCmake))
