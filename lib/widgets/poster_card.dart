@@ -121,10 +121,6 @@ class _PosterCardState extends State<PosterCard> {
                           ),
                         ),
                       ],
-                              ),
-                            ),
-                          ),
-                      ],
                     ),
                   ),
                   Padding(

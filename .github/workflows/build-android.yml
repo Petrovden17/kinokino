@@ -2,7 +2,7 @@ name: Build KinoKino for Android
 
 concurrency:
   group: kinokino-android-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read

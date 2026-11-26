@@ -23,6 +23,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _checkingUpdates = false;
   bool _isCreator = false;
   bool _betaLoading = false;
+  bool _betaInstalling = false;
   bool _diagnosticsRunning = false;
   String? _diagnosticsResult;
   Map<String, dynamic>? _betaRelease;
@@ -164,6 +165,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _betaLoading = false);
     }
+  }
+
+
+  Future<void> _installBetaRelease() async {
+    if (!Platform.isWindows) {
+      setState(() => _notice = 'Установка бета-версий сейчас доступна только в Windows.');
+      return;
+    }
+    final release = _betaRelease;
+    final asset = release?['beta_asset'];
+    final url = asset is Map ? (asset['browser_download_url'] ?? '').toString() : '';
+    final tag = (release?['tag_name'] ?? '').toString();
+    if (url.isEmpty || tag.isEmpty) {
+      setState(() => _notice = 'Бета-сборка пока не опубликована. Нажми «Проверить» позже.');
+      return;
+    }
+    setState(() { _betaInstalling = true; _notice = 'Загружаем и устанавливаем бета-версию…'; });
+    try {
+      await _updates.downloadAndInstall(AppUpdateInfo(
+        tag: tag,
+        downloadUrl: url,
+        notes: (release?['body'] ?? '').toString(),
+      ));
+    } catch (e) {
+      if (mounted) setState(() => _notice = 'Не удалось установить бета-версию: $e');
+    } finally {
+      if (mounted) setState(() => _betaInstalling = false);
+    }
+  }
+
+  Widget _betaSettingsSection() {
+    final release = _betaRelease;
+    final tag = (release?['tag_name'] ?? '').toString();
+    final name = (release?['name'] ?? tag).toString();
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            Icon(Icons.science_outlined),
+            SizedBox(width: 10),
+            Text('Бета-версии', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          ]),
+          const SizedBox(height: 8),
+          Text(_betaLoading
+              ? 'Проверяем тестовые сборки…'
+              : release == null
+                  ? 'Пока нет опубликованной тестовой сборки. Новая бета появится после успешной сборки Windows.'
+                  : 'Последняя сборка: $name'),
+          const SizedBox(height: 10),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            OutlinedButton.icon(
+              onPressed: _betaLoading || _betaInstalling ? null : _loadBetaAccess,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Проверить'),
+            ),
+            FilledButton.icon(
+              onPressed: release == null || _betaLoading || _betaInstalling
+                  ? null : _installBetaRelease,
+              icon: _betaInstalling
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.download),
+              label: Text(_betaInstalling ? 'Устанавливаем…' : 'Установить бета-версию'),
+            ),
+          ]),
+        ]),
+      ),
+    );
   }
 
   Future<void> _checkForUpdates() async {
