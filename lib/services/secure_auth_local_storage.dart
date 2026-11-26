@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Keeps the Supabase session in Windows-protected storage.
-/// Existing SharedPreferences sessions are migrated on the first launch.
+/// Android stores the Supabase session in SharedPreferences so Android Auto
+/// Backup can restore it after reinstall (when the user's Google/device backup
+/// is enabled). Windows continues to use OS-protected secure storage.
 class SecureAuthLocalStorage extends LocalStorage {
   static const String _sessionKey =
       'sb-rsubtcrfnpqijpwjcbyc-auth-token';
@@ -11,9 +13,17 @@ class SecureAuthLocalStorage extends LocalStorage {
   late final SharedPreferencesLocalStorage _legacy =
       SharedPreferencesLocalStorage(persistSessionKey: _sessionKey);
 
+  bool get _useAndroidBackupStorage =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
   @override
   Future<void> initialize() async {
     await _legacy.initialize();
+
+    // Android Keystore keys are removed on uninstall, so encrypted storage
+    // cannot be decrypted after reinstall. Keep the Supabase refresh session
+    // in the app's backed-up SharedPreferences on Android instead.
+    if (_useAndroidBackupStorage) return;
 
     final existingSecureSession = await _secure.read(key: _sessionKey);
     if (existingSecureSession == null) {
@@ -27,6 +37,8 @@ class SecureAuthLocalStorage extends LocalStorage {
 
   @override
   Future<String?> accessToken() async {
+    if (_useAndroidBackupStorage) return _legacy.accessToken();
+
     final session = await _secure.read(key: _sessionKey);
     if (session != null && session.isNotEmpty) return session;
     return _legacy.accessToken();
@@ -34,12 +46,19 @@ class SecureAuthLocalStorage extends LocalStorage {
 
   @override
   Future<bool> hasAccessToken() async {
+    if (_useAndroidBackupStorage) return _legacy.hasAccessToken();
+
     if (await _secure.containsKey(key: _sessionKey)) return true;
     return _legacy.hasAccessToken();
   }
 
   @override
   Future<void> persistSession(String persistSessionString) async {
+    if (_useAndroidBackupStorage) {
+      await _legacy.persistSession(persistSessionString);
+      return;
+    }
+
     await _secure.write(key: _sessionKey, value: persistSessionString);
     await _legacy.removePersistedSession();
   }
