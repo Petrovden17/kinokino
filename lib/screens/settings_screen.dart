@@ -177,6 +177,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onChanged: (v) => _save(_value.copyWith(notificationsEnabled: v))),
       SwitchListTile(title: const Text('Автовоспроизведение'), value: _value.autoplay,
         onChanged: (v) => _save(_value.copyWith(autoplay: v))),
+      const Divider(height: 28),
+      SwitchListTile(
+        secondary: const Icon(Icons.animation),
+        title: const Text('Анимации интерфейса'),
+        subtitle: const Text('Плавное появление экранов и переходы между элементами'),
+        value: _value.animationsEnabled,
+        onChanged: (v) => _save(_value.copyWith(animationsEnabled: v)),
+      ),
+      ListTile(
+        contentPadding: const EdgeInsets.only(left: 16, right: 8),
+        title: const Text('Скорость анимаций'),
+        subtitle: const Text('Можно замедлить или ускорить переходы'),
+        trailing: DropdownButton<double>(
+          value: _value.animationSpeed,
+          items: const [
+            DropdownMenuItem(value: 0.5, child: Text('0,5×')),
+            DropdownMenuItem(value: 0.75, child: Text('0,75×')),
+            DropdownMenuItem(value: 1.0, child: Text('1×')),
+            DropdownMenuItem(value: 1.25, child: Text('1,25×')),
+            DropdownMenuItem(value: 1.5, child: Text('1,5×')),
+            DropdownMenuItem(value: 2.0, child: Text('2×')),
+          ],
+          onChanged: _value.animationsEnabled
+              ? (v) { if (v != null) _save(_value.copyWith(animationSpeed: v)); }
+              : null,
+        ),
+      ),
       SwitchListTile(title: const Text('Показывать взрослый контент в обычных профилях'),
         value: _value.adultContentAllowed,
         onChanged: (v) => _save(_value.copyWith(adultContentAllowed: v))),
