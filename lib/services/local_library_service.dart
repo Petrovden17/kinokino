@@ -7,11 +7,9 @@ class LocalLibraryService {
   static const _favoritesKey = 'kinokino_favorites_v1';
   static const _historyKey = 'kinokino_history_v1';
 
-  Future<List<MediaItem>> getFavorites() async =>
-      _readItems(_favoritesKey);
+  Future<List<MediaItem>> getFavorites() async => _readItems(_favoritesKey);
 
-  Future<List<MediaItem>> getHistory() async =>
-      _readItems(_historyKey);
+  Future<List<MediaItem>> getHistory() async => _readItems(_historyKey);
 
   Future<bool> isFavorite(MediaItem item) async {
     final items = await getFavorites();
@@ -68,13 +66,13 @@ class LocalLibraryService {
     }
   }
 
-  String _identity(MediaItem item) => '${item.type.name}:${item.id}';
+  String _identity(MediaItem item) => '${item.mediaType}:${item.id}';
 
   Map<String, dynamic> _toJson(MediaItem item) => {
         'id': item.id,
         'title': item.title,
         'overview': item.overview,
-        'type': item.type.name,
+        'mediaType': item.mediaType,
         'posterPath': item.posterPath,
         'backdropPath': item.backdropPath,
         'releaseDate': item.releaseDate,
@@ -82,21 +80,18 @@ class LocalLibraryService {
         'genreIds': item.genreIds,
       };
 
-  MediaItem _fromJson(Map<String, dynamic> json) {
-    final type = json['type'] == 'tv' ? MediaType.tv : MediaType.movie;
-    return MediaItem(
-      id: (json['id'] as num).toInt(),
-      title: json['title'] as String? ?? 'Без названия',
-      overview: json['overview'] as String? ?? '',
-      type: type,
-      posterPath: json['posterPath'] as String?,
-      backdropPath: json['backdropPath'] as String?,
-      releaseDate: json['releaseDate'] as String?,
-      voteAverage: (json['voteAverage'] as num?)?.toDouble() ?? 0,
-      genreIds: (json['genreIds'] as List<dynamic>? ?? const [])
-          .whereType<num>()
-          .map((value) => value.toInt())
-          .toList(),
-    );
-  }
+  MediaItem _fromJson(Map<String, dynamic> json) => MediaItem(
+        id: (json['id'] as num).toInt(),
+        title: json['title'] as String? ?? 'Без названия',
+        overview: json['overview'] as String? ?? '',
+        mediaType: (json['mediaType'] ?? json['type'] ?? 'movie').toString(),
+        posterPath: json['posterPath'] as String?,
+        backdropPath: json['backdropPath'] as String?,
+        releaseDate: json['releaseDate'] as String? ?? '',
+        voteAverage: (json['voteAverage'] as num?)?.toDouble() ?? 0,
+        genreIds: (json['genreIds'] as List<dynamic>? ?? const [])
+            .whereType<num>()
+            .map((value) => value.toInt())
+            .toList(),
+      );
 }
