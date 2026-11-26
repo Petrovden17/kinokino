@@ -101,10 +101,12 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
   }
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _settings,
+    builder: (context, _) => MaterialApp(
     title: 'KinoKino',
     debugShowCheckedModeBanner: false,
-    theme: AppTheme.dark,
+    theme: AppTheme.darkWithAccent(Color(_settings.settings.accentColorValue)),
     home: StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
@@ -120,5 +122,5 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
           : const Scaffold(body: Center(child: CircularProgressIndicator()));
       },
     ),
-  );
+  ));
 }
