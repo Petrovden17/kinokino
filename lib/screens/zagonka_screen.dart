@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({super.key, required this.title, this.kinopoiskId, this.isSeries = false});
