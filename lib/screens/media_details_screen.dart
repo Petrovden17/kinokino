@@ -68,10 +68,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     } catch (_) {}
     if (details != null) {
       if (recommendations.isEmpty) {
-        recommendations = _relatedFallback(details, 'recommendations');
+        recommendations = _relatedFallback(details, const ['recommendations', 'similar']);
       }
       if (similar.isEmpty) {
-        similar = _relatedFallback(details, 'similar');
+        similar = _relatedFallback(details, const ['similar', 'recommendations']);
       }
     }
     final recommendationsById = <String, MediaItem>{
@@ -91,11 +91,12 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     });
   }
 
-  List<MediaItem> _relatedFallback(Map<String, dynamic> details, String key) {
-    final section = details[key];
-    final rows = (section is Map ? section['results'] : null) as List? ?? const [];
+  List<MediaItem> _relatedFallback(Map<String, dynamic> details, List<String> keys) {
     final found = <String, MediaItem>{};
-    for (final row in rows.whereType<Map>()) {
+    for (final key in keys) {
+      final section = details[key];
+      final rows = (section is Map ? section['results'] : null) as List? ?? const [];
+      for (final row in rows.whereType<Map>()) {
       final data = Map<String, dynamic>.from(row);
       data.putIfAbsent('media_type', () => _type);
       final item = MediaItem.fromJson(data);
@@ -103,6 +104,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           item.hasConfirmedRelease &&
           (item.mediaType == 'movie' || item.mediaType == 'tv')) {
         found['${item.mediaType}:${item.id}'] = item;
+      }
       }
     }
     return found.values.toList();
