@@ -49,7 +49,7 @@ class InternetArchiveService {
   }
 
   String _normalize(String value, int expectedYear) => value.toLowerCase()
-      .replaceAll(RegExp('\\\\(?\\\\s*$expectedYear\\\\s*\\\\)?'), ' ')
+      .replaceAll(expectedYear.toString(), ' ')
       .replaceAll(RegExp(r'[^a-z0-9а-яё]+', unicode: true), ' ')
       .replaceAll(RegExp(r'\\s+'), ' ')
       .trim();
