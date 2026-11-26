@@ -1,0 +1,47 @@
+name: Build and publish KinoKino Windows update
+
+on:
+  push:
+    tags:
+      - 'build-*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Generate Windows runner
+        run: flutter create --platforms=windows --project-name=kinokino .
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release --dart-define=APP_BUILD=${{ github.ref_name }}
+
+      - name: Package application
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "KinoKino-Windows-x64.zip" -Force
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: KinoKino ${{ github.ref_name }}
+          generate_release_notes: true
+          files: KinoKino-Windows-x64.zip
