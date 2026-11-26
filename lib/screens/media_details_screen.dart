@@ -60,6 +60,40 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     return raw.length >= 4 ? int.tryParse(raw.substring(0, 4)) ?? 0 : 0;
   }
 
+  Future<Map<String, dynamic>?> _findKinopoiskMatch(
+    Map<String, dynamic>? details,
+  ) async {
+    final candidates = <Map<String, dynamic>>[];
+    // TMDB may already know the Wikidata entity ID. Use that exact entity
+    // first instead of trying to infer an ID from a card or a web page.
+    try {
+      final external = await _tmdb.externalIds(widget.item.id, type: _type);
+      final wikidataId = external['wikidata_id']?.toString() ?? '';
+      if (wikidataId.isNotEmpty) {
+        candidates.addAll(await _kinopoisk.byWikidataId(wikidataId));
+      }
+    } catch (_) {}
+
+    final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
+    final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
+    final queries = <String>{
+      if (localizedTitle.length >= 2) localizedTitle,
+      if (originalTitle.length >= 2) originalTitle,
+      if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
+    };
+    for (final query in queries) {
+      try {
+        candidates.addAll(await _kinopoisk.search(query));
+      } catch (_) {}
+    }
+    return _selectKinopoiskMatch(
+      candidates,
+      details: details,
+      year: _yearFromDetails(details, widget.item.releaseDate),
+      isSeries: _type == 'tv',
+    );
+  }
+
   Map<String, dynamic>? _selectKinopoiskMatch(
     List<Map<String, dynamic>> candidates, {
     required Map<String, dynamic>? details,
@@ -134,23 +168,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     List<Map<String, dynamic>> kpSeasons = [];
     List<Map<String, dynamic>> kpVideos = [];
     try {
-      final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
-      final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
-      final year = _yearFromDetails(details, widget.item.releaseDate);
-      final queries = <String>{
-        if (localizedTitle.length >= 2) localizedTitle,
-        if (originalTitle.length >= 2) originalTitle,
-        if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
-      };
-      final candidates = <Map<String, dynamic>>[];
-      for (final query in queries) {
-        try {
-          candidates.addAll(await _kinopoisk.search(query));
-        } catch (_) {
-          // A failed title variant must not prevent trying the other names.
-        }
-      }
-      final selected = _selectKinopoiskMatch(candidates, details: details, year: year, isSeries: _type == 'tv');
+      final selected = await _findKinopoiskMatch(details);
       if (selected != null) {
         final rawId = selected['filmId'] ?? selected['kinopoiskId'] ??
             selected['kinopoisk_id'] ?? selected['id'];
@@ -643,25 +661,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       setState(() => _resolvingKinopoisk = true);
       try {
         final details = _details;
-        final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
-        final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
-        final queries = <String>{
-          if (localizedTitle.length >= 2) localizedTitle,
-          if (originalTitle.length >= 2) originalTitle,
-          if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
-        };
-        final candidates = <Map<String, dynamic>>[];
-        for (final query in queries) {
-          try {
-            candidates.addAll(await _kinopoisk.search(query));
-          } catch (_) {}
-        }
-        final selected = _selectKinopoiskMatch(
-          candidates,
-          details: details,
-          year: _yearFromDetails(details, widget.item.releaseDate),
-          isSeries: _type == 'tv',
-        );
+        final selected = await _findKinopoiskMatch(details);
         final rawId = selected?['filmId'] ?? selected?['kinopoiskId'] ??
             selected?['kinopoisk_id'] ?? selected?['id'];
         id = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
