@@ -389,6 +389,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
   }
 
+  // ignore: unused_element
   Future<void> _startPlayback() async {
     if (_searchingPlayback) return;
     String sourceTitle = _playbackSearchTitle;
