@@ -8,6 +8,7 @@ import '../services/internet_archive_service.dart';
 import '../services/local_database.dart';
 import '../widgets/poster_card.dart';
 import 'player_screen.dart';
+import 'zagonka_screen.dart';
 class MediaDetailsScreen extends StatefulWidget {
   const MediaDetailsScreen({super.key, required this.item, this.preferredAudioLanguage = 'auto', this.preferredVideoQuality = 'auto'});
   final MediaItem item;
@@ -615,6 +616,13 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 8, children: [
             FilledButton.icon(onPressed: _searchingPlayback ? null : _startPlayback, icon: _searchingPlayback ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_arrow), label: const Text('Начать просмотр')),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(
+                builder: (_) => ZagonkaScreen(title: _displayTitle),
+              )),
+              icon: const Icon(Icons.public),
+              label: const Text('Открыть Zagonka'),
+            ),
             OutlinedButton.icon(onPressed: () async {
               await LocalDatabase.setFavorite(item.id, item.title, item.posterPath, true, mediaType: _type);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Добавлено в избранное')));
