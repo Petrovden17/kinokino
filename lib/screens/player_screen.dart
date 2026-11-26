@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:window_manager/window_manager.dart';
 import 'package:video_player/video_player.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/legal_source_service.dart';
 import '../services/internet_archive_service.dart';
 
@@ -76,9 +77,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   String _friendlyError(Object error) {
-    final message = error.toString();
-    if (message.contains('HTTPS')) return message;
-    return 'Не удалось воспроизвести этот видеофайл. Формат или кодек может не поддерживаться Windows.\n\n$message';
+    final message = error.toString().toLowerCase();
+    if (message.contains('https')) {
+      return 'Источник видео не прошёл проверку безопасности.';
+    }
+    return 'Не удалось запустить видео в этом плеере. Возможно, Windows не поддерживает его формат или кодек.';
+  }
+
+  Future<void> _openInBrowser() async {
+    final uri = Uri.tryParse(_activeUrl);
+    if (uri == null || uri.scheme != 'https') return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   String _time(Duration d) {
@@ -339,6 +348,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       Text(_error!, textAlign: TextAlign.center),
                       const SizedBox(height: 16),
                       FilledButton.icon(onPressed: _initialize, icon: const Icon(Icons.refresh), label: const Text('Повторить')),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _openInBrowser,
+                        icon: const Icon(Icons.open_in_browser),
+                        label: const Text('Открыть видео в браузере'),
+                      ),
                     ],
                   )))
                 : !ready || c == null
