@@ -31,7 +31,6 @@ class AboutScreen extends StatelessWidget {
         _ServiceLine(name: 'Dio', detail: 'Сетевые запросы'),
         _ServiceLine(name: 'cached_network_image', detail: 'Загрузка и кэширование изображений'),
         _ServiceLine(name: 'SharedPreferences и SQLite', detail: 'Локальные настройки и данные библиотеки'),
-        _ServiceLine(name: 'url_launcher', detail: 'Открытие внешних ссылок'),
         _ServiceLine(name: 'flutter_secure_storage, archive, crypto, uuid, path_provider', detail: 'Вспомогательные функции и работа с файлами'),
         SizedBox(height: 20),
         Text(
