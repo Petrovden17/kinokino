@@ -226,9 +226,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         builder: (dialogContext) => AlertDialog(
           title: const Text('Проверь найденное видео'),
           content: Text(
-            'Название в архиве: ${source.archiveTitle}\\n'
-            'Год в метаданных: ${source.releaseYear}\\n'
-            'Длительность: ${(source.durationSeconds / 60).round()} мин.\\n'
+            'Название в архиве: ${source.archiveTitle}\n'
+            'Год в метаданных: ${source.releaseYear}\n'
+            'Длительность: ${(source.durationSeconds / 60).round()} мин.\n'
             'Лицензия: ${source.license}',
           ),
           actions: [
