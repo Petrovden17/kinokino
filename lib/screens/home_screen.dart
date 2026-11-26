@@ -352,7 +352,7 @@ class _HomeScreenState extends State<HomeScreen> {
           CustomScrollView(
             controller: _scroll,
             slivers: [
-              const SliverToBoxAdapter(child: SizedBox(height: kToolbarHeight + 8)),
+              SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).top + kToolbarHeight + 8)),
               SliverToBoxAdapter(child: _filters()),
               SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.fromLTRB(18, 5, 18, 10),
@@ -379,16 +379,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 SliverLayoutBuilder(builder: (context, constraints) {
                   final width = MediaQuery.sizeOf(context).width;
                   final columns = width > 1200 ? 6 : width > 900 ? 5 : width > 650 ? 4 : 2;
-                  return SliverGrid(
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: columns, childAspectRatio: .58,
-                      crossAxisSpacing: 14, mainAxisSpacing: 16,
-                    ),
-                    delegate: SliverChildBuilderDelegate(
-                      (context, i) => i >= _items.length
-                          ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-                          : PosterCard(item: _items[i], onTap: () => _open(_items[i])),
-                      childCount: _items.length + (_hasMore ? 1 : 0),
+                  return SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: SliverGrid(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns, childAspectRatio: .58,
+                        crossAxisSpacing: 14, mainAxisSpacing: 16,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, i) => i >= _items.length
+                            ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+                            : PosterCard(item: _items[i], onTap: () => _open(_items[i])),
+                        childCount: _items.length + (_hasMore ? 1 : 0),
+                      ),
                     ),
                   );
                 }),
