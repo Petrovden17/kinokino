@@ -31,7 +31,12 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows release
-        run: flutter build windows --release --dart-define=APP_BUILD=${{ github.ref_name }}
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          $buildNumber = $env:RELEASE_TAG -replace '^build-', ''
+          flutter build windows --release "--dart-define=APP_BUILD=$buildNumber"
 
       - name: Package application
         shell: pwsh
