@@ -33,7 +33,7 @@ jobs:
           cache: true
 
       - name: Generate Android runner
-        run: flutter create --platforms=android --project-name=kinokino .
+        run: flutter create --platforms=android --org com.osirisvectory --project-name=kinokino .
 
       - name: Get Flutter dependencies
         run: flutter pub get
