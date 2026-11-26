@@ -31,6 +31,10 @@ class InternetArchiveService {
       'https://raw.githubusercontent.com/OnlineM3U/publicdomainm3u/main/movies.m3u';
   static const _seriesPlaylist =
       'https://raw.githubusercontent.com/OnlineM3U/publicdomainm3u/main/series.m3u';
+  static const _nexonicMovies =
+      'https://raw.githubusercontent.com/nexonic-technologies/nexonic-iptv/main/playlists/vod/movies.m3u';
+  static const _nexonicSeries =
+      'https://raw.githubusercontent.com/nexonic-technologies/nexonic-iptv/main/playlists/vod/series.m3u';
 
   bool _isAllowedLicense(String value) {
     final license = value.toLowerCase();
@@ -50,38 +54,62 @@ class InternetArchiveService {
       .trim();
 
   Future<ArchiveVideo?> _findInPlaylist(String title, {required bool isSeries}) async {
-    final response = await _dio.get<String>(isSeries ? _seriesPlaylist : _moviePlaylist);
-    final text = response.data ?? '';
-    final lines = text.split(RegExp(r'\r?\n'));
     final wanted = _normalize(title);
     if (wanted.isEmpty) return null;
-
-    for (var i = 0; i < lines.length; i++) {
-      final line = lines[i].trim();
-      if (!line.startsWith('#EXTINF:')) continue;
-      final comma = line.lastIndexOf(',');
-      if (comma < 0 || i + 1 >= lines.length) continue;
-      final name = line.substring(comma + 1).trim();
-      final urlLine = lines.skip(i + 1).firstWhere(
-        (candidate) => candidate.trim().isNotEmpty && !candidate.trim().startsWith('#'),
-        orElse: () => '',
-      ).trim();
-      if (urlLine.isEmpty) continue;
-      final normalized = _normalize(name);
-      final matches = normalized == wanted ||
-          normalized.startsWith('$wanted ') ||
-          wanted.startsWith('$normalized ');
-      if (!matches) continue;
-      final uri = Uri.tryParse(urlLine);
-      if (uri == null || uri.scheme != 'https' || uri.host != 'archive.org') continue;
-      return ArchiveVideo(
-        identifier: uri.pathSegments.length > 1 ? uri.pathSegments[1] : 'public-domain-playlist',
-        title: name,
-        creator: 'Internet Archive',
-        license: 'Подборка PublicDomainM3U (публичный каталог; проверяйте статус в своей стране)',
-        fileName: uri.pathSegments.isNotEmpty ? Uri.decodeComponent(uri.pathSegments.last) : name,
-        url: uri,
-      );
+    final urls = isSeries
+        ? <String>[_nexonicSeries, _seriesPlaylist]
+        : <String>[_nexonicMovies, _moviePlaylist];
+    for (final playlistUrl in urls) {
+      try {
+        final response = await _dio.get<String>(playlistUrl);
+        final lines = (response.data ?? '').split(RegExp(r'\r?\n'));
+        for (var i = 0; i < lines.length; i++) {
+          final line = lines[i].trim();
+          if (!line.startsWith('#EXTINF:')) continue;
+          final comma = line.lastIndexOf(',');
+          if (comma < 0 || i + 1 >= lines.length) continue;
+          final entryTitle = line.substring(comma + 1).trim();
+          final groupMatch = RegExp(r'group-title="([^"]+)"').firstMatch(line);
+          final groupTitle = groupMatch?.group(1) ?? '';
+          final normalizedTitle = _normalize(entryTitle);
+          final normalizedGroup = _normalize(groupTitle);
+          final matches = normalizedTitle == wanted ||
+              normalizedTitle.startsWith('$wanted ') ||
+              wanted.startsWith('$normalizedTitle ') ||
+              (normalizedGroup.isNotEmpty &&
+                (normalizedGroup == wanted ||
+                 normalizedGroup.startsWith('$wanted ') ||
+                 wanted.startsWith('$normalizedGroup ')));
+          if (!matches) continue;
+          var next = i + 1;
+          while (next < lines.length &&
+              (lines[next].trim().isEmpty || lines[next].trim().startsWith('#'))) {
+            next++;
+          }
+          if (next >= lines.length) continue;
+          final uri = Uri.tryParse(lines[next].trim());
+          if (uri == null || uri.scheme != 'https' || uri.host != 'archive.org') continue;
+          final licenseMatch = RegExp(r'x-licen[cs]e="([^"]+)"').firstMatch(line);
+          final license = licenseMatch?.group(1) ??
+              'Public Domain (curated PublicDomainM3U listing; confirm local copyright status)';
+          if (playlistUrl == _nexonicMovies || playlistUrl == _nexonicSeries) {
+            final lowerLicense = license.toLowerCase();
+            if (!(lowerLicense.contains('public domain') ||
+                  lowerLicense.contains('creative commons') ||
+                  lowerLicense.contains('cc0'))) continue;
+          }
+          return ArchiveVideo(
+            identifier: uri.pathSegments.length > 1 ? uri.pathSegments[1] : 'public-domain-playlist',
+            title: entryTitle,
+            creator: 'Internet Archive',
+            license: license,
+            fileName: uri.pathSegments.isNotEmpty ? Uri.decodeComponent(uri.pathSegments.last) : entryTitle,
+            url: uri,
+          );
+        }
+      } catch (_) {
+        // Try the next public catalogue if this feed is temporarily unavailable.
+      }
     }
     return null;
   }
