@@ -8,12 +8,15 @@ class AppTheme {
   static const Color gold = Color(0xFFFFC45C);
   static const Color aqua = Color(0xFF5ED8D0);
 
-  static ThemeData get dark {
+  static ThemeData get dark => darkWithAccent(accent);
+
+  static ThemeData darkWithAccent(Color selectedAccent) {
+    final selectedSurface = surface;
     final scheme = ColorScheme.fromSeed(
-      seedColor: accent, brightness: Brightness.dark, surface: surface,
+      seedColor: selectedAccent, brightness: Brightness.dark, surface: selectedSurface,
     ).copyWith(
-      primary: accent, secondary: gold, tertiary: aqua,
-      surface: surface, onSurface: const Color(0xFFF4F6FC),
+      primary: selectedAccent, secondary: gold, tertiary: aqua,
+      surface: selectedSurface, onSurface: const Color(0xFFF4F6FC),
     );
     return ThemeData(
       brightness: Brightness.dark,
@@ -44,12 +47,12 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: accent, width: 1.5),
+          borderSide: BorderSide(color: selectedAccent, width: 1.5),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: accent, foregroundColor: Colors.white,
+          backgroundColor: selectedAccent, foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
@@ -61,7 +64,7 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: surfaceRaised, selectedColor: accent.withValues(alpha: .22),
+        backgroundColor: surfaceRaised, selectedColor: selectedAccent.withValues(alpha: .22),
         side: BorderSide(color: Colors.white.withValues(alpha: .08)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         labelStyle: const TextStyle(color: Colors.white),
