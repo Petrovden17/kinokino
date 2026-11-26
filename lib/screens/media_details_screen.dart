@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../services/internet_archive_service.dart';
+import '../services/watchmode_service.dart';
 import '../services/local_database.dart';
 import '../widgets/poster_card.dart';
 import 'player_screen.dart';
@@ -312,6 +313,84 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
   }
 
+  Future<void> _showLegalViewingOptions() async {
+    final options = <Map<String, dynamic>>[];
+    String? guideUrl;
+    try {
+      final free = await WatchmodeService().freeSources(
+        tmdbId: widget.item.id,
+        mediaType: _type,
+        region: 'NL',
+      );
+      options.addAll(free);
+    } catch (_) {}
+    try {
+      final providers = await _tmdb.watchProviders(widget.item.id, type: _type, region: 'NL');
+      guideUrl = providers['link']?.toString();
+      for (final group in ['flatrate', 'rent', 'buy']) {
+        for (final provider in providers[group] as List? ?? const []) {
+          if (provider is Map) {
+            options.add({
+              'name': provider['provider_name'] ?? 'Видеосервис',
+              'type': group,
+              'web_url': guideUrl,
+            });
+          }
+        }
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    if (options.isEmpty && (guideUrl == null || guideUrl.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Легальный источник не найден. Для этого названия нет доступного потока или подтверждённого сервиса.'),
+      ));
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Где посмотреть легально'),
+        content: SizedBox(
+          width: 460,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              if (options.isNotEmpty)
+                ...options.map((option) {
+                  final name = (option['name'] ?? option['source'] ?? 'Видеосервис').toString();
+                  final type = (option['type'] ?? '').toString();
+                  final url = (option['web_url'] ?? option['url'] ?? guideUrl ?? '').toString();
+                  return ListTile(
+                    leading: const Icon(Icons.ondemand_video_outlined),
+                    title: Text(name),
+                    subtitle: Text(type == 'free' ? 'Бесплатно' : type == 'rent' ? 'Аренда' : type == 'buy' ? 'Покупка' : 'Подписка'),
+                    onTap: url.startsWith('https://') ? () {
+                      Navigator.pop(ctx);
+                      _openExternalPage(Uri.parse(url));
+                    } : null,
+                  );
+                }),
+              if (guideUrl != null && guideUrl.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.open_in_new),
+                  title: const Text('Открыть список всех сервисов'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openExternalPage(Uri.parse(guideUrl!));
+                  },
+                ),
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('Эти сервисы открываются на своих официальных страницах; встроенный плеер не получает от них видеопоток.'),
+              ),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть'))],
+      ),
+    );
+  }
+
   Future<void> _startPlayback() async {
     if (_searchingPlayback) return;
     String sourceTitle = _playbackSearchTitle;
@@ -403,11 +482,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       Navigator.of(context, rootNavigator: true).pop();
       dialogClosed = true;
       if (source == null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_type == 'tv'
-            ? 'Источник для этого сериала пока не найден.'
-            : 'Источник для этого фильма пока не найден.'),
-        ));
+        await _showLegalViewingOptions();
         return;
       }
       final playableSource = source;
