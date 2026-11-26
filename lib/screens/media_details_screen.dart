@@ -270,13 +270,25 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     );
     var dialogClosed = false;
     try {
-      final source = await InternetArchiveService().findLicensedVideo(
+      final archive = InternetArchiveService();
+      var source = await archive.findLicensedVideo(
         sourceTitle,
         expectedRuntimeMinutes: expectedRuntime,
         expectedYear: expectedYear,
         displayTitle: _displayTitle,
         cancelToken: cancelToken,
       );
+      // Try the localized display title too: public archives often catalogue
+      // dubbed releases under their translated title rather than the original.
+      if (source == null && sourceTitle.toLowerCase() != _displayTitle.toLowerCase()) {
+        source = await archive.findLicensedVideo(
+          _displayTitle,
+          expectedRuntimeMinutes: expectedRuntime,
+          expectedYear: expectedYear,
+          displayTitle: _displayTitle,
+          cancelToken: cancelToken,
+        );
+      }
       if (!mounted || cancelToken.isCancelled) return;
       Navigator.of(context, rootNavigator: true).pop();
       dialogClosed = true;
