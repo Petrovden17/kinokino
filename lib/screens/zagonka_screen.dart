@@ -21,9 +21,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   WebUri get _primaryUrl {
     final id = widget.kinopoiskId;
-    if (id == null || id <= 0) return WebUri('https://kinokino.win/');
+    if (id == null || id <= 0) return WebUri('https://www.kinokino.win/');
     final kind = widget.isSeries ? 'series' : 'film';
-    return WebUri('https://kinokino.win/$kind/$id/');
+    return WebUri('https://www.kinokino.win/$kind/$id/');
   }
 
   Future<void> _setFullscreen(bool enabled) async {
