@@ -70,7 +70,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!mounted) return;
     final value = _controller?.value;
     if (value?.hasError == true) {
-      setState(() => _error = value?.errorDescription ?? 'Ошибка воспроизведения');
+      setState(() => _error = 'Не удалось воспроизвести видео в этом плеере. Попробуйте открыть его в браузере.');
     } else {
       setState(() {});
     }
@@ -87,7 +87,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _openInBrowser() async {
     final uri = Uri.tryParse(_activeUrl);
     if (uri == null || uri.scheme != 'https') return;
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось открыть видео в браузере.')),
+      );
+    }
   }
 
   String _time(Duration d) {
