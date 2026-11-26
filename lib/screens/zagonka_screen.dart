@@ -245,14 +245,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         children: [
           // Keep the source page alive for cookies/session and popup creation,
           // but never expose its catalogue or film page on screen.
-          Positioned(
-            left: 0,
-            top: 0,
-            width: 1,
-            height: 1,
-            child: Opacity(
-              opacity: 0.01,
-              child: InAppWebView(
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Opacity(
+                // Keep the source page fully laid out: many embedded players
+                // refuse to initialize when their parent WebView is 1x1.
+                opacity: 0.01,
+                child: InAppWebView(
                 initialUrlRequest: URLRequest(url: _pageUrl),
                 initialSettings: _webSettings,
                 onWebViewCreated: (controller) =>
@@ -275,8 +274,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                         'Не удалось подготовить плеер. Проверь подключение и попробуй ещё раз.');
                   }
                 },
-                onConsoleMessage: (_, message) =>
-                    debugPrint('[KinoKino bootstrap console] ${message.message}'),
+                  onConsoleMessage: (_, message) =>
+                      debugPrint('[KinoKino bootstrap console] ${message.message}'),
+                ),
               ),
             ),
           ),
