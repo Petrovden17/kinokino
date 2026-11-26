@@ -1,0 +1,19 @@
+name: Keep KinoKino Android signing key
+
+on:
+  schedule:
+    - cron: "17 4 * * 1,4"
+  workflow_dispatch:
+
+jobs:
+  keep-signing-key:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore persistent Android signing key cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: kinokino-android-signing-v1
+
+      - name: Verify signing key is present
+        run: test -s "$HOME/.android/debug.keystore"
