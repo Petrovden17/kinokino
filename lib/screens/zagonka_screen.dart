@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({super.key, required this.title, this.kinopoiskId, this.isSeries = false});
@@ -20,15 +19,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   double _progress = 0;
   String? _pageError;
   bool _isFullscreen = false;
-  bool _browserOpening = false;
-  String? _browserError;
-
   @override
   void initState() {
     super.initState();
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _openInAppBrowser());
-    }
   }
 
   WebUri get _primaryUrl {
@@ -52,94 +45,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
   }
-
-  // Android WebView has repeatedly failed to render this site's separate
-  // player surface. Use the browser's own Chromium Custom Tab instead: it
-  // shares the same browser engine/cookies as Chrome, but remains an
-  // in-app browser surface with a close button back to KinoKino.
-  Future<void> _openInAppBrowser() async {
-    if (!mounted || _browserOpening) return;
-    setState(() { _browserOpening = true; _browserError = null; });
-    try {
-      final opened = await launchUrl(
-        Uri.parse(_primaryUrl.toString()),
-        mode: LaunchMode.inAppBrowserView,
-      );
-      if (!opened) {
-        final fallback = await launchUrl(
-          Uri.parse(_primaryUrl.toString()),
-          mode: LaunchMode.externalApplication,
-        );
-        if (!fallback) throw Exception('Browser launch returned false');
-      }
-    } catch (e) {
-      debugPrint('[KinoKino Custom Tabs] launch failed: $e');
-      if (mounted) setState(() => _browserError = 'Не удалось открыть встроенный браузер Chrome. Проверь, установлен ли Chrome или другой браузер с поддержкой вкладок.');
-    } finally {
-      if (mounted) setState(() => _browserOpening = false);
-    }
-  }
-
-  Future<void> _openExternalBrowser() async {
-    final opened = await launchUrl(Uri.parse(_primaryUrl.toString()), mode: LaunchMode.externalApplication);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть страницу во внешнем браузере.')),
-      );
-    }
-  }
-
-  Widget _buildAndroidBrowserLauncher() {
-    return Scaffold(
-      backgroundColor: const Color(0xFF101010),
-      appBar: AppBar(
-        title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        backgroundColor: const Color(0xFF101010),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.play_circle_outline, color: Colors.white, size: 76),
-              const SizedBox(height: 18),
-              const Text(
-                'Открываем плеер в браузере приложения',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'Используется Chromium Custom Tab с браузерными cookies и поддержкой сайта. После закрытия вкладки ты вернёшься сюда.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70),
-              ),
-              if (_browserError != null) ...[
-                const SizedBox(height: 14),
-                Text(_browserError!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.orangeAccent)),
-              ],
-              const SizedBox(height: 22),
-              FilledButton.icon(
-                onPressed: _browserOpening ? null : _openInAppBrowser,
-                icon: _browserOpening
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.play_arrow),
-                label: Text(_browserOpening ? 'Открываем…' : 'Открыть плеер'),
-              ),
-              const SizedBox(height: 10),
-              TextButton.icon(
-                onPressed: _openExternalBrowser,
-                icon: const Icon(Icons.open_in_browser),
-                label: const Text('Открыть во внешнем браузере'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
 
   Future<void> _toggleFullscreen() async {
     if (_isFullscreen) {
@@ -308,9 +213,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return _buildAndroidBrowserLauncher();
-    }
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -356,8 +258,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      _overlayButton(Icons.open_in_browser, 'Открыть в браузере', _openExternalBrowser),
-                      const SizedBox(width: 4),
                       _overlayButton(Icons.fullscreen, 'На весь экран', _toggleFullscreen),
                     ],
                   ),
