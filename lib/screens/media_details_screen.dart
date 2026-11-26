@@ -204,6 +204,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       expectedYear: year,
       displayTitle: '$_displayTitle · Сезон $season · Серия $number',
       preferredLanguage: _preferredArchiveLanguage,
+      seriesTitle: _displayTitle,
+      seasonNumber: season,
+      episodeNumber: number,
     );
     if (!mounted || source == null) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -244,7 +247,18 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final seasonNumber = (seasons.first['season_number'] as num?)?.toInt() ?? 1;
     try {
       final data = await _tmdb.seasonDetails(widget.item.id, seasonNumber);
-      final episodes = (data['episodes'] as List? ?? const []).whereType<Map>().toList();
+      final today = DateTime.now();
+      final episodes = (data['episodes'] as List? ?? const [])
+          .whereType<Map>()
+          .where((episode) {
+            final raw = (episode['air_date'] ?? '').toString();
+            if (raw.length < 10) return false;
+            final date = DateTime.tryParse(raw.substring(0, 10));
+            return date != null && !DateTime(date.year, date.month, date.day)
+                .isAfter(DateTime(today.year, today.month, today.day));
+          }).toList()
+        ..sort((a, b) => ((a['episode_number'] as num?)?.toInt() ?? 0)
+            .compareTo((b['episode_number'] as num?)?.toInt() ?? 0));
       if (episodes.isEmpty) return null;
       final ep = Map<String, dynamic>.from(episodes.first);
       final runtimeList = _details?['episode_run_time'] as List? ?? const [];
@@ -269,6 +283,14 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     if (_type == 'tv') {
       selectedEpisode = await _firstEpisode();
       if (!mounted) return;
+      selectedEpisode ??= await _chooseEpisode();
+      if (!mounted) return;
+      if (selectedEpisode == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Не удалось определить вышедшую серию. Выбери сезон и серию вручную.'),
+        ));
+        return;
+      }
       if (selectedEpisode != null) {
         sourceTitle = (selectedEpisode['name'] ?? '').toString();
         expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
@@ -319,6 +341,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         expectedYear: expectedYear,
         displayTitle: _displayTitle,
         preferredLanguage: _preferredArchiveLanguage,
+        seriesTitle: _type == 'tv' ? _displayTitle : null,
+        seasonNumber: selectedEpisode == null ? null : (selectedEpisode['season_number'] as num?)?.toInt(),
+        episodeNumber: selectedEpisode == null ? null : (selectedEpisode['episode_number'] as num?)?.toInt(),
         cancelToken: cancelToken,
       );
       // Try the localized display title too: public archives often catalogue
@@ -330,6 +355,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           expectedYear: expectedYear,
           displayTitle: _displayTitle,
           preferredLanguage: widget.preferredAudioLanguage,
+          seriesTitle: _type == 'tv' ? _displayTitle : null,
+          seasonNumber: selectedEpisode == null ? null : (selectedEpisode['season_number'] as num?)?.toInt(),
+          episodeNumber: selectedEpisode == null ? null : (selectedEpisode['episode_number'] as num?)?.toInt(),
           cancelToken: cancelToken,
         );
       }
@@ -382,7 +410,16 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           final date = isEpisode ? (selectedEpisode['air_date'] ?? '').toString() : '';
           final year = isEpisode ? int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? _releaseYear : _releaseYear;
           final languageCode = language == 'original' ? (_details?['original_language']?.toString() ?? 'auto') : language;
-          return InternetArchiveService().findLicensedVideo(title, expectedRuntimeMinutes: runtime, expectedYear: year, displayTitle: _displayTitle, preferredLanguage: languageCode);
+          return InternetArchiveService().findLicensedVideo(
+            title,
+            expectedRuntimeMinutes: runtime,
+            expectedYear: year,
+            displayTitle: _displayTitle,
+            preferredLanguage: languageCode,
+            seriesTitle: isEpisode ? _displayTitle : null,
+            seasonNumber: isEpisode ? (selectedEpisode!['season_number'] as num?)?.toInt() : null,
+            episodeNumber: isEpisode ? (selectedEpisode!['episode_number'] as num?)?.toInt() : null,
+          );
         },
       )));
     } catch (e) {
