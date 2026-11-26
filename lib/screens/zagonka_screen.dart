@@ -4,7 +4,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 
 class ZagonkaScreen extends StatefulWidget {
-  const ZagonkaScreen({super.key, required this.title, this.kinopoiskId, this.isSeries = false});
+  const ZagonkaScreen({
+    super.key,
+    required this.title,
+    this.kinopoiskId,
+    this.isSeries = false,
+  });
 
   final String title;
   final int? kinopoiskId;
@@ -15,193 +20,165 @@ class ZagonkaScreen extends StatefulWidget {
 }
 
 class _ZagonkaScreenState extends State<ZagonkaScreen> {
-  InAppWebViewController? _controller;
-  double _progress = 0;
-  String? _pageError;
+  InAppWebViewController? _bootstrapController;
+  bool _pageLoaded = false;
+  bool _playerWindowOpened = false;
   bool _isFullscreen = false;
-  @override
-  void initState() {
-    super.initState();
-  }
+  String? _error;
 
-  WebUri get _primaryUrl {
+  WebUri get _pageUrl {
     final id = widget.kinopoiskId;
     if (id == null || id <= 0) return WebUri('https://www.kinokino.win/');
-    final kind = widget.isSeries ? 'series' : 'film';
-    return WebUri('https://www.kinokino.win/$kind/$id/');
+    final type = widget.isSeries ? 'series' : 'film';
+    return WebUri('https://www.kinokino.win/$type/$id/');
   }
 
-  Future<void> _setFullscreen(bool enabled) async {
-    if (!mounted || _isFullscreen == enabled) return;
-    setState(() => _isFullscreen = enabled);
-    if (enabled) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      await SystemChrome.setPreferredOrientations(const [
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-    } else {
-      await SystemChrome.setPreferredOrientations(const []);
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    }
-  }
-
-  Future<void> _toggleFullscreen() async {
-    if (_isFullscreen) {
-      await _setFullscreen(false);
-      return;
-    }
-    const fullscreenScript = r"""
-      (() => {
-        const video = document.querySelector('video');
-        const frame = document.querySelector('iframe[allowfullscreen], iframe');
-        const target = video || frame || document.documentElement;
-        if (target && target.requestFullscreen) {
-          const result = target.requestFullscreen();
-          if (result && result.catch) result.catch(() => {});
-        }
-      })();
-    """;
-    await _controller?.evaluateJavascript(source: fullscreenScript);
-    await _setFullscreen(true);
-  }
-
-  Future<void> _goBack() async {
-    if (_isFullscreen) {
-      await _setFullscreen(false);
-      return;
-    }
-    final controller = _controller;
-    if (controller != null && await controller.canGoBack()) {
-      await controller.goBack();
-    } else if (mounted) {
-      Navigator.of(context).maybePop();
-    }
-  }
-
-  Future<void> _reloadPage() async {
-    await _controller?.loadUrl(urlRequest: URLRequest(url: _primaryUrl));
-  }
-
-  Widget _buildPlayerView() {
-    return InAppWebView(
-      initialUrlRequest: URLRequest(url: _primaryUrl),
-      initialSettings: InAppWebViewSettings(
+  InAppWebViewSettings get _webSettings => InAppWebViewSettings(
         javaScriptEnabled: true,
+        javaScriptCanOpenWindowsAutomatically: true,
         mediaPlaybackRequiresUserGesture: false,
         allowsInlineMediaPlayback: true,
         domStorageEnabled: true,
+        databaseEnabled: true,
         thirdPartyCookiesEnabled: true,
         hardwareAcceleration: true,
         enableEncryptedMedia: true,
         enableMedia: true,
         isElementFullscreenEnabled: true,
-        useShouldOverrideUrlLoading: true,
         supportMultipleWindows: true,
-        javaScriptCanOpenWindowsAutomatically: true,
-        mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
         useHybridComposition: defaultTargetPlatform == TargetPlatform.android,
+        mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
         transparentBackground: false,
         supportZoom: false,
-        useWideViewPort: false,
-        loadWithOverviewMode: false,
-      ),
-      onWebViewCreated: (controller) => _controller = controller,
-      onCreateWindow: (controller, action) async {
-        debugPrint('[KinoKino popup] requested windowId=${action.windowId} url=${action.request.url}');
-        if (!mounted) return false;
+      );
 
-        // Android creates target=_blank/window.open pages as a separate native
-        // WebView. Host it in a real fullscreen route so Hybrid Composition
-        // cannot leave the popup behind the parent WebView in the Flutter Stack.
-        showDialog<void>(
-          context: context,
-          barrierDismissible: false,
-          useSafeArea: false,
-          builder: (dialogContext) => PopScope(
-            canPop: true,
-            child: Scaffold(
-              backgroundColor: Colors.black,
-              body: InAppWebView(
-                key: ValueKey('kinokino-popup-${action.windowId}'),
-                windowId: action.windowId,
-                initialSettings: InAppWebViewSettings(
-                  javaScriptEnabled: true,
-                  javaScriptCanOpenWindowsAutomatically: true,
-                  mediaPlaybackRequiresUserGesture: false,
-                  allowsInlineMediaPlayback: true,
-                  domStorageEnabled: true,
-                  thirdPartyCookiesEnabled: true,
-                  hardwareAcceleration: true,
-                  enableEncryptedMedia: true,
-                  enableMedia: true,
-                  isElementFullscreenEnabled: true,
-                  supportMultipleWindows: true,
-                  useHybridComposition: defaultTargetPlatform == TargetPlatform.android,
-                  mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-                ),
-                onWebViewCreated: (popupController) {
-                  debugPrint('[KinoKino popup] native popup attached');
-                },
-                onLoadStart: (popupController, url) {
-                  debugPrint('[KinoKino popup] load start: $url');
-                },
-                onLoadStop: (popupController, url) {
-                  debugPrint('[KinoKino popup] load finished: $url');
-                },
-                onReceivedError: (popupController, request, error) {
-                  debugPrint('[KinoKino popup] load error main=${request.isForMainFrame}: ${error.description} ${request.url}');
-                },
-                onReceivedHttpError: (popupController, request, response) {
-                  debugPrint('[KinoKino popup] HTTP ${response.statusCode} main=${request.isForMainFrame}: ${request.url}');
-                },
-                onCloseWindow: (popupController) {
-                  debugPrint('[KinoKino popup] close callback');
-                  if (Navigator.of(dialogContext).canPop()) {
-                    Navigator.of(dialogContext).pop();
-                  }
-                },
-                onEnterFullscreen: (popupController) => _setFullscreen(true),
-                onExitFullscreen: (popupController) => _setFullscreen(false),
+  Future<void> _enterFullscreen() async {
+    if (!mounted || _isFullscreen) return;
+    _isFullscreen = true;
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    await SystemChrome.setPreferredOrientations(const [
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+  }
+
+  Future<void> _leaveFullscreen() async {
+    if (!_isFullscreen) return;
+    _isFullscreen = false;
+    await SystemChrome.setPreferredOrientations(const []);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
+
+  // The catalogue page is only a hidden bootstrap. It is never presented to
+  // the user. We ask it to activate the site's own "watch/play" control;
+  // Android's onCreateWindow then hands the real player window to this screen.
+  Future<void> _activateSitePlayer(InAppWebViewController controller) async {
+    const script = r"""
+      (() => {
+        if (window.__kinoPlayerLauncherInstalled) return;
+        window.__kinoPlayerLauncherInstalled = true;
+        const activate = () => {
+          if (window.__kinoPlayerWindowRequested) return;
+          const nodes = Array.from(document.querySelectorAll(
+            'a,button,[role="button"],input[type="button"],input[type="submit"]'
+          ));
+          const candidate = nodes.find((node) => {
+            const text = ((node.innerText || node.value || node.getAttribute('aria-label') || '') + ' ' +
+              (node.getAttribute('title') || '')).trim().toLowerCase();
+            const rect = node.getBoundingClientRect();
+            const visible = rect.width > 0 && rect.height > 0 &&
+              getComputedStyle(node).visibility !== 'hidden' &&
+              getComputedStyle(node).display !== 'none';
+            return visible && /смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text);
+          });
+          if (candidate) {
+            window.__kinoPlayerWindowRequested = true;
+            candidate.click();
+            console.log('[KinoKino] activated site watch control');
+            return true;
+          }
+          return false;
+        };
+        let attempts = 0;
+        const timer = setInterval(() => {
+          attempts += 1;
+          if (activate() || attempts >= 40) clearInterval(timer);
+        }, 500);
+        activate();
+      })();
+    """;
+    try {
+      await controller.evaluateJavascript(source: script);
+    } catch (e) {
+      debugPrint('[KinoKino] player activation script failed: $e');
+    }
+  }
+
+  Future<bool> _showPlayerWindow(CreateWindowAction action) async {
+    if (!mounted || _playerWindowOpened) {
+      debugPrint('[KinoKino] ignoring extra popup: ${action.request.url}');
+      return false;
+    }
+    _playerWindowOpened = true;
+    await _enterFullscreen();
+    if (mounted) setState(() => _error = null);
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useSafeArea: false,
+      builder: (dialogContext) => PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) {
+            _playerWindowOpened = false;
+            _leaveFullscreen();
+          }
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: SizedBox.expand(
+            child: InAppWebView(
+              key: ValueKey('kino-player-window-${action.windowId}'),
+              windowId: action.windowId,
+              initialSettings: _webSettings,
+              onWebViewCreated: (_) =>
+                  debugPrint('[KinoKino] actual player popup attached'),
+              onLoadStart: (_, url) =>
+                  debugPrint('[KinoKino player] loading: $url'),
+              onLoadStop: (_, url) =>
+                  debugPrint('[KinoKino player] loaded: $url'),
+              onReceivedError: (_, request, error) => debugPrint(
+                '[KinoKino player] error main=${request.isForMainFrame}: ${error.description}; ${request.url}',
               ),
+              onReceivedHttpError: (_, request, response) => debugPrint(
+                '[KinoKino player] HTTP ${response.statusCode} main=${request.isForMainFrame}: ${request.url}',
+              ),
+              onCloseWindow: (_) {
+                debugPrint('[KinoKino] player popup closed');
+                _playerWindowOpened = false;
+                if (Navigator.of(dialogContext).canPop()) {
+                  Navigator.of(dialogContext).pop();
+                }
+                _leaveFullscreen();
+              },
+              onEnterFullscreen: (_) => _enterFullscreen(),
+              onExitFullscreen: (_) => _leaveFullscreen(),
+              // Block advertising popups spawned by the player itself.
+              onCreateWindow: (_, nestedAction) async {
+                debugPrint('[KinoKino] blocked nested popup: ${nestedAction.request.url}');
+                return false;
+              },
             ),
           ),
-        );
-        return true;
-      },
-      onLoadStart: (controller, url) {
-        debugPrint('[KinoKino WebView] load start: $url');
-        if (!mounted) return;
-        setState(() { _pageError = null; _progress = 0; });
-      },
-      onProgressChanged: (controller, progress) {
-        if (mounted) setState(() => _progress = progress / 100);
-      },
-      onLoadStop: (controller, url) async {
-        if (!mounted) return;
-        setState(() => _progress = 1);
-        try {
-          final probe = await controller.evaluateJavascript(source: r'''(() => JSON.stringify({ready:document.readyState,title:document.title,url:location.href,bodyText:(document.body?.innerText||'').slice(0,300),iframes:Array.from(document.querySelectorAll('iframe')).map(x=>x.src).slice(0,8),videos:Array.from(document.querySelectorAll('video')).map(x=>({src:x.currentSrc,ready:x.readyState,error:x.error?.code})).slice(0,4)}))()''');
-          debugPrint('[KinoKino WebView] page probe: $probe');
-        } catch (e) { debugPrint('[KinoKino WebView] page probe failed: $e'); }
-      },
-      onConsoleMessage: (controller, message) => debugPrint('[KinoKino WebView console] ${message.message}'),
-      onEnterFullscreen: (controller) => _setFullscreen(true),
-      onExitFullscreen: (controller) => _setFullscreen(false),
-      onReceivedError: (controller, request, error) {
-        debugPrint('[KinoKino WebView] resource error main=${request.isForMainFrame}: ${error.description} (${error.type}) ${request.url}');
-        if (request.isForMainFrame != true || !mounted) return;
-        setState(() => _pageError = 'Не удалось загрузить страницу KinoKino. Проверь подключение и нажми «Обновить».');
-      },
-      onReceivedHttpError: (controller, request, errorResponse) {
-        if ((errorResponse.statusCode ?? 0) >= 400) {
-          debugPrint('[KinoKino WebView] HTTP resource ${errorResponse.statusCode} main=${request.isForMainFrame}: ${request.url}');
-        }
-        if (request.isForMainFrame == true && (errorResponse.statusCode ?? 0) >= 400 && mounted) {
-          setState(() => _pageError = 'KinoKino вернул ошибку HTTP ${errorResponse.statusCode}. Нажми «Обновить», чтобы попробовать снова.');
-        }
-      },
-    );
+        ),
+      ),
+    ).then((_) {
+      _playerWindowOpened = false;
+      _leaveFullscreen();
+      if (mounted) setState(() {});
+    });
+    return true;
   }
 
   @override
@@ -218,126 +195,94 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          _buildPlayerView(),
-          if (_progress > 0 && _progress < 1)
-            Align(
-              alignment: Alignment.topCenter,
-              child: LinearProgressIndicator(value: _progress, minHeight: 2),
-            ),
-          if (!_isFullscreen)
-            SafeArea(
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _overlayButton(Icons.arrow_back, 'Назад', _goBack),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: IgnorePointer(
-                          child: Container(
-                            margin: const EdgeInsets.only(top: 3),
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.58),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              '${widget.title} · KinoKino',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _overlayButton(Icons.fullscreen, 'На весь экран', _toggleFullscreen),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: IgnorePointer(
-                        child: Container(
-                          margin: const EdgeInsets.only(top: 3),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.48),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '${widget.title} · KinoKino',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    _overlayButton(Icons.fullscreen_exit, 'Выйти из полного экрана', _toggleFullscreen),
-                  ],
-                ),
+          // Keep the source page alive for cookies/session and popup creation,
+          // but never expose its catalogue or film page on screen.
+          Positioned(
+            left: 0,
+            top: 0,
+            width: 1,
+            height: 1,
+            child: Opacity(
+              opacity: 0.01,
+              child: InAppWebView(
+                initialUrlRequest: URLRequest(url: _pageUrl),
+                initialSettings: _webSettings,
+                onWebViewCreated: (controller) =>
+                    _bootstrapController = controller,
+                onLoadStop: (controller, url) async {
+                  debugPrint('[KinoKino bootstrap] loaded: $url');
+                  if (!_pageLoaded) {
+                    _pageLoaded = true;
+                    await _activateSitePlayer(controller);
+                    if (mounted) setState(() {});
+                  }
+                },
+                onCreateWindow: (_, action) => _showPlayerWindow(action),
+                onReceivedError: (_, request, error) {
+                  debugPrint(
+                    '[KinoKino bootstrap] error main=${request.isForMainFrame}: ${error.description}; ${request.url}',
+                  );
+                  if (request.isForMainFrame == true && mounted) {
+                    setState(() => _error =
+                        'Не удалось подготовить плеер. Проверь подключение и попробуй ещё раз.');
+                  }
+                },
+                onConsoleMessage: (_, message) =>
+                    debugPrint('[KinoKino bootstrap console] ${message.message}'),
               ),
             ),
-          if (_pageError != null)
+          ),
+          if (!_playerWindowOpened)
             Center(
-              child: Container(
-                margin: const EdgeInsets.all(20),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF202020),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Row(
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.wifi_off, color: Colors.white),
-                    const SizedBox(width: 12),
-                    Expanded(child: Text(_pageError!, style: const TextStyle(color: Colors.white))),
-                    IconButton(
-                      tooltip: 'Повторить',
-                      onPressed: () {
-                        setState(() => _pageError = null);
-                        _reloadPage();
-                      },
-                      icon: const Icon(Icons.refresh, color: Colors.white),
+                    const SizedBox(
+                      width: 34,
+                      height: 34,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2.5,
+                      ),
                     ),
+                    const SizedBox(height: 18),
+                    Text(
+                      _error ??
+                          (_pageLoaded
+                              ? 'Запускаем встроенный плеер…'
+                              : 'Подключаем плеер…'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 16),
+                      TextButton.icon(
+                        onPressed: () async {
+                          setState(() {
+                            _error = null;
+                            _pageLoaded = false;
+                          });
+                          await _bootstrapController?.loadUrl(
+                            urlRequest: URLRequest(url: _pageUrl),
+                          );
+                        },
+                        icon: const Icon(Icons.refresh, color: Colors.white),
+                        label: const Text(
+                          'Повторить',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _overlayButton(IconData icon, String tooltip, VoidCallback onPressed) {
-    return Material(
-      color: Colors.black.withValues(alpha: 0.62),
-      shape: const CircleBorder(),
-      child: IconButton(
-        tooltip: tooltip,
-        onPressed: onPressed,
-        icon: Icon(icon, color: Colors.white),
       ),
     );
   }
