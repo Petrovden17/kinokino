@@ -15,14 +15,24 @@ class HomeScreen extends StatefulWidget {
   @override State<HomeScreen> createState()=>_HomeScreenState();
 }
 class _HomeScreenState extends State<HomeScreen>{
-  final _tmdb=TmdbService();final _search=TextEditingController();
+  final _tmdb=TmdbService();final _search=TextEditingController();final _scroll=ScrollController();int _page=1;bool _hasMore=true;bool _loadingMore=false;
   List<MediaItem> _items=[];List<Map<String,dynamic>> _genres=[];
   bool _loading=false;String? _error;String _type='movie';String _sort='popularity.desc';int? _genreId;double _minRating=0;
-  @override void initState(){super.initState();_loadGenres();_loadTrending();}
-  @override void dispose(){_search.dispose();super.dispose();}
+  @override void initState(){super.initState();_scroll.addListener(_onScroll);_loadGenres();_loadTrending();}
+  void _onScroll(){if(_scroll.position.pixels>=_scroll.position.maxScrollExtent-700){_loadMore();}}
+  Future<void> _loadMore() async {
+    if(_loading||_loadingMore||!_hasMore||_search.text.trim().isNotEmpty)return;
+    _loadingMore=true;final next=_page+1;
+    try{
+      final results=await _tmdb.discover(type:_type,genreId:_genreId,sortBy:_sort,minRating:_minRating==0?null:_minRating,page:next);
+      if(!mounted)return;
+      setState((){final seen=_items.map((e)=>e.id).toSet();_items.addAll(results.where((e)=>!seen.contains(e.id)));_page=next;_hasMore=results.isNotEmpty;});
+    }catch(_){}finally{_loadingMore=false;}
+  }
+  @override void dispose(){_scroll.removeListener(_onScroll);_scroll.dispose();_search.dispose();super.dispose();}
   Future<void> _loadGenres() async {try{final r=await _tmdb.genres(type:_type);if(mounted)setState(()=>_genres=r);}catch(_){}}
   Future<void> _loadTrending() async {
-    setState(()=>_loading=true);_error=null;
+    setState(()=>_loading=true);_error=null;_page=1;_hasMore=true;
     try{
       final requests=<Future<List<MediaItem>>>[_tmdb.trending()];
       for(var page=1;page<=5;page++){
@@ -37,13 +47,13 @@ class _HomeScreenState extends State<HomeScreen>{
   }
   Future<void> _applyFilters() async {
     setState(()=>_loading=true);_error=null;
-    try{final r=await _tmdb.discover(type:_type,genreId:_genreId,sortBy:_sort,minRating:_minRating==0?null:_minRating);if(mounted)setState(()=>_items=r);}
+    try{final r=await _tmdb.discover(type:_type,genreId:_genreId,sortBy:_sort,minRating:_minRating==0?null:_minRating);if(mounted)setState(()=>{_items=r,_page=1,_hasMore=r.isNotEmpty});}
     catch(_){if(mounted)setState(()=>_error='Не удалось применить фильтры.');}
     finally{if(mounted)setState(()=>_loading=false);}
   }
   Future<void> _searchMedia(String value) async {
     if(value.trim().isEmpty){_loadTrending();return;}setState(()=>_loading=true);_error=null;
-    try{final r=await _tmdb.search(value);if(mounted)setState(()=>_items=r);}
+    try{final r=await _tmdb.search(value);if(mounted)setState(()=>{_items=r,_page=1,_hasMore=r.isNotEmpty});}
     catch(_){if(mounted)setState(()=>_error='Ошибка поиска. Проверьте подключение к интернету.');}
     finally{if(mounted)setState(()=>_loading=false);}
   }
@@ -68,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen>{
         const SizedBox(height:8),
         Expanded(child:_loading?const Center(child:CircularProgressIndicator()):_error!=null?Center(child:Padding(padding:const EdgeInsets.all(24),child:Column(mainAxisSize:MainAxisSize.min,children:[Text(_error!,textAlign:TextAlign.center),const SizedBox(height:12),FilledButton.icon(onPressed:_loadTrending,icon:const Icon(Icons.refresh),label:const Text('Повторить'))]))):_items.isEmpty?const Center(child:Text('Ничего не найдено.')):LayoutBuilder(builder:(context,c){
           final columns=c.maxWidth>1200?6:c.maxWidth>900?5:c.maxWidth>650?4:2;
-          return GridView.builder(padding:const EdgeInsets.all(16),gridDelegate:SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount:columns,childAspectRatio:.58,crossAxisSpacing:14,mainAxisSpacing:16),itemCount:_items.length,itemBuilder:(_,i)=>PosterCard(item:_items[i],onTap:()=>_open(_items[i])));
+          return GridView.builder(controller:_scroll,padding:const EdgeInsets.all(16),gridDelegate:SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount:columns,childAspectRatio:.58,crossAxisSpacing:14,mainAxisSpacing:16),itemCount:_items.length+(_hasMore?1:0),itemBuilder:(_,i)=>i>=_items.length?const Center(child:Padding(padding:EdgeInsets.all(20),child:CircularProgressIndicator())):PosterCard(item:_items[i],onTap:()=>_open(_items[i])));
         }))
       ]));
   }
