@@ -19,6 +19,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   String? _pageError;
   bool _isFullscreen = false;
   bool _usingFallback = false;
+  String _playerDiagnostics = 'Пока не проверено';
 
   WebUri get _primaryUrl {
     final id = widget.kinopoiskId;
@@ -81,6 +82,42 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       await controller.goBack();
     } else if (mounted) {
       Navigator.of(context).maybePop();
+    }
+  }
+
+  Future<void> _inspectPlayers(InAppWebViewController controller) async {
+    try {
+      final result = await controller.evaluateJavascript(source: r"""
+        (() => {
+          const found = [];
+          const add = (kind, value) => {
+            if (!value) return;
+            try {
+              const url = new URL(value, document.baseURI).href;
+              if (!found.some(item => item.url === url)) found.push({kind, url});
+            } catch (_) {}
+          };
+          document.querySelectorAll('iframe').forEach((el, i) => {
+            add('iframe ' + (i + 1), el.getAttribute('src') || el.getAttribute('data-src') || el.getAttribute('data-lazy-src'));
+          });
+          document.querySelectorAll('video').forEach((el, i) => {
+            add('video ' + (i + 1), el.currentSrc || el.getAttribute('src'));
+            el.querySelectorAll('source').forEach(source => add('video source', source.getAttribute('src')));
+          });
+          document.querySelectorAll('embed, object').forEach((el, i) => add('media ' + (i + 1), el.getAttribute('src') || el.getAttribute('data')));
+          return JSON.stringify(found);
+        })();
+      """);
+      final value = result is String ? result : result?.toString() ?? '';
+      if (!mounted) return;
+      setState(() {
+        _playerDiagnostics = value.isEmpty || value == '[]'
+            ? 'Медиассылки пока не найдены. Нажми «Обновить поиск» после загрузки страницы или запуска видео.'
+            : value;
+      });
+      debugPrint('KINOKINO_PLAYER_DIAGNOSTICS: $_playerDiagnostics');
+    } catch (error) {
+      if (mounted) setState(() => _playerDiagnostics = 'Ошибка чтения страницы: $error');
     }
   }
 
@@ -164,6 +201,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             },
             onLoadStop: (controller, url) async {
               await _hideSiteBranding(controller);
+              await _inspectPlayers(controller);
               if (!mounted) return;
               setState(() => _progress = 1);
             },
@@ -266,6 +304,60 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     const SizedBox(width: 8),
                     _overlayButton(Icons.fullscreen_exit, 'Выйти из полного экрана', _toggleFullscreen),
                   ],
+                ),
+              ),
+            ),
+          if (!_isFullscreen)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: SafeArea(
+                top: false,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.82),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              'Диагностика видеоплеера',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Обновить поиск',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () {\n                              final controller = _controller;\n                              if (controller != null) _inspectPlayers(controller);\n                            },
+                            icon: const Icon(Icons.refresh, color: Colors.white),
+                          ),
+                          IconButton(
+                            tooltip: 'Скопировать результат',
+                            visualDensity: VisualDensity.compact,
+                            onPressed: () => Clipboard.setData(ClipboardData(text: _playerDiagnostics)),
+                            icon: const Icon(Icons.copy, color: Colors.white),
+                          ),
+                        ],
+                      ),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 92),
+                        child: SingleChildScrollView(
+                          child: SelectableText(
+                            _playerDiagnostics,
+                            style: const TextStyle(color: Colors.white70, fontSize: 11),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
