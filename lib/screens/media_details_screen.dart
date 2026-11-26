@@ -68,7 +68,11 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     List<Map<String, dynamic>> kpSeasons = [];
     List<Map<String, dynamic>> kpVideos = [];
     try {
-      final matches = await _kinopoisk.search(widget.item.title);
+      final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
+      var matches = await _kinopoisk.search(localizedTitle.isEmpty ? widget.item.title : localizedTitle);
+      if (matches.isEmpty && localizedTitle != widget.item.title) {
+        matches = await _kinopoisk.search(widget.item.title);
+      }
       if (matches.isNotEmpty) {
         final first = matches.first;
         final rawId = first['filmId'] ?? first['kinopoiskId'] ?? first['id'];
@@ -621,13 +625,17 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 8, children: [
             FilledButton.icon(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(
-                builder: (_) => ZagonkaScreen(
-                  title: _displayTitle,
-                  kinopoiskId: _kinopoiskId,
-                  isSeries: _type == 'tv',
-                ),
-              )),
+              onPressed: _kinopoiskId == null
+                ? () => ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Не удалось найти это произведение в Кинопоиске. Попробуй обновить карточку.')),
+                  )
+                : () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => ZagonkaScreen(
+                      title: _displayTitle,
+                      kinopoiskId: _kinopoiskId,
+                      isSeries: _type == 'tv',
+                    ),
+                  )),
               icon: const Icon(Icons.play_arrow),
               label: const Text('Начать просмотр'),
             ),
