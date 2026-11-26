@@ -86,22 +86,36 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         norm(candidate['nameRu']), norm(candidate['nameEn']),
         norm(candidate['nameOriginal']), norm(candidate['name']),
       }..remove('');
-      final exactTitle = candidateTitles.any(expectedTitles.contains);
+      var titleScore = 0.0;
+      for (final expected in expectedTitles) {
+        final expectedWords = expected.split(' ').where((word) => word.length > 1).toSet();
+        for (final actual in candidateTitles) {
+          if (actual == expected) {
+            titleScore = 100;
+          } else if (actual.contains(expected) || expected.contains(actual)) {
+            titleScore = titleScore < 85 ? 85 : titleScore;
+          } else {
+            final actualWords = actual.split(' ').where((word) => word.length > 1).toSet();
+            if (expectedWords.isNotEmpty && actualWords.isNotEmpty) {
+              final overlap = expectedWords.intersection(actualWords).length /
+                  expectedWords.union(actualWords).length;
+              final score = overlap * 80;
+              if (score > titleScore) titleScore = score;
+            }
+          }
+        }
+      }
       final candidateYear = int.tryParse((candidate['year'] ??
           candidate['startYear'] ?? '').toString()) ?? 0;
       final rawType = (candidate['type'] ?? '').toString().toUpperCase();
       final candidateIsSeries = rawType.contains('TV') ||
           rawType.contains('SERIES') || rawType.contains('MINI');
       final typeKnown = rawType.isNotEmpty;
-      final yearMatches = year == 0 || candidateYear == 0 || candidateYear == year;
-      final typeMatches = !typeKnown || candidateIsSeries == isSeries;
-      final score = (exactTitle ? 100 : 0) +
-          (year > 0 && candidateYear == year ? 30 : 0) +
-          (typeKnown && typeMatches ? 20 : 0);
-      return (candidate: candidate, score: score, exactTitle: exactTitle,
-          yearMatches: yearMatches, typeMatches: typeMatches);
-    }).where((entry) => entry.exactTitle && entry.yearMatches && entry.typeMatches)
-      .toList()
+      final yearScore = year == 0 || candidateYear == 0
+          ? 0 : (candidateYear == year ? 20 : -35);
+      final typeScore = !typeKnown ? 0 : (candidateIsSeries == isSeries ? 15 : -35);
+      return (candidate: candidate, score: titleScore + yearScore + typeScore);
+    }).where((entry) => entry.score >= 65).toList()
       ..sort((a, b) => b.score.compareTo(a.score));
     return ranked.isEmpty ? null : ranked.first.candidate;
   }
@@ -620,6 +634,54 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
   }
 
+  bool _resolvingKinopoisk = false;
+
+  Future<void> _openKinoKino() async {
+    if (_resolvingKinopoisk) return;
+    var id = _kinopoiskId;
+    if (id == null || id <= 0) {
+      setState(() => _resolvingKinopoisk = true);
+      try {
+        final details = _details;
+        final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
+        final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
+        final queries = <String>{
+          if (localizedTitle.length >= 2) localizedTitle,
+          if (originalTitle.length >= 2) originalTitle,
+          if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
+        };
+        final candidates = <Map<String, dynamic>>[];
+        for (final query in queries) {
+          try {
+            candidates.addAll(await _kinopoisk.search(query));
+          } catch (_) {}
+        }
+        final selected = _selectKinopoiskMatch(
+          candidates,
+          details: details,
+          year: _yearFromDetails(details, widget.item.releaseDate),
+          isSeries: _type == 'tv',
+        );
+        final rawId = selected?['filmId'] ?? selected?['kinopoiskId'] ??
+            selected?['kinopoisk_id'] ?? selected?['id'];
+        id = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
+        if (id != null && id! > 0 && mounted) {
+          setState(() => _kinopoiskId = id);
+        }
+      } finally {
+        if (mounted) setState(() => _resolvingKinopoisk = false);
+      }
+    }
+    if (!mounted || id == null || id! <= 0) return;
+    await Navigator.push(context, MaterialPageRoute(
+      builder: (_) => ZagonkaScreen(
+        title: _displayTitle,
+        kinopoiskId: id,
+        isSeries: _type == 'tv',
+      ),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -691,19 +753,11 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 8, children: [
             FilledButton.icon(
-              onPressed: _kinopoiskId == null
-                ? () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Не удалось найти это произведение в Кинопоиске. Попробуй обновить карточку.')),
-                  )
-                : () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => ZagonkaScreen(
-                      title: _displayTitle,
-                      kinopoiskId: _kinopoiskId,
-                      isSeries: _type == 'tv',
-                    ),
-                  )),
-              icon: const Icon(Icons.play_arrow),
-              label: const Text('Начать просмотр'),
+              onPressed: _resolvingKinopoisk ? null : _openKinoKino,
+              icon: _resolvingKinopoisk
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.play_arrow),
+              label: Text(_resolvingKinopoisk ? 'Получаем ID…' : 'Начать просмотр'),
             ),
             OutlinedButton.icon(onPressed: () async {
               await LocalDatabase.setFavorite(item.id, item.title, item.posterPath, true, mediaType: _type);
