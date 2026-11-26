@@ -1,5 +1,9 @@
 name: Build KinoKino for Windows
 
+concurrency:
+  group: kinokino-windows-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   push:
@@ -33,6 +37,9 @@ jobs:
 
       - name: Get Flutter dependencies
         run: flutter pub get
+
+      - name: Analyze Dart code
+        run: flutter analyze --no-pub
 
       - name: Build Windows release
         run: flutter build windows --release --dart-define=APP_BUILD=6
