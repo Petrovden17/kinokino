@@ -1,0 +1,53 @@
+name: Build KinoKino for Android
+
+concurrency:
+  group: kinokino-android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build-android.yml"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "lib/**"
+      - "android/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android runner
+        run: flutter create --platforms=android --project-name=kinokino .
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Dart code
+        run: flutter analyze --no-pub --no-fatal-infos
+
+      - name: Build Android APK
+        run: flutter build apk --release --dart-define=APP_BUILD=6
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: KinoKino-Android-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
