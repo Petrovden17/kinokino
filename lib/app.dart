@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/auth_screen.dart';
+import 'screens/zagonka_screen.dart';
 import 'services/auth_service.dart';
 import 'services/profile_service.dart';
 import 'services/settings_service.dart';
@@ -127,21 +128,26 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
         ),
       );
     },
-    home: StreamBuilder<AuthState>(
-      stream: Supabase.instance.client.auth.onAuthStateChange,
-      builder: (context, snapshot) {
-        final user = Supabase.instance.client.auth.currentUser;
-        if (user == null) return const AuthScreen();
-        if (_profileEnsuredForUser != user.id) {
-          _profileEnsuredForUser = user.id;
-          AuthService().ensureProfile(user.id, user.userMetadata?['display_name'] as String?)
-            .catchError((_) { _profileEnsuredForUser = null; });
-        }
-        return _ready
-          ? HomeScreen(profileService: _profiles, settingsService: _settings)
-          : const Scaffold(body: Center(child: CircularProgressIndicator()));
-      },
-    ),
+    home: const bool.fromEnvironment('KINO_PLAYER_SMOKE_TEST')
+        ? const ZagonkaScreen(
+            title: 'KinoKino Android player smoke test',
+            kinopoiskId: 258687,
+          )
+        : StreamBuilder<AuthState>(
+            stream: Supabase.instance.client.auth.onAuthStateChange,
+            builder: (context, snapshot) {
+              final user = Supabase.instance.client.auth.currentUser;
+              if (user == null) return const AuthScreen();
+              if (_profileEnsuredForUser != user.id) {
+                _profileEnsuredForUser = user.id;
+                AuthService().ensureProfile(user.id, user.userMetadata?['display_name'] as String?)
+                  .catchError((_) { _profileEnsuredForUser = null; });
+              }
+              return _ready
+                ? HomeScreen(profileService: _profiles, settingsService: _settings)
+                : const Scaffold(body: Center(child: CircularProgressIndicator()));
+            },
+          ),
     );
     },
   );
