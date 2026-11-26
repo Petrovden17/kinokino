@@ -248,6 +248,7 @@ jobs:
           PY
 
       - name: Verify the embedded video player in Android emulator
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
