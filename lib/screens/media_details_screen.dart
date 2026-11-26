@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
@@ -23,7 +24,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final d = _details ?? {};
     return (d['title'] ?? d['name'] ?? widget.item.title).toString();
   }
-  String get _playbackSearchTitle {
+  int get _releaseYear {\n    final date = (_details?['release_date'] ?? _details?['first_air_date'] ?? widget.item.releaseDate).toString();\n    return int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? 0;\n  }\n  String get _playbackSearchTitle {
     final d = _details ?? {};
     return (d['original_title'] ?? d['original_name'] ?? d['title'] ?? d['name'] ?? widget.item.title).toString();
   }
@@ -146,30 +147,20 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       sourceTitle = (selectedEpisode['name'] ?? '').toString();
       expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
     }
-    if (expectedRuntime <= 0) {
+    if (_releaseYear <= 0) {\n      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен год выхода. Не буду запускать неподтверждённую версию.')));\n      return;\n    }\n    if (expectedRuntime <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен хронометраж. Не буду запускать непроверенный ролик.')));
       return;
     }
-    setState(() => _searchingPlayback = true);
-    showDialog<void>(
+    final cancelToken = CancelToken();\n    setState(() => _searchingPlayback = true);\n    showDialog<void>(
       context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Row(children: [
-          CircularProgressIndicator(),
-          SizedBox(width: 16),
-          Expanded(child: Text('Ищем доступное видео…')),
-        ]),
-      ),
+      barrierDismissible: false,\n      builder: (dialogContext) => AlertDialog(\n        content: const Row(children: [\n          CircularProgressIndicator(),\n          SizedBox(width: 16),\n          Expanded(child: Text('Ищем точное совпадение по названию, году и длительности…')),\n        ]),\n        actions: [\n          TextButton.icon(\n            onPressed: () {\n              cancelToken.cancel('Пользователь отменил поиск');\n              Navigator.of(dialogContext).pop();\n            },\n            icon: const Icon(Icons.arrow_back),\n            label: const Text('Назад'),\n          ),\n        ],\n      ),
     );
     var dialogClosed = false;
     try {
       final source = await InternetArchiveService().findLicensedVideo(
         sourceTitle,
-        expectedRuntimeMinutes: expectedRuntime,
-      );
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
+        expectedRuntimeMinutes: expectedRuntime,\n        expectedYear: _releaseYear,\n        displayTitle: _displayTitle,\n        cancelToken: cancelToken,\n      );
+      if (!mounted || cancelToken.isCancelled) return;\n      Navigator.of(context, rootNavigator: true).pop();
       dialogClosed = true;
       if (source == null) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -180,10 +171,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         return;
       }
       await Navigator.push(context, MaterialPageRoute(builder: (_) =>
-        PlayerScreen(streamUrl: source.url.toString(), title: source.title, variants: source.variants)));
-    } catch (e) {
-      if (!mounted) return;
-      if (!dialogClosed) Navigator.of(context, rootNavigator: true).pop();
+        PlayerScreen(streamUrl: source.url.toString(), title: _displayTitle, variants: source.variants)));
+    } catch (e) {\n      if (!mounted) return;\n      if (cancelToken.isCancelled) return;\n      if (!dialogClosed) Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Не удалось найти видео: $e')),
       );
