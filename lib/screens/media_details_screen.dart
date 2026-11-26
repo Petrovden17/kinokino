@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
@@ -15,7 +16,7 @@ class MediaDetailsScreen extends StatefulWidget {
 class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   final _tmdb = TmdbService();
   Map<String, dynamic>? _details;
-  List<MediaItem> _recommendations = [];
+  List<MediaItem> _recommendations = [];\n  Map<String, dynamic> _externalIds = {};
   bool _loading = true;
   String? _error;
   double _rating = 0;
@@ -37,9 +38,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Future<void> _load() async {
     Map<String, dynamic>? details;
     List<MediaItem> picks = [];
-    String? error;
-    try {
-      details = await _tmdb.details(widget.item.id, type: _type);
+    String? error;\n    Map<String, dynamic> externalIds = {};\n    try {
+      details = await _tmdb.details(widget.item.id, type: _type);\n      try { externalIds = await _tmdb.externalIds(widget.item.id, type: _type); } catch (_) {}
     } catch (e) {
       error = e.toString();
     }
@@ -59,8 +59,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
     if (mounted) setState(() {
       _details = details;
-      _recommendations = picks;
-      _error = error;
+      _recommendations = picks;\n      _externalIds = externalIds;\n      _error = error;
       _loading = false;
     });
   }
@@ -130,6 +129,12 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       ),
     );
   }
+  Future<void> _openRatingPage(Uri uri) async {
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось открыть страницу рейтинга.')));
+    }
+  }
+
   Future<void> _saveRating(double value) async {
     setState(() => _rating = value);
     await LocalDatabase.setRating(widget.item.id, widget.item.title, widget.item.posterPath, value, mediaType: _type);
@@ -240,6 +245,24 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             const SizedBox(height: 18), const Text('В ролях', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 6), Text(cast),
           ],
+          const SizedBox(height: 12),
+          const Text('Внешние рейтинги', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            if ((_externalIds['imdb_id'] ?? '').toString().startsWith('tt'))
+              OutlinedButton.icon(
+                onPressed: () => _openRatingPage(Uri.parse('https://www.imdb.com/title/${_externalIds['imdb_id']}/')),
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: const Text('Оценка IMDb'),
+              ),
+            OutlinedButton.icon(
+              onPressed: () => _openRatingPage(Uri.https('www.google.com', '/search', {
+                'q': 'Кинопоиск $_displayTitle $_releaseYear рейтинг',
+              })),
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: const Text('Найти оценку Кинопоиска'),
+            ),
+          ]),
           const SizedBox(height: 20), const Text('Твоя оценка', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Wrap(spacing: 4, children: List.generate(10, (i) {
