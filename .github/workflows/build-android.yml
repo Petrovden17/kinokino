@@ -209,6 +209,44 @@ jobs:
             echo "ANDROID_I_WANT_MY_TCG=yes" >> "$GITHUB_ENV"
           fi
 
+      - name: Prepare Android player smoke-test verifier
+        run: |
+          mkdir -p .github/scripts
+          cat > .github/scripts/verify-player-smoke.py <<'PY'
+          import json, re, sys
+          from pathlib import Path
+
+          log = Path("player-smoke-logcat.txt").read_text(errors="replace")
+          probes = re.findall(r"PLAYER_PROBE[^\\n]*?(\\{.*\\})", log)
+          parsed = []
+          for raw in probes:
+              try:
+                  value = json.loads(raw)
+                  if isinstance(value, str):
+                      value = json.loads(value)
+                  if isinstance(value, dict):
+                      parsed.append(value)
+              except (json.JSONDecodeError, TypeError):
+                  continue
+
+          if not parsed:
+              print("FAIL: no player DOM diagnostics were emitted; popup/player did not load.")
+              sys.exit(1)
+
+          for item in parsed:
+              print("PLAYER PROBE:", json.dumps(item, ensure_ascii=False))
+          loaded = any(
+              any(v.get("visible") and (v.get("width", 0) > 0 or v.get("height", 0) > 0)
+                  for v in item.get("videos", []))
+              or item.get("playerFrameCount", 0) > 0
+              for item in parsed
+          )
+          if not loaded:
+              print("FAIL: no visible HTML video element or visible player iframe found.")
+              sys.exit(1)
+          print("PASS: visible video element or player iframe detected.")
+          PY
+
       - name: Verify the embedded video player in Android emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -225,36 +263,7 @@ jobs:
             sleep 75
             adb logcat -d -v time > player-smoke-logcat.txt
             adb exec-out screencap -p > player-smoke-screen.png
-            python3 - <<'PY'
-            import json, re, sys
-            from pathlib import Path
-
-            log = Path("player-smoke-logcat.txt").read_text(errors="replace")
-            probes = re.findall(r"PLAYER_PROBE[^\n]*?(\{.*\})", log)
-            parsed = []
-            for raw in probes:
-                try:
-                    parsed.append(json.loads(raw))
-                except json.JSONDecodeError:
-                    pass
-
-            if not parsed:
-                print("FAIL: no player DOM diagnostics were emitted; popup/player did not load.")
-                sys.exit(1)
-
-            for item in parsed:
-                print("PLAYER PROBE:", json.dumps(item, ensure_ascii=False))
-            loaded = any(
-                any(v.get("visible") and (v.get("width", 0) > 0 or v.get("height", 0) > 0)
-                    for v in item.get("videos", []))
-                or item.get("playerFrameCount", 0) > 0
-                for item in parsed
-            )
-            if not loaded:
-                print("FAIL: no visible HTML video element or visible player iframe found.")
-                sys.exit(1)
-            print("PASS: visible video element or player iframe detected.")
-            PY
+            python3 .github/scripts/verify-player-smoke.py
 
       - name: Upload Android player smoke-test diagnostics
         if: always()
