@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart' as official_webview;
-import 'package:webview_flutter_android/webview_flutter_android.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart' as android_webview;
 
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({super.key, required this.title, this.kinopoiskId, this.isSeries = false});
@@ -72,11 +72,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         },
       ),
     );
-    final androidController = controller.platform as AndroidWebViewController;
+    final androidController = controller.platform as android_webview.AndroidWebViewController;
     await androidController.setMediaPlaybackRequiresUserGesture(false);
-    await androidController.setMixedContentMode(MixedContentMode.alwaysAllow);
-    AndroidWebViewController.enableDebugging(kDebugMode);
-    final widgetParams = AndroidWebViewWidgetCreationParams(
+    await androidController.setMixedContentMode(android_webview.MixedContentMode.alwaysAllow);
+    android_webview.AndroidWebViewController.enableDebugging(kDebugMode);
+    final widgetParams = android_webview.AndroidWebViewWidgetCreationParams(
       controller: controller.platform,
       displayWithHybridComposition: true,
     );
