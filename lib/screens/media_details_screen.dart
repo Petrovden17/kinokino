@@ -615,13 +615,12 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           })),
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 8, children: [
-            FilledButton.icon(onPressed: _searchingPlayback ? null : _startPlayback, icon: _searchingPlayback ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_arrow), label: const Text('Начать просмотр')),
-            OutlinedButton.icon(
+            FilledButton.icon(
               onPressed: () => Navigator.push(context, MaterialPageRoute(
                 builder: (_) => ZagonkaScreen(title: _displayTitle),
               )),
-              icon: const Icon(Icons.public),
-              label: const Text('Открыть Zagonka'),
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Начать просмотр'),
             ),
             OutlinedButton.icon(onPressed: () async {
               await LocalDatabase.setFavorite(item.id, item.title, item.posterPath, true, mediaType: _type);
