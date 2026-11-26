@@ -93,7 +93,12 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Zagonka'),
+        title: Text(widget.searchTitle == null || widget.searchTitle!.trim().isEmpty
+            ? 'Zagonka'
+            : 'Zagonka · ${widget.searchTitle}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         actions: [
           IconButton(
             tooltip: 'Назад',
