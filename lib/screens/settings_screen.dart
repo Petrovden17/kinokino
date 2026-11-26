@@ -138,6 +138,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         subtitle: const Text('Создаёт JSON-файл без паролей и PIN'),
         trailing: const Icon(Icons.backup), onTap: _backup),
       const ListTile(title: Text('Диагностика'), subtitle: Text('Проверка соединения и доступности сервисов будет расширена в следующем обновлении.')),
+      ListTile(
+        leading: const Icon(Icons.logout),
+        title: const Text('Выйти из аккаунта'),
+        subtitle: const Text('Завершить текущий сеанс'),
+        onTap: _signOut,
+      ),
       SwitchListTile(
         title: const Text('Автоматическая проверка обновлений'),
         subtitle: const Text('Проверять наличие новых версий автоматически по выбранному интервалу'),
