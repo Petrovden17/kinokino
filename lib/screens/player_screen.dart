@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import '../services/legal_source_service.dart';
+import '../services/internet_archive_service.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.streamUrl, required this.title});
+  const PlayerScreen({super.key, required this.streamUrl, required this.title, this.variants = const []});
   final String streamUrl;
   final String title;
+  final List<ArchiveVideoVariant> variants;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -18,10 +20,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _busy = true;
   bool _fullscreen = false;
   double _speed = 1;
+  late String _activeUrl;
 
   @override
   void initState() {
     super.initState();
+    _activeUrl = widget.streamUrl;
     _initialize();
   }
 
@@ -29,7 +33,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (mounted) setState(() { _busy = true; _error = null; });
     VideoPlayerController? next;
     try {
-      final uri = LegalSourceService().validateAuthorizedStream(widget.streamUrl);
+      final uri = LegalSourceService().validateAuthorizedStream(_activeUrl);
       next = VideoPlayerController.networkUrl(uri);
       _controller = next;
       next.addListener(_onChanged);
@@ -76,6 +80,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final duration = c.value.duration;
     final target = c.value.position + offset;
     await c.seekTo(target < Duration.zero ? Duration.zero : target > duration ? duration : target);
+  }
+
+  Future<void> _selectQuality(ArchiveVideoVariant variant) async {
+    if (variant.url.toString() == _activeUrl) return;
+    final wasPlaying = _controller?.value.isPlaying ?? false;
+    final previous = _controller;
+    previous?.removeListener(_onChanged);
+    _controller = null;
+    await previous?.dispose();
+    if (!mounted) return;
+    setState(() {
+      _activeUrl = variant.url.toString();
+      _busy = true;
+      _error = null;
+    });
+    await _initialize();
+    if (wasPlaying && _controller?.value.isInitialized == true) {
+      await _controller!.play();
+    }
   }
 
   Future<void> _toggleFullscreen() async {
@@ -198,6 +221,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               v.isPlaying ? 'Пауза' : 'Воспроизвести',
                               () => v.isPlaying ? c.pause() : c.play(), size: 42),
                             _control(Icons.forward_10, 'Вперёд 10 секунд', () => _seek(const Duration(seconds: 10)), size: 30),
+                            if (widget.variants.length > 1)
+                              PopupMenuButton<ArchiveVideoVariant>(
+                                tooltip: 'Качество видео',
+                                onSelected: _selectQuality,
+                                itemBuilder: (_) => widget.variants.map((variant) =>
+                                  PopupMenuItem(
+                                    value: variant,
+                                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                      const Icon(Icons.hd_outlined, size: 18),
+                                      const SizedBox(width: 8),
+                                      Text(variant.label),
+                                      if (variant.url.toString() == _activeUrl) ...[
+                                        const SizedBox(width: 10), const Icon(Icons.check, size: 16),
+                                      ],
+                                    ]),
+                                  )).toList(),
+                                child: Padding(padding: const EdgeInsets.all(10), child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.hd_outlined),
+                                    const SizedBox(width: 4),
+                                    Text(widget.variants.firstWhere(
+                                      (v) => v.url.toString() == _activeUrl,
+                                      orElse: () => widget.variants.first,
+                                    ).label),
+                                  ],
+                                )),
+                              ),
                             PopupMenuButton<double>(
                               tooltip: 'Скорость',
                               initialValue: _speed,
