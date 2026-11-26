@@ -47,13 +47,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
-  Future<void> _goForward() async {
-    final controller = _controller;
-    if (controller != null && await controller.canGoForward()) {
-      await controller.goForward();
-    }
-  }
-
   Future<void> _hideSiteBranding(InAppWebViewController controller) async {
     // Hide only the small site-brand label; do not remove the player or its controls.
     await controller.evaluateJavascript(source: r"""
