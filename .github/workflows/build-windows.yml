@@ -58,11 +58,21 @@ jobs:
       - name: Patch incompatible Windows WebView CMake command
         shell: pwsh
         run: |
-          $pluginCmake = 'flutter\ephemeral\.plugin_symlinks\flutter_inappwebview_forge_windows\windows\CMakeLists.txt'
-          if (-not (Test-Path $pluginCmake)) { throw "Windows WebView plugin CMake file not found: $pluginCmake" }
+          $pluginCmake = 'windows\flutter\ephemeral\.plugin_symlinks\flutter_inappwebview_forge_windows\windows\CMakeLists.txt'
+          if (-not (Test-Path $pluginCmake)) {
+            Get-ChildItem -Path 'windows' -Recurse -Filter CMakeLists.txt | Where-Object { $_.FullName -like '*flutter_inappwebview_forge_windows*' } | Select-Object -ExpandProperty FullName
+            throw "Windows WebView plugin CMake file not found: $pluginCmake"
+          }
           $source = [IO.File]::ReadAllText((Resolve-Path $pluginCmake))
+          # DEPENDS is not valid in add_custom_command(TARGET ... PRE_BUILD).
           $patched = [regex]::Replace($source, '(?m)^\s*DEPENDS\s+\$\{NUGET\}\s*\r?\n', '')
-          if ($patched -ne $source) { [IO.File]::WriteAllText((Resolve-Path $pluginCmake), $patched) }
+          # Make the actual plugin library wait for the NuGet dependency-download target.
+          if ($patched -notmatch 'add_dependencies\(\$\{PLUGIN_NAME\}\s+\$\{PROJECT_NAME\}_DEPS\)') {
+            $pattern = '(?s)(add_library\(\$\{PLUGIN_NAME\} SHARED.*?\r?\n\))'
+            if ($patched -notmatch $pattern) { throw 'Could not locate Windows WebView plugin add_library block.' }
+            $patched = [regex]::Replace($patched, $pattern, '$1' + "`r`n`r`nadd_dependencies(`${PLUGIN_NAME} `${PROJECT_NAME}_DEPS)", 1)
+          }
+          [IO.File]::WriteAllText((Resolve-Path $pluginCmake), $patched)
           if ($patched -match '(?m)^\s*DEPENDS\s+\$\{NUGET\}') { throw 'Invalid DEPENDS argument remains in add_custom_command(TARGET).' }
       - name: Analyze Dart code
         run: flutter analyze --no-pub --no-fatal-infos
