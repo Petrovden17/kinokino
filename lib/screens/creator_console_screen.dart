@@ -246,7 +246,6 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
           const SizedBox(height: 18),
           if (_showExtraInfo) ...[
           const Text('Управление аккаунтами', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const Text('Управление аккаунтами', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           TextField(
             controller: _accountSearch,
