@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:window_manager/window_manager.dart';
 import 'package:video_player/video_player.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../services/legal_source_service.dart';
 import '../services/internet_archive_service.dart';
 
@@ -86,7 +85,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (!mounted) return;
     final value = _controller?.value;
     if (value?.hasError == true) {
-      setState(() => _error = 'Не удалось воспроизвести видео в этом плеере. Попробуйте открыть его в браузере.');
+      setState(() => _error = 'Не удалось воспроизвести видео во встроенном плеере.');
     } else {
       setState(() {});
     }
@@ -98,17 +97,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return 'Источник видео не прошёл проверку безопасности.';
     }
     return 'Не удалось запустить видео в этом плеере. Возможно, Windows не поддерживает его формат или кодек.';
-  }
-
-  Future<void> _openInBrowser() async {
-    final uri = Uri.tryParse(_activeUrl);
-    if (uri == null || uri.scheme != 'https') return;
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть видео в браузере.')),
-      );
-    }
   }
 
   String _time(Duration d) {
@@ -418,9 +406,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       FilledButton.icon(onPressed: _initialize, icon: const Icon(Icons.refresh), label: const Text('Повторить')),
                       const SizedBox(height: 8),
                       OutlinedButton.icon(
-                        onPressed: _openInBrowser,
+                        onPressed: _initialize,
                         icon: const Icon(Icons.open_in_browser),
-                        label: const Text('Открыть видео в браузере'),
+                        label: const Text('Повторить запуск'),
                       ),
                     ],
                   )))
