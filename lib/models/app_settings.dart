@@ -9,6 +9,8 @@ class AppSettings {
     this.autoUpdatesEnabled = true,
     this.updateIntervalHours = 24,
     this.accentColorValue = 0xFFFF765E,
+    this.animationsEnabled = true,
+    this.animationSpeed = 1.0,
   });
   final String language;
   final bool notificationsEnabled;
@@ -19,11 +21,14 @@ class AppSettings {
   final bool autoUpdatesEnabled;
   final int updateIntervalHours;
   final int accentColorValue;
+  final bool animationsEnabled;
+  final double animationSpeed;
 
   AppSettings copyWith({
     String? language, bool? notificationsEnabled, bool? autoplay,
     double? defaultPlaybackSpeed, bool? adultContentAllowed, int? maxChildRating,
     bool? autoUpdatesEnabled, int? updateIntervalHours, int? accentColorValue,
+    bool? animationsEnabled, double? animationSpeed,
   }) => AppSettings(
     language: language ?? this.language,
     notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
@@ -34,6 +39,8 @@ class AppSettings {
     autoUpdatesEnabled: autoUpdatesEnabled ?? this.autoUpdatesEnabled,
     updateIntervalHours: updateIntervalHours ?? this.updateIntervalHours,
     accentColorValue: accentColorValue ?? this.accentColorValue,
+    animationsEnabled: animationsEnabled ?? this.animationsEnabled,
+    animationSpeed: animationSpeed ?? this.animationSpeed,
   );
 
   Map<String, Object> toJson() => {
@@ -43,6 +50,8 @@ class AppSettings {
     'autoUpdatesEnabled': autoUpdatesEnabled,
     'updateIntervalHours': updateIntervalHours,
     'accentColorValue': accentColorValue,
+    'animationsEnabled': animationsEnabled,
+    'animationSpeed': animationSpeed,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -55,5 +64,7 @@ class AppSettings {
     autoUpdatesEnabled: json['autoUpdatesEnabled'] as bool? ?? true,
     updateIntervalHours: json['updateIntervalHours'] as int? ?? 24,
     accentColorValue: json['accentColorValue'] as int? ?? 0xFFFF765E,
+    animationsEnabled: json['animationsEnabled'] as bool? ?? true,
+    animationSpeed: (json['animationSpeed'] as num?)?.toDouble() ?? 1.0,
   );
 }
