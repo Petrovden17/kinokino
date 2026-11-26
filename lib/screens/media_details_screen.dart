@@ -282,7 +282,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         expectedRuntimeMinutes: expectedRuntime,
         expectedYear: expectedYear,
         displayTitle: _displayTitle,
-        preferredLanguage: widget.preferredAudioLanguage,
+        preferredLanguage: _preferredArchiveLanguage,
         cancelToken: cancelToken,
       );
       // Try the localized display title too: public archives often catalogue
