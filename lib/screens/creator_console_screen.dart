@@ -14,6 +14,11 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
   bool _checking = false;
   Map<String, dynamic> _stats = {};
   List<Map<String, dynamic>> _announcements = [];
+  List<Map<String, dynamic>> _accounts = [];
+  final _accountSearch = TextEditingController();
+  int _accountPage = 1;
+  bool _accountsHasMore = true;
+  bool _accountsLoadingMore = false;
   String? _error;
   String? _diagnostics;
 
@@ -29,17 +34,96 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
       if (!await _creator.isCreator()) {
         throw Exception('У этого аккаунта нет прав создателя.');
       }
-      final values = await Future.wait([_creator.loadStats(), _creator.announcements()]);
+      final values = await Future.wait([_creator.loadStats(), _creator.announcements(), _creator.loadAccounts()]);
       if (!mounted) return;
       setState(() {
         _stats = values[0] as Map<String, dynamic>;
         _announcements = values[1] as List<Map<String, dynamic>>;
+        _accounts = values[2] as List<Map<String, dynamic>>;
+        _accountPage = 1;
+        _accountsHasMore = _accounts.length == 100;
       });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  List<Map<String, dynamic>> get _visibleAccounts {
+    final query = _accountSearch.text.trim().toLowerCase();
+    if (query.isEmpty) return _accounts;
+    return _accounts.where((account) =>
+      (account['email']?.toString().toLowerCase().contains(query) ?? false) ||
+      (account['display_name']?.toString().toLowerCase().contains(query) ?? false) ||
+      account['id'].toString().toLowerCase().contains(query)).toList();
+  }
+
+  bool _isBanned(Map<String, dynamic> account) {
+    final raw = account['banned_until']?.toString();
+    if (raw == null || raw.isEmpty) return false;
+    final date = DateTime.tryParse(raw);
+    return date != null && date.isAfter(DateTime.now().toUtc());
+  }
+
+  Future<void> _loadMoreAccounts() async {
+    if (_accountsLoadingMore || !_accountsHasMore) return;
+    setState(() => _accountsLoadingMore = true);
+    try {
+      final nextPage = _accountPage + 1;
+      final rows = await _creator.loadAccounts(page: nextPage);
+      if (!mounted) return;
+      setState(() {
+        _accounts.addAll(rows);
+        _accountPage = nextPage;
+        _accountsHasMore = rows.length == 100;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Не удалось загрузить следующие аккаунты: $e');
+    } finally {
+      if (mounted) setState(() => _accountsLoadingMore = false);
+    }
+  }
+
+  Future<void> _toggleAccountBan(Map<String, dynamic> account) async {
+    final banned = _isBanned(account);
+    final email = account['email']?.toString() ?? 'Без email';
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(banned ? 'Разблокировать аккаунт?' : 'Заблокировать аккаунт?'),
+        content: Text(banned
+          ? 'Пользователь $email снова сможет входить в KinoKino.'
+          : 'Пользователь $email не сможет входить в KinoKino, пока блокировка не будет снята.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true),
+            child: Text(banned ? 'Разблокировать' : 'Заблокировать')),
+        ],
+      ),
+    );
+    if (yes != true) return;
+    try {
+      await _creator.setAccountBanned(account['id'].toString(), banned: !banned);
+      final updated = await _creator.loadAccounts(page: 1);
+      if (!mounted) return;
+      setState(() {
+        _accounts = updated;
+        _accountPage = 1;
+        _accountsHasMore = updated.length == 100;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(banned ? 'Аккаунт разблокирован.' : 'Аккаунт заблокирован.'),
+      ));
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Не удалось изменить аккаунт: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _accountSearch.dispose();
+    super.dispose();
   }
 
   Future<void> _checkServices() async {
@@ -133,6 +217,66 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
           _stat('Оценки', 'ratings', Icons.star_outline),
           _stat('Записи истории', 'watch_history', Icons.history),
           _stat('Объявления', 'announcements', Icons.campaign_outlined),
+          const SizedBox(height: 18),
+          const Text('Управление аккаунтами', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _accountSearch,
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              hintText: 'Поиск по email, имени или ID',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text('Загружено аккаунтов: ${_accounts.length}',
+            style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          if (_visibleAccounts.isEmpty)
+            const Padding(padding: EdgeInsets.all(16), child: Text('Аккаунты не найдены.')),
+          for (final account in _visibleAccounts)
+            Card(child: ListTile(
+              leading: CircleAvatar(
+                child: Icon(account['is_creator'] == true
+                  ? Icons.shield_outlined
+                  : _isBanned(account) ? Icons.block : Icons.person_outline),
+              ),
+              title: Text(
+                (account['display_name']?.toString().trim().isNotEmpty == true)
+                  ? account['display_name'].toString()
+                  : (account['email']?.toString().isNotEmpty == true
+                      ? account['email'].toString() : 'Аккаунт без имени'),
+              ),
+              subtitle: Text([
+                account['email']?.toString() ?? '',
+                account['is_creator'] == true ? 'Создатель — защищённый аккаунт'
+                  : _isBanned(account) ? 'Заблокирован' : 'Активен',
+                'Регистрация: ${account['created_at']?.toString().substring(0, 10) ?? '—'}',
+                'Последний вход: ${account['last_sign_in_at']?.toString().substring(0, 10) ?? 'ещё не входил'}',
+                account['email_confirmed_at'] == null ? 'Email не подтверждён' : 'Email подтверждён',
+              ].where((part) => part.isNotEmpty).join(' • ')),
+              isThreeLine: true,
+              trailing: account['is_creator'] == true
+                ? const Icon(Icons.verified_user_outlined, color: Colors.amber)
+                : PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'toggle_ban') _toggleAccountBan(account);
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem(
+                        value: 'toggle_ban',
+                        child: Text(_isBanned(account) ? 'Разблокировать' : 'Заблокировать'),
+                      ),
+                    ],
+                  ),
+            )),
+          if (_accountsHasMore && _accountSearch.text.trim().isEmpty)
+            Center(child: OutlinedButton(
+              onPressed: _accountsLoadingMore ? null : _loadMoreAccounts,
+              child: _accountsLoadingMore
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('Загрузить ещё'),
+            )),
           const SizedBox(height: 18),
           const Text('Диагностика сервисов', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           OutlinedButton.icon(onPressed: _checking ? null : _checkServices,
