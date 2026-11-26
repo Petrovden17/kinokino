@@ -8,6 +8,7 @@ class AppSettings {
     this.maxChildRating = 12,
     this.autoUpdatesEnabled = true,
     this.updateIntervalHours = 24,
+    this.accentColorValue = 0xFFFF765E,
   });
   final String language;
   final bool notificationsEnabled;
@@ -17,11 +18,12 @@ class AppSettings {
   final int maxChildRating;
   final bool autoUpdatesEnabled;
   final int updateIntervalHours;
+  final int accentColorValue;
 
   AppSettings copyWith({
     String? language, bool? notificationsEnabled, bool? autoplay,
     double? defaultPlaybackSpeed, bool? adultContentAllowed, int? maxChildRating,
-    bool? autoUpdatesEnabled, int? updateIntervalHours,
+    bool? autoUpdatesEnabled, int? updateIntervalHours, int? accentColorValue,
   }) => AppSettings(
     language: language ?? this.language,
     notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
@@ -31,6 +33,7 @@ class AppSettings {
     maxChildRating: maxChildRating ?? this.maxChildRating,
     autoUpdatesEnabled: autoUpdatesEnabled ?? this.autoUpdatesEnabled,
     updateIntervalHours: updateIntervalHours ?? this.updateIntervalHours,
+    accentColorValue: accentColorValue ?? this.accentColorValue,
   );
 
   Map<String, Object> toJson() => {
@@ -39,6 +42,7 @@ class AppSettings {
     'adultContentAllowed': adultContentAllowed, 'maxChildRating': maxChildRating,
     'autoUpdatesEnabled': autoUpdatesEnabled,
     'updateIntervalHours': updateIntervalHours,
+    'accentColorValue': accentColorValue,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> json) => AppSettings(
@@ -50,5 +54,6 @@ class AppSettings {
     maxChildRating: json['maxChildRating'] as int? ?? 12,
     autoUpdatesEnabled: json['autoUpdatesEnabled'] as bool? ?? true,
     updateIntervalHours: json['updateIntervalHours'] as int? ?? 24,
+    accentColorValue: json['accentColorValue'] as int? ?? 0xFFFF765E,
   );
 }
