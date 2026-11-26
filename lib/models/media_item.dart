@@ -26,16 +26,28 @@ class MediaItem {
 
   bool get hasRussianTitle => RegExp(r'[А-Яа-яЁё]').hasMatch(title);
 
+  bool get hasConfirmedRelease {
+    if (releaseDate.length != 10) return false;
+    final parsed = DateTime.tryParse(releaseDate);
+    if (parsed == null || parsed.year < 1888) return false;
+    final today = DateTime.now();
+    final releaseDay = DateTime(parsed.year, parsed.month, parsed.day);
+    final currentDay = DateTime(today.year, today.month, today.day);
+    return !releaseDay.isAfter(currentDay);
+  }
+
   static String _validatedReleaseDate(dynamic value) {
     final date = (value ?? '').toString().trim();
-    if (date.length < 4) return '';
-    final year = int.tryParse(date.substring(0, 4));
-    if (year == null || year < 1888 || year > DateTime.now().year) return '';
-    if (date.length >= 10) {
-      final parsed = DateTime.tryParse(date.substring(0, 10));
-      if (parsed == null || parsed.year != year) return '';
-    }
-    return date;
+    // Require a complete calendar date. A year-only or missing date is not
+    // sufficient evidence that a title has actually been released.
+    if (date.length < 10) return '';
+    final day = date.substring(0, 10);
+    final parsed = DateTime.tryParse(day);
+    if (parsed == null || parsed.year < 1888) return '';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (DateTime(parsed.year, parsed.month, parsed.day).isAfter(today)) return '';
+    return day;
   }
 
   factory MediaItem.fromJson(Map<String, dynamic> json) => MediaItem(
