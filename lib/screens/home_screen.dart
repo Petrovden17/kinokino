@@ -192,7 +192,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ? await _tmdb.trending(page: 1)
           : _type == 'all' ? await _loadAllTypesPage(1)
           : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre,
-              sortBy: _sort, minRating: _minRating == 0 ? null : _minRating);
+              sortBy: _sort == 'primary_release_date.desc' && _apiType == 'tv' ? 'first_air_date.desc' : _sort,
+              minRating: _minRating == 0 ? null : _minRating);
       if (mounted) setState(() { _items = r; _page = 1; _hasMore = r.isNotEmpty; });
     } catch (_) {
       if (mounted) setState(() => _error = 'Не удалось применить фильтры.');
