@@ -72,6 +72,32 @@ Deno.serve(async (req: Request) => {
       return json({ users, page });
     }
 
+    if (action === "watch_history") {
+      const limit = Math.max(1, Math.min(500, Number(body.limit) || 200));
+      const { data: rows, error: historyError } = await admin
+        .from("watch_history")
+        .select("id,user_id,media_id,media_type,media,watched_at,progress_seconds")
+        .order("watched_at", { ascending: false })
+        .limit(limit);
+      if (historyError) return json({ error: historyError.message }, 400);
+
+      const userIds = [...new Set((rows ?? []).map((row) => row.user_id))];
+      const profilesResult = userIds.length
+        ? await admin.from("profiles").select("id,display_name").in("id", userIds)
+        : { data: [], error: null };
+      if (profilesResult.error) return json({ error: profilesResult.error.message }, 400);
+      const names = new Map((profilesResult.data ?? []).map((profile) => [profile.id, profile.display_name ?? ""]));
+      const usersResult = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+      if (usersResult.error) return json({ error: usersResult.error.message }, 400);
+      const emails = new Map(usersResult.data.users.map((user) => [user.id, user.email ?? ""]));
+      const history = (rows ?? []).map((row) => ({
+        ...row,
+        display_name: names.get(row.user_id) ?? "",
+        email: emails.get(row.user_id) ?? "",
+      }));
+      return json({ history });
+    }
+
     const targetId = String(body?.user_id ?? "");
     if (!targetId || targetId.length > 64) return json({ error: "Invalid user id" }, 400);
     if (targetId === authData.user.id) return json({ error: "You cannot change your own account here" }, 400);
