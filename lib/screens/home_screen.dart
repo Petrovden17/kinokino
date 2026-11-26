@@ -23,10 +23,12 @@ class _HomeScreenState extends State<HomeScreen>{
   @override void initState(){super.initState();_scroll.addListener(_onScroll);_loadGenres();_loadTrending();}
   void _onScroll(){if(_scroll.position.pixels>=_scroll.position.maxScrollExtent-700){_loadMore();}}
   Future<void> _loadMore() async {
-    if(_loading||_loadingMore||!_hasMore||_search.text.trim().isNotEmpty)return;
+    if(_loading||_loadingMore||!_hasMore)return;
     _loadingMore=true;final next=_page+1;
     try{
-      final results=await _tmdb.discover(type:_apiType,genreId:_effectiveGenre,sortBy:_sort,minRating:_minRating==0?null:_minRating,page:next);
+      final results=_search.text.trim().isNotEmpty
+        ? await _tmdb.search(_search.text,page:next)
+        : await _tmdb.discover(type:_apiType,genreId:_effectiveGenre,sortBy:_sort,minRating:_minRating==0?null:_minRating,page:next);
       if(!mounted)return;
       setState((){final seen=_items.map((e)=>e.id).toSet();_items.addAll(results.where((e)=>!seen.contains(e.id)));_page=next;_hasMore=results.isNotEmpty;});
     }catch(_){}finally{_loadingMore=false;}
@@ -49,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen>{
   }
   Future<void> _applyFilters() async {
     setState(()=>_loading=true);_error=null;
-    try{final r=await _tmdb.discover(type:_apiType,genreId:_effectiveGenre,sortBy:_sort,minRating:_minRating==0?null:_minRating);if(mounted)setState(()=>{_items=r,_page=1,_hasMore=r.isNotEmpty});}
+    try{final r=await _tmdb.discover(type:_apiType,genreId:_effectiveGenre,sortBy:_sort,minRating:_minRating==0?null:_minRating);if(mounted)setState(()=>{_items=r,_page=1,_hasMore:r.isNotEmpty});}
     catch(_){if(mounted)setState(()=>_error='Не удалось применить фильтры.');}
     finally{if(mounted)setState(()=>_loading=false);}
   }
