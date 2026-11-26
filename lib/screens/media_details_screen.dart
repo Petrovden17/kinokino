@@ -51,7 +51,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   }
   Future<void> _load() async {
     Map<String, dynamic>? details;
-    List<MediaItem> picks = [];
     String? error;
     Map<String, dynamic> externalIds = {};
     try {
