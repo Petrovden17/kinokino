@@ -121,9 +121,9 @@ jobs:
       - name: Analyze Dart code
         run: flutter analyze --no-pub --no-fatal-infos
 
-      - name: Warn when persistent Android signing is not configured
+      - name: Verify stable Android signing configuration
         if: ${{ env.HAS_ANDROID_KEYSTORE != 'true' }}
-        run: echo '::warning::No persistent Android keystore is configured. This APK uses a temporary runner debug key and cannot update an APK signed by another build.'
+        run: test -s "$HOME/.android/debug.keystore"
       - name: Configure persistent Android release signing
         if: ${{ env.HAS_ANDROID_KEYSTORE == 'true' }}
         env:
