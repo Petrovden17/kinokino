@@ -119,6 +119,18 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
+  // The site may initialize the selected stream in its own session before
+  // exposing the standalone InPlayer endpoint. Keep this navigation in the
+  // same WebView so its cookies and browsing session are preserved.
+  Future<void> _openInPlayer() async {
+    const playerUrl = 'https://inplayer.ru/video/black.jpg';
+    if (_androidController != null) {
+      await _androidController!.loadRequest(Uri.parse(playerUrl));
+    } else {
+      await _controller?.loadUrl(urlRequest: URLRequest(url: WebUri(playerUrl)));
+    }
+  }
+
   Future<void> _toggleFullscreen() async {
     if (_isFullscreen) {
       await _setFullscreen(false);
@@ -286,6 +298,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                       ),
                       const SizedBox(width: 8),
                       _overlayButton(Icons.open_in_browser, 'Открыть в браузере', _openExternalBrowser),
+                      const SizedBox(width: 4),
+                      _overlayButton(Icons.play_circle_outline, 'Открыть видеоплеер', _openInPlayer),
                       const SizedBox(width: 4),
                       _overlayButton(Icons.fullscreen, 'На весь экран', _toggleFullscreen),
                     ],
