@@ -33,17 +33,21 @@ class KinopoiskService {
   }
 
   Future<List<Map<String, dynamic>>> search(String query) async {
+    final results = <Map<String, dynamic>>[];
     try {
       final data = await _invoke('search', query: query);
       final items = data['films'] as List? ?? const [];
-      final films = items.whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item)).toList();
-      if (films.isNotEmpty) return films;
+      results.addAll(items.whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item)));
     } catch (_) {
-      // Continue with the public identifier index when the private API key
-      // is absent or the Kinopoisk proxy is temporarily unavailable.
+      // Keep resolving IDs through the public index if the private API fails.
     }
-    return _searchWikidata(query);
+    try {
+      results.addAll(await _searchWikidata(query));
+    } catch (_) {
+      // A temporary Wikidata outage must not discard Kinopoisk API results.
+    }
+    return results;
   }
 
   Future<List<Map<String, dynamic>>> _searchWikidata(String query) async {
