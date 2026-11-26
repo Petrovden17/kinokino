@@ -78,7 +78,9 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final results = _search.text.trim().isNotEmpty
           ? await _tmdb.search(_search.text, page: next)
-          : _type == 'all' ? await _loadAllTypesPage(next)
+          : _type == 'all' && _genreId == null && _minRating == 0 && _sort == 'popularity.desc'
+              ? await _tmdb.trending(page: next)
+              : _type == 'all' ? await _loadAllTypesPage(next)
           : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre, sortBy: _sort,
               minRating: _minRating == 0 ? null : _minRating, page: next);
       if (!mounted) return;
@@ -166,7 +168,9 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loading = true);
     _error = null;
     try {
-      final r = _type == 'all' ? await _loadAllTypesPage(1)
+      final r = _type == 'all' && _genreId == null && _minRating == 0 && _sort == 'popularity.desc'
+          ? await _tmdb.trending(page: 1)
+          : _type == 'all' ? await _loadAllTypesPage(1)
           : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre,
               sortBy: _sort, minRating: _minRating == 0 ? null : _minRating);
       if (mounted) setState(() { _items = r; _page = 1; _hasMore = r.isNotEmpty; });
