@@ -144,7 +144,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const rect = frame.getBoundingClientRect();
             const style = getComputedStyle(frame);
             if (rect.width < 160 || rect.height < 90 || style.display === 'none' || style.visibility === 'hidden') return;
-            report(frame.src, (frame.title || '') + ' ' + (frame.id || '') + ' ' + (frame.className || ''));
+            const frameUrl = new URL(frame.src || '', location.href);
+            // Never promote the catalogue/site page itself. Only a visible,
+            // external embedded frame can become the standalone player view.
+            if (frameUrl.origin === location.origin ||
+                /(^|\\.)kinokino\\.win$/i.test(frameUrl.hostname) ||
+                /doubleclick|adservice|analytics|metrika|captcha/i.test(frameUrl.hostname)) return;
+            report(frameUrl.href, (frame.title || '') + ' ' + (frame.id || '') + ' ' + (frame.className || '') + ' iframe');
           });
           try {
             performance.getEntriesByType('resource').forEach((entry) => {
@@ -412,7 +418,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     if (mounted) setState(() {});
                   }
                 },
-                onCreateWindow: (_, action) => _showPlayerWindow(action),
+                // A popup is often the whole catalogue page, not the player.
+                // Block it. StreamBridge independently extracts the actual
+                // external iframe from the hidden source page and opens only that URL.
+                onCreateWindow: (_, action) async {
+                  debugPrint('[KinoKino bootstrap] blocked popup; waiting for embedded player iframe: ${action.request.url}');
+                  return false;
+                },
                 onReceivedError: (_, request, error) {
                   debugPrint(
                     '[KinoKino bootstrap] error main=${request.isForMainFrame}: ${error.description}; ${request.url}',
