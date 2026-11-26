@@ -35,7 +35,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _loading = false;
   bool _isCreator = false;
   String? _error;
-  String _type = 'movie';
+  String _type = 'all';
+  String _audioLanguage = 'auto';
+  String _videoQuality = 'auto';
   String _sort = 'popularity.desc';
   int? _genreId;
   double _minRating = 0;
@@ -47,6 +49,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
+    _audioLanguage = widget.settingsService.settings.preferredAudioLanguage;
+    _videoQuality = widget.settingsService.settings.preferredVideoQuality;
     _loadGenres();
     _loadTrending();
     _loadCreatorAccess();
@@ -74,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final results = _search.text.trim().isNotEmpty
           ? await _tmdb.search(_search.text, page: next)
+          : _type == 'all' ? await _loadAllTypesPage(next)
           : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre, sortBy: _sort,
               minRating: _minRating == 0 ? null : _minRating, page: next);
       if (!mounted) return;
@@ -99,9 +104,43 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadGenres() async {
     try {
-      final r = await _tmdb.genres(type: _apiType);
-      if (mounted) setState(() => _genres = r);
+      final lists = _type == 'all'
+          ? await Future.wait([_tmdb.genres(type: 'movie'), _tmdb.genres(type: 'tv')])
+          : [await _tmdb.genres(type: _apiType)];
+      final unique = <int, Map<String, dynamic>>{};
+      for (final list in lists) {
+        for (final genre in list) {
+          unique[genre['id'] as int] = genre;
+        }
+      }
+      if (mounted) setState(() => _genres = unique.values.toList()
+        ..sort((a, b) => a['name'].toString().compareTo(b['name'].toString())));
     } catch (_) {}
+  }
+
+  Future<List<MediaItem>> _loadAllTypesPage(int page) async {
+    final results = await Future.wait([
+      _tmdb.discover(type: 'movie', genreId: _genreId, sortBy: _sort,
+        minRating: _minRating == 0 ? null : _minRating, page: page),
+      _tmdb.discover(type: 'tv', genreId: _genreId, sortBy: _sort,
+        minRating: _minRating == 0 ? null : _minRating, page: page),
+    ]);
+    final unique = <String, MediaItem>{};
+    for (final group in results) {
+      for (final item in group) {
+        unique['${item.mediaType}:${item.id}'] = item;
+      }
+    }
+    final merged = unique.values.toList()
+      ..sort((a, b) => b.popularity.compareTo(a.popularity));
+    return merged;
+  }
+
+  Future<void> _savePlaybackPreferences() async {
+    await widget.settingsService.update(widget.settingsService.settings.copyWith(
+      preferredAudioLanguage: _audioLanguage,
+      preferredVideoQuality: _videoQuality,
+    ));
   }
 
   Future<void> _loadTrending() async {
@@ -110,22 +149,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _page = 1;
     _hasMore = true;
     try {
-      final requests = <Future<List<MediaItem>>>[_tmdb.trending()];
-      for (var page = 1; page <= 10; page++) {
-        requests.add(_tmdb.popular(type: 'movie', page: page));
-        requests.add(_tmdb.popular(type: 'tv', page: page));
-      }
-      final groups = await Future.wait(requests);
-      final unique = <String, MediaItem>{};
-      for (final group in groups) {
-        for (final item in group) {
-          unique['${item.mediaType}:${item.id}'] = item;
-        }
-      }
+      final results = await _tmdb.trending(page: 1);
       if (mounted) setState(() {
-        _items = unique.values.toList();
-        _page = 10;
-        _hasMore = true;
+        _items = results;
+        _page = 1;
+        _hasMore = results.isNotEmpty;
       });
     } catch (_) {
       if (mounted) setState(() => _error = 'Не удалось загрузить каталог. Проверьте подключение и попробуйте ещё раз.');
@@ -138,8 +166,9 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loading = true);
     _error = null;
     try {
-      final r = await _tmdb.discover(type: _apiType, genreId: _effectiveGenre,
-          sortBy: _sort, minRating: _minRating == 0 ? null : _minRating);
+      final r = _type == 'all' ? await _loadAllTypesPage(1)
+          : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre,
+              sortBy: _sort, minRating: _minRating == 0 ? null : _minRating);
       if (mounted) setState(() { _items = r; _page = 1; _hasMore = r.isNotEmpty; });
     } catch (_) {
       if (mounted) setState(() => _error = 'Не удалось применить фильтры.');
@@ -195,7 +224,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _open(MediaItem item) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => MediaDetailsScreen(item: item)));
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => MediaDetailsScreen(
+      item: item, preferredAudioLanguage: _audioLanguage, preferredVideoQuality: _videoQuality,
+    )));
     if (mounted) setState(() {});
   }
 
@@ -227,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
         controller: _search,
         onSubmitted: _searchMedia,
         decoration: InputDecoration(
-          hintText: 'Поиск фильмов и сериалов',
+          hintText: 'Поиск по каталогу',
           prefixIcon: const Icon(Icons.search),
           suffixIcon: IconButton(
             tooltip: 'Очистить поиск',
@@ -242,6 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SegmentedButton<String>(
           showSelectedIcon: false,
           segments: const [
+            ButtonSegment(value: 'all', label: Text('Популярное')),
             ButtonSegment(value: 'movie', label: Text('Фильмы')),
             ButtonSegment(value: 'tv', label: Text('Сериалы')),
             ButtonSegment(value: 'animation', label: Text('Мультфильмы')),
@@ -255,6 +287,39 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
       ),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: DropdownButtonFormField<String>(
+          value: _audioLanguage,
+          decoration: const InputDecoration(labelText: 'Озвучка', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+          items: const [
+            DropdownMenuItem(value: 'auto', child: Text('Авто')),
+            DropdownMenuItem(value: 'ru', child: Text('Русская')),
+            DropdownMenuItem(value: 'original', child: Text('Оригинал')),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            setState(() => _audioLanguage = value);
+            _savePlaybackPreferences();
+          },
+        )),
+        const SizedBox(width: 10),
+        Expanded(child: DropdownButtonFormField<String>(
+          value: _videoQuality,
+          decoration: const InputDecoration(labelText: 'Качество', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+          items: const [
+            DropdownMenuItem(value: 'auto', child: Text('Авто')),
+            DropdownMenuItem(value: '1080', child: Text('До 1080p')),
+            DropdownMenuItem(value: '720', child: Text('До 720p')),
+            DropdownMenuItem(value: '480', child: Text('До 480p')),
+          ],
+          onChanged: (value) {
+            if (value == null) return;
+            setState(() => _videoQuality = value);
+            _savePlaybackPreferences();
+          },
+        )),
+      ]),
       const SizedBox(height: 10),
       Row(children: [
         Expanded(child: DropdownButtonFormField<int?>(
@@ -357,7 +422,7 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.fromLTRB(18, 5, 18, 10),
                 child: Row(children: [
-                  const Text('Подборка для тебя', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  const Text('Популярное сейчас', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
                   const Spacer(),
                   Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.secondary, size: 18),
                 ]),
