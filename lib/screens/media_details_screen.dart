@@ -62,6 +62,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
 
   Map<String, dynamic>? _selectKinopoiskMatch(
     List<Map<String, dynamic>> candidates, {
+    required Map<String, dynamic>? details,
     required int year,
     required bool isSeries,
   }) {
@@ -69,8 +70,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         .replaceAll(RegExp(r'[^a-zа-яё0-9]+', unicode: true), ' ')
         .trim();
     final expectedTitles = <String>{
-      norm(_details?['title']), norm(_details?['name']),
-      norm(_details?['original_title']), norm(_details?['original_name']),
+      norm(details?['title']), norm(details?['name']),
+      norm(details?['original_title']), norm(details?['original_name']),
       norm(widget.item.title),
     }..remove('');
     final unique = <int, Map<String, dynamic>>{};
@@ -135,7 +136,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           // A failed title variant must not prevent trying the other names.
         }
       }
-      final selected = _selectKinopoiskMatch(candidates, year: year, isSeries: _type == 'tv');
+      final selected = _selectKinopoiskMatch(candidates, details: details, year: year, isSeries: _type == 'tv');
       if (selected != null) {
         final rawId = selected['filmId'] ?? selected['kinopoiskId'] ??
             selected['kinopoisk_id'] ?? selected['id'];
