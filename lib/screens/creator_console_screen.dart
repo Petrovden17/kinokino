@@ -21,6 +21,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
   bool _accountsLoadingMore = false;
   String? _error;
   String? _diagnostics;
+  bool _showExtraInfo = false;
 
   @override
   void initState() {
@@ -57,6 +58,15 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
       (account['email']?.toString().toLowerCase().contains(query) ?? false) ||
       (account['display_name']?.toString().toLowerCase().contains(query) ?? false) ||
       account['id'].toString().toLowerCase().contains(query)).toList();
+  }
+
+  String _dateLabel(dynamic value, {String fallback = '—'}) {
+    final raw = value?.toString() ?? '';
+    if (raw.isEmpty) return fallback;
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return fallback;
+    final local = parsed.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}.${local.month.toString().padLeft(2, '0')}.${local.year}';
   }
 
   bool _isBanned(Map<String, dynamic> account) {
@@ -211,12 +221,21 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
             FilledButton(onPressed: _refresh, child: const Text('Повторить')),
           ])))
       : ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 96), children: [
-          const Text('Статистика KinoKino', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          _stat('Аккаунты', 'users', Icons.people_outline),
-          _stat('Избранное', 'favorites', Icons.favorite_outline),
-          _stat('Оценки', 'ratings', Icons.star_outline),
-          _stat('Записи истории', 'watch_history', Icons.history),
-          _stat('Объявления', 'announcements', Icons.campaign_outlined),
+          OutlinedButton.icon(
+            onPressed: () => setState(() => _showExtraInfo = !_showExtraInfo),
+            icon: Icon(_showExtraInfo ? Icons.visibility_off_outlined : Icons.analytics_outlined),
+            label: Text(_showExtraInfo ? 'Скрыть подробную информацию' : 'Показать подробную информацию'),
+          ),
+          if (_showExtraInfo) ...[
+            const SizedBox(height: 10),
+            const Text('Статистика KinoKino', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            _stat('Аккаунты', 'users', Icons.people_outline),
+            _stat('Избранное', 'favorites', Icons.favorite_outline),
+            _stat('Оценки', 'ratings', Icons.star_outline),
+            _stat('Записи истории', 'watch_history', Icons.history),
+            _stat('Объявления', 'announcements', Icons.campaign_outlined),
+            const SizedBox(height: 12),
+          ],
           const SizedBox(height: 18),
           const Text('Управление аккаунтами', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
@@ -230,8 +249,9 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          Text('Загружено аккаунтов: ${_accounts.length}',
-            style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          if (_showExtraInfo)
+            Text('Загружено аккаунтов: ${_accounts.length}',
+              style: const TextStyle(color: Colors.white60, fontSize: 12)),
           if (_visibleAccounts.isEmpty)
             const Padding(padding: EdgeInsets.all(16), child: Text('Аккаунты не найдены.')),
           for (final account in _visibleAccounts)
@@ -248,14 +268,14 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
                       ? account['email'].toString() : 'Аккаунт без имени'),
               ),
               subtitle: Text([
-                account['email']?.toString() ?? '',
                 account['is_creator'] == true ? 'Создатель — защищённый аккаунт'
                   : _isBanned(account) ? 'Заблокирован' : 'Активен',
-                'Регистрация: ${account['created_at']?.toString().substring(0, 10) ?? '—'}',
-                'Последний вход: ${account['last_sign_in_at']?.toString().substring(0, 10) ?? 'ещё не входил'}',
-                account['email_confirmed_at'] == null ? 'Email не подтверждён' : 'Email подтверждён',
+                if (_showExtraInfo) account['email']?.toString() ?? '',
+                if (_showExtraInfo) 'Регистрация: ${_dateLabel(account['created_at'])}',
+                if (_showExtraInfo) 'Последний вход: ${_dateLabel(account['last_sign_in_at'], fallback: 'ещё не входил')}',
+                if (_showExtraInfo) account['email_confirmed_at'] == null ? 'Email не подтверждён' : 'Email подтверждён',
               ].where((part) => part.isNotEmpty).join(' • ')),
-              isThreeLine: true,
+              isThreeLine: _showExtraInfo,
               trailing: account['is_creator'] == true
                 ? const Icon(Icons.verified_user_outlined, color: Colors.amber)
                 : PopupMenuButton<String>(
@@ -277,6 +297,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Text('Загрузить ещё'),
             )),
+          if (_showExtraInfo) ...[
           const SizedBox(height: 18),
           const Text('Диагностика сервисов', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           OutlinedButton.icon(onPressed: _checking ? null : _checkServices,
@@ -308,6 +329,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
           const SizedBox(height: 12),
           const Text('Каталог KinoKino использует TMDB для метаданных. Панель проверяет его доступность, но не изменяет и не размещает видеопотоки TMDB.',
             style: TextStyle(color: Colors.white60, fontSize: 12)),
+          ],
         ]),
   );
 }
