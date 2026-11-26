@@ -164,7 +164,7 @@ class InternetArchiveService {
         if (metadataYear != null && dateYear != null && metadataYear != dateYear) continue;
         if (metadataYear != null && titleYear != null && metadataYear != titleYear) continue;
         final archiveYear = metadataYear ?? dateYear ?? titleYear;
-        if (archiveYear != expectedYear) continue;
+        if (archiveYear == null || archiveYear != expectedYear) continue;
         final license = (metadata['licenseurl']?.toString().trim().isNotEmpty == true
             ? metadata['licenseurl'] : metadata['rights'] ?? '').toString();
         if (!_isAllowedLicense(license)) continue;
