@@ -24,6 +24,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   double _progress = 0;
   String? _pageError;
   bool _isFullscreen = false;
+  bool _playerRedirected = false;
 
   @override
   void initState() {
@@ -37,6 +38,14 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     final controller = official_webview.WebViewController();
     await controller.setJavaScriptMode(official_webview.JavaScriptMode.unrestricted);
     await controller.setBackgroundColor(Colors.black);
+    await controller.addJavaScriptChannel(
+      'KinoPlayerBridge',
+      onMessageReceived: (message) {
+        if (message.message == 'inplayer-ready') {
+          _openDetectedInPlayer();
+        }
+      },
+    );
     await controller.setNavigationDelegate(
       official_webview.NavigationDelegate(
         onProgress: (progress) {
@@ -55,8 +64,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               r'''JSON.stringify({ready:document.readyState,title:document.title,url:location.href,bodyText:(document.body?.innerText||'').slice(0,300),iframes:Array.from(document.querySelectorAll('iframe')).map(x=>x.src).slice(0,8),videos:Array.from(document.querySelectorAll('video')).map(x=>({src:x.currentSrc,ready:x.readyState,error:x.error?.code})).slice(0,4)})''',
             );
             debugPrint('[KinoKino Android WebView] page probe: $probe');
+            await controller.runJavaScript(_playerDetectionScript);
           } catch (e) {
-            debugPrint('[KinoKino Android WebView] page probe failed: $e');
+            debugPrint('[KinoKino Android WebView] page probe/detector failed: $e');
           }
         },
         onWebResourceError: (error) {
@@ -119,16 +129,44 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
-  // The site may initialize the selected stream in its own session before
-  // exposing the standalone InPlayer endpoint. Keep this navigation in the
-  // same WebView so its cookies and browsing session are preserved.
-  Future<void> _openInPlayer() async {
-    const playerUrl = 'https://inplayer.ru/video/black.jpg';
-    if (_androidController != null) {
-      await _androidController!.loadRequest(Uri.parse(playerUrl));
-    } else {
-      await _controller?.loadUrl(urlRequest: URLRequest(url: WebUri(playerUrl)));
-    }
+  static const String _playerDetectionScript = r"""
+    (() => {
+      if (window.__kinoPlayerDetectorInstalled) return;
+      window.__kinoPlayerDetectorInstalled = true;
+      let userStartedPlayback = false;
+      let sent = false;
+      const isPlayAction = (node) => {
+        if (!node) return false;
+        const text = ((node.innerText || node.getAttribute?.('aria-label') || node.title || '') + '').toLowerCase();
+        return /смотреть|воспроиз|play|watch|серия|фильм/.test(text);
+      };
+      document.addEventListener('click', (event) => {
+        let node = event.target;
+        for (let i = 0; node && i < 5; i++, node = node.parentElement) {
+          if (isPlayAction(node)) { userStartedPlayback = true; break; }
+        }
+      }, true);
+      document.addEventListener('play', () => { userStartedPlayback = true; }, true);
+      const check = () => {
+        if (!userStartedPlayback || sent) return;
+        const entries = performance.getEntriesByType('resource');
+        const found = entries.some(entry =>
+          /https?:\/\/inplayer\.ru\/video\/black\.jpg(?:[?#]|$)/i.test(entry.name)
+        );
+        if (found) {
+          sent = true;
+          if (window.KinoPlayerBridge) window.KinoPlayerBridge.postMessage('inplayer-ready');
+        }
+      };
+      setInterval(check, 500);
+    })();
+  """;
+
+  Future<void> _openDetectedInPlayer() async {
+    if (_playerRedirected || _androidController == null) return;
+    _playerRedirected = true;
+    debugPrint('[KinoKino] detected active InPlayer endpoint; opening in same WebView');
+    await _androidController!.loadRequest(Uri.parse('https://inplayer.ru/video/black.jpg'));
   }
 
   Future<void> _toggleFullscreen() async {
@@ -298,8 +336,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                       ),
                       const SizedBox(width: 8),
                       _overlayButton(Icons.open_in_browser, 'Открыть в браузере', _openExternalBrowser),
-                      const SizedBox(width: 4),
-                      _overlayButton(Icons.play_circle_outline, 'Открыть видеоплеер', _openInPlayer),
                       const SizedBox(width: 4),
                       _overlayButton(Icons.fullscreen, 'На весь экран', _toggleFullscreen),
                     ],
