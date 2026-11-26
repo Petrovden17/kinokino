@@ -25,6 +25,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   bool _playerWindowOpened = false;
   bool _isFullscreen = false;
   String? _error;
+  final Set<String> _openedPlayerUrls = <String>{};
 
   WebUri get _pageUrl {
     final id = widget.kinopoiskId;
@@ -112,6 +113,126 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     } catch (e) {
       debugPrint('[KinoKino] player activation script failed: $e');
     }
+  }
+
+  // StreamBridge watches for an actual embedded player, not the catalogue UI.
+  // Direct HLS/DASH URLs are logged only because they may require session headers or DRM.
+  Future<void> _installStreamBridge(InAppWebViewController controller) async {
+    const script = r"""
+      (() => {
+        if (window.__kinoStreamBridgeInstalled) return;
+        window.__kinoStreamBridgeInstalled = true;
+        const sent = new Set();
+        const report = (url, hint) => {
+          try {
+            const parsed = new URL(url, location.href);
+            if (!/^https?:$/.test(parsed.protocol) || parsed.origin === location.origin) return;
+            const key = parsed.href;
+            if (sent.has(key)) return;
+            const text = (hint || '').toLowerCase();
+            if (!/player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo|iframe/i.test(key + ' ' + text)) return;
+            sent.add(key);
+            window.flutter_inappwebview.callHandler('streamBridge', {
+              kind: /\\.(m3u8|mpd|mp4)(?:$|[?#])/i.test(key) ? 'media' : 'player',
+              url: key,
+              hint: text
+            });
+          } catch (_) {}
+        };
+        const scan = () => {
+          document.querySelectorAll('iframe').forEach((frame) => {
+            const rect = frame.getBoundingClientRect();
+            const style = getComputedStyle(frame);
+            if (rect.width < 160 || rect.height < 90 || style.display === 'none' || style.visibility === 'hidden') return;
+            report(frame.src, (frame.title || '') + ' ' + (frame.id || '') + ' ' + (frame.className || ''));
+          });
+          try {
+            performance.getEntriesByType('resource').forEach((entry) => {
+              if (/\\.(m3u8|mpd|mp4)(?:$|[?#])/i.test(entry.name)) report(entry.name, 'media resource');
+            });
+          } catch (_) {}
+        };
+        new MutationObserver(scan).observe(document.documentElement, {
+          childList: true, subtree: true, attributes: true, attributeFilter: ['src']
+        });
+        try { new PerformanceObserver(scan).observe({type:'resource', buffered:true}); } catch (_) {}
+        scan();
+        setInterval(scan, 1800);
+      })();
+    """;
+    try {
+      await controller.evaluateJavascript(source: script);
+    } catch (e) {
+      debugPrint('[StreamBridge] injection failed: $e');
+    }
+  }
+
+  Future<void> _handleStreamBridgeCall(List<dynamic> args) async {
+    if (!mounted || args.isEmpty || args.first is! Map) return;
+    final data = Map<String, dynamic>.from(args.first as Map);
+    final rawUrl = data['url']?.toString() ?? '';
+    final kind = data['kind']?.toString() ?? '';
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || !uri.hasScheme || !{'http', 'https'}.contains(uri.scheme)) return;
+    debugPrint('[StreamBridge] detected $kind: $rawUrl');
+    if (kind != 'player' || _playerWindowOpened || !_openedPlayerUrls.add(rawUrl)) return;
+    await _showDetectedPlayer(rawUrl);
+  }
+
+  Future<void> _showDetectedPlayer(String url) async {
+    if (!mounted || _playerWindowOpened) return;
+    _playerWindowOpened = true;
+    await _enterFullscreen();
+    if (mounted) setState(() => _error = null);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      useSafeArea: false,
+      builder: (dialogContext) => PopScope(
+        canPop: true,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) {
+            _playerWindowOpened = false;
+            _leaveFullscreen();
+          }
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: SizedBox.expand(
+            child: InAppWebView(
+              key: const ValueKey('kino-streambridge-player'),
+              initialUrlRequest: URLRequest(url: WebUri(url)),
+              initialSettings: _webSettings,
+              onWebViewCreated: (_) => debugPrint('[StreamBridge] player view attached'),
+              onLoadStart: (_, uri) => debugPrint('[StreamBridge] loading player: $uri'),
+              onLoadStop: (controller, uri) {
+                debugPrint('[StreamBridge] player loaded: $uri');
+                _installStreamBridge(controller);
+                _probePlayerWindow(controller);
+              },
+              onReceivedError: (_, request, error) => debugPrint(
+                '[StreamBridge] error main=${request.isForMainFrame}: ${error.description}; ${request.url}',
+              ),
+              onCloseWindow: (_) {
+                _playerWindowOpened = false;
+                if (Navigator.of(dialogContext).canPop()) Navigator.of(dialogContext).pop();
+                _leaveFullscreen();
+              },
+              onEnterFullscreen: (_) => _enterFullscreen(),
+              onExitFullscreen: (_) => _leaveFullscreen(),
+              onCreateWindow: (_, nestedAction) async {
+                debugPrint('[StreamBridge] blocked nested popup: ${nestedAction.request.url}');
+                return false;
+              },
+            ),
+          ),
+        ),
+      ),
+    ).then((_) {
+      _playerWindowOpened = false;
+      _leaveFullscreen();
+      if (mounted) setState(() {});
+    });
   }
 
   Future<void> _probePlayerWindow(InAppWebViewController controller) async {
@@ -254,10 +375,19 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 child: InAppWebView(
                 initialUrlRequest: URLRequest(url: _pageUrl),
                 initialSettings: _webSettings,
-                onWebViewCreated: (controller) =>
-                    _bootstrapController = controller,
+                onWebViewCreated: (controller) {
+                  _bootstrapController = controller;
+                  controller.addJavaScriptHandler(
+                    handlerName: 'streamBridge',
+                    callback: (args) {
+                      _handleStreamBridgeCall(args);
+                      return {'accepted': true};
+                    },
+                  );
+                },
                 onLoadStop: (controller, url) async {
                   debugPrint('[KinoKino bootstrap] loaded: $url');
+                  await _installStreamBridge(controller);
                   if (!_pageLoaded) {
                     _pageLoaded = true;
                     await _activateSitePlayer(controller);
