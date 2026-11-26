@@ -20,6 +20,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   final _tmdb = TmdbService();
   final _kinopoisk = KinopoiskService();
   Map<String, dynamic>? _kpFilm;
+  int? _kinopoiskId;
   List<Map<String, dynamic>> _kpSeasons = [];
   List<Map<String, dynamic>> _kpVideos = [];
 
@@ -63,6 +64,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
     // Kinopoisk supplements catalogue metadata. Its private token remains server-side.
     Map<String, dynamic>? kpFilm;
+    int? kinopoiskId;
     List<Map<String, dynamic>> kpSeasons = [];
     List<Map<String, dynamic>> kpVideos = [];
     try {
@@ -72,6 +74,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         final rawId = first['filmId'] ?? first['kinopoiskId'] ?? first['id'];
         final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
         if (id > 0) {
+          kinopoiskId = id;
           kpFilm = await _kinopoisk.film(id);
           if (_type == 'tv') kpSeasons = await _kinopoisk.seasons(id);
           kpVideos = await _kinopoisk.videos(id);
@@ -109,6 +112,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     if (mounted) setState(() {
       _details = details;
       _kpFilm = kpFilm;
+      _kinopoiskId = kinopoiskId;
       _kpSeasons = kpSeasons;
       _kpVideos = kpVideos;
       _recommendations = recommendationsById.values.toList();
@@ -618,7 +622,11 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           Wrap(spacing: 10, runSpacing: 8, children: [
             FilledButton.icon(
               onPressed: () => Navigator.push(context, MaterialPageRoute(
-                builder: (_) => ZagonkaScreen(title: _displayTitle),
+                builder: (_) => ZagonkaScreen(
+                  title: _displayTitle,
+                  kinopoiskId: _kinopoiskId,
+                  isSeries: _type == 'tv',
+                ),
               )),
               icon: const Icon(Icons.play_arrow),
               label: const Text('Начать просмотр'),
