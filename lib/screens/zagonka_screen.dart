@@ -68,6 +68,17 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     // Hide only the small site-brand label; do not remove the player or its controls.
     await controller.evaluateJavascript(source: r"""
       (() => {
+        let viewport = document.querySelector('meta[name="viewport"]');
+        if (!viewport) {
+          viewport = document.createElement('meta');
+          viewport.name = 'viewport';
+          document.head.appendChild(viewport);
+        }
+        viewport.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+        const mobileLayout = document.getElementById('kinokino-mobile-layout') || document.createElement('style');
+        mobileLayout.id = 'kinokino-mobile-layout';
+        mobileLayout.textContent = 'html,body{width:100%!important;max-width:100vw!important;overflow-x:hidden!important;margin:0!important} video,iframe,embed,object{max-width:100%!important}';
+        if (!mobileLayout.parentNode) document.head.appendChild(mobileLayout);
         const hideBrand = () => {
           const nodes = Array.from(document.querySelectorAll('body *'));
           for (const node of nodes) {
@@ -117,8 +128,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               supportMultipleWindows: false,
               transparentBackground: false,
               supportZoom: false,
-              useWideViewPort: true,
-              loadWithOverviewMode: true,
+              useWideViewPort: false,
+              loadWithOverviewMode: false,
             ),
             onWebViewCreated: (controller) => _controller = controller,
             onLoadStart: (controller, url) {
