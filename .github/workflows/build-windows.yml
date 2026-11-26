@@ -58,40 +58,19 @@ jobs:
       - name: Repair Windows WebView CMake registration
         shell: pwsh
         run: |
-          $pluginCmake = 'windows\\flutter\\ephemeral\\.plugin_symlinks\\flutter_inappwebview_forge_windows\\windows\\CMakeLists.txt'
+          $pluginCmake = 'windows\flutter\ephemeral\.plugin_symlinks\flutter_inappwebview_forge_windows\windows\CMakeLists.txt'
           if (-not (Test-Path $pluginCmake)) { throw "Windows WebView CMake file not found: $pluginCmake" }
           $pluginSource = [IO.File]::ReadAllText((Resolve-Path $pluginCmake))
-          # CMake does not accept DEPENDS in add_custom_command(TARGET ... PRE_BUILD).
+          # DEPENDS is invalid for add_custom_command(TARGET ... PRE_BUILD).
           $pluginPatched = [regex]::Replace($pluginSource, '(?m)^\s*DEPENDS\s+\$\{NUGET\}\s*\r?\n', '')
-          # Keep NuGet packages ready before compiling the actual plugin library.
           if ($pluginPatched -notmatch 'add_dependencies\(\$\{PLUGIN_NAME\}\s+\$\{PROJECT_NAME\}_DEPS\)') {
-            $libPattern = '(?s)(add_library\(\$\{PLUGIN_NAME\} SHARED.*?\))'
+            $libPattern = '(?s)(add_library\(\$\{PLUGIN_NAME\} SHARED.*?\r?\n\))'
             if ($pluginPatched -notmatch $libPattern) { throw 'Could not locate WebView add_library declaration.' }
             $pluginPatched = [regex]::Replace($pluginPatched, $libPattern, '$1' + "`r`nadd_dependencies(`${PLUGIN_NAME} `${PROJECT_NAME}_DEPS)", 1)
           }
           [IO.File]::WriteAllText((Resolve-Path $pluginCmake), $pluginPatched)
-
-          # Flutter's generated plugin list can reference the DLL target before
-          # its subdirectory is registered on some Windows runner/toolchain combinations.
-          $rootCmake = 'windows\\CMakeLists.txt'
-          $rootSource = [IO.File]::ReadAllText((Resolve-Path $rootCmake))
-          $marker = 'include(flutter/generated_plugins.cmake)'
-          if (-not $rootSource.Contains($marker)) { throw 'Could not find generated_plugins.cmake include in windows/CMakeLists.txt.' }
-          $fallback = @'
-          # Work around a missing generated CMake registration for the Forge WebView plugin.
-          if(NOT TARGET flutter_inappwebview_forge_windows_plugin)
-            set(_forge_windows_plugin_dir "${CMAKE_CURRENT_LIST_DIR}/flutter/ephemeral/.plugin_symlinks/flutter_inappwebview_forge_windows/windows")
-            if(NOT EXISTS "${_forge_windows_plugin_dir}/CMakeLists.txt")
-              message(FATAL_ERROR "Forge WebView plugin CMakeLists.txt is missing: ${_forge_windows_plugin_dir}")
-            endif()
-            add_subdirectory("${_forge_windows_plugin_dir}" "${CMAKE_CURRENT_BINARY_DIR}/plugins/flutter_inappwebview_forge_windows_fallback")
-          endif()
-          '@
-          if (-not $rootSource.Contains('flutter_inappwebview_forge_windows_fallback')) {
-            $rootSource = $rootSource.Replace($marker, $marker + "`r`n" + $fallback)
-            [IO.File]::WriteAllText((Resolve-Path $rootCmake), $rootSource)
-          }
           if ($pluginPatched -match '(?m)^\s*DEPENDS\s+\$\{NUGET\}') { throw 'Invalid DEPENDS argument remains in WebView CMake.' }
+
       - name: Analyze Dart code
         run: flutter analyze --no-pub --no-fatal-infos
 
