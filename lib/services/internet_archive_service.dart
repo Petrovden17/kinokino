@@ -94,7 +94,7 @@ class InternetArchiveService {
     } catch (_) {
       // Continue to the Internet Archive search for films if the feed is unavailable.
     }
-    if (isSeries) return null;
+    // If the curated series playlist has no exact match, search the Archive metadata too.
 
     final query = 'title:"${title.replaceAll('"', '').trim()}"';
     final search = await _dio.get<dynamic>('https://archive.org/advancedsearch.php',
@@ -136,7 +136,6 @@ class InternetArchiveService {
         for (final file in files) {
           final name = file['name']?.toString() ?? '';
           final lower = name.toLowerCase();
-          final format = (file['format'] ?? '').toString().toLowerCase();
           final width = int.tryParse(file['width']?.toString() ?? '') ?? 0;
           final height = int.tryParse(file['height']?.toString() ?? '') ?? 0;
           final video = lower.endsWith('.mp4') || lower.endsWith('.mov');
