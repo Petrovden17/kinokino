@@ -29,7 +29,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _initialize();
   }
 
-  Future<void> _initialize() async {
+  Future<void> _initialize({bool autoplay = true}) async {
     if (mounted) setState(() { _busy = true; _error = null; });
     VideoPlayerController? next;
     try {
@@ -41,7 +41,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await next.setLooping(false);
       if (!mounted) return;
       setState(() => _busy = false);
-      await next.play();
+      if (autoplay) await next.play();
     } catch (e) {
       next?.removeListener(_onChanged);
       await next?.dispose();
@@ -95,10 +95,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _busy = true;
       _error = null;
     });
-    await _initialize();
-    if (wasPlaying && _controller?.value.isInitialized == true) {
-      await _controller!.play();
-    }
+    await _initialize(autoplay: wasPlaying);
   }
 
   Future<void> _toggleFullscreen() async {
