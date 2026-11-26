@@ -251,6 +251,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
             const SizedBox(height: 12),
           ],
           const SizedBox(height: 18),
+          if (_showExtraInfo) ...[
           const Text('Управление аккаунтами', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           TextField(
@@ -311,6 +312,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Text('Загрузить ещё'),
             )),
+          ],
           if (_showExtraInfo) ...[
           const SizedBox(height: 18),
           const Text('Диагностика сервисов', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
