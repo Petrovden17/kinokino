@@ -1,41 +1,32 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const background = Color(0xFF090D16);
-  static const surface = Color(0xFF111827);
-  static const surfaceRaised = Color(0xFF182235);
-  static const accent = Color(0xFF3984FF);
-
-  static ThemeData get dark {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: accent,
+  static ThemeData get dark => ThemeData(
+    brightness: Brightness.dark,
+    useMaterial3: true,
+    scaffoldBackgroundColor: const Color(0xFF090D16),
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: const Color(0xFF2878F0),
       brightness: Brightness.dark,
-      surface: surface,
-    );
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: scheme,
-      scaffoldBackgroundColor: background,
-      fontFamily: 'Roboto',
-      appBarTheme: const AppBarTheme(
-        backgroundColor: background,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
+      surface: const Color(0xFF111827),
+    ),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: Color(0xFF090D16),
+      foregroundColor: Colors.white,
+      elevation: 0,
+    ),
+    cardTheme: const CardThemeData(
+      color: Color(0xFF151E2E),
+      elevation: 0,
+      margin: EdgeInsets.zero,
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFF151E2E),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
       ),
-      cardTheme: CardThemeData(
-        color: surface,
-        elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: surfaceRaised,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-      ),
-    );
-  }
+    ),
+  );
 }

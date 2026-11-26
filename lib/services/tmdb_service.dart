@@ -1,83 +1,59 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
 import '../models/media_item.dart';
 
-class TmdbException implements Exception {
-  const TmdbException(this.message);
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
-/// Клиент TMDB API. Ключ передаётся при запуске через --dart-define=TMDB_API_KEY=...
 class TmdbService {
-  TmdbService({http.Client? client}) : _client = client ?? http.Client();
+  TmdbService() : _dio = Dio(BaseOptions(
+    baseUrl: 'https://api.themoviedb.org/3',
+    connectTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(seconds: 20),
+  ));
+  final Dio _dio;
+  static const _key = String.fromEnvironment('TMDB_API_KEY');
+  bool get isConfigured => _key.isNotEmpty;
 
-  static const _baseUrl = 'https://api.themoviedb.org/3';
-  static const _imageBaseUrl = 'https://image.tmdb.org/t/p';
-  static const apiKey = String.fromEnvironment('TMDB_API_KEY');
-
-  final http.Client _client;
-
-  String imageUrl(String? path, {String size = 'w500'}) {
-    if (path == null || path.isEmpty) return '';
-    return '$_imageBaseUrl/$size$path';
-  }
-
-  Future<List<MediaItem>> trending({MediaType type = MediaType.movie}) {
-    return _getMedia('/trending/${type == MediaType.movie ? 'movie' : 'tv'}/week', type);
-  }
-
-  Future<List<MediaItem>> popular({MediaType type = MediaType.movie}) {
-    return _getMedia('/${type == MediaType.movie ? 'movie' : 'tv'}/popular', type);
-  }
-
+  Future<List<MediaItem>> trending() => _list('/trending/all/week');
+  Future<List<MediaItem>> popular({String type = 'movie'}) =>
+      _list('/$type/popular');
   Future<List<MediaItem>> search(String query) async {
-    final value = query.trim();
-    if (value.isEmpty) return [];
-    final movieResults = await _getMedia(
-      '/search/multi',
-      MediaType.movie,
-      queryParameters: {'query': value, 'include_adult': 'false'},
-      mixed: true,
-    );
-    return movieResults;
+    if (query.trim().isEmpty || !isConfigured) return const [];
+    return _list('/search/multi', extra: {'query': query.trim(), 'include_adult': false});
   }
 
-  Future<List<MediaItem>> _getMedia(
-    String path,
-    MediaType type, {
-    Map<String, String>? queryParameters,
-    bool mixed = false,
+  Future<List<Map<String, dynamic>>> genres({String type = 'movie'}) async {
+    if (!isConfigured) return const [];
+    final response = await _dio.get('/genre/$type/list', queryParameters: {'api_key': _key});
+    final list = (response.data['genres'] as List? ?? const []);
+    return list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<List<MediaItem>> discover({
+    String type = 'movie', int? genreId, String sortBy = 'popularity.desc',
+    int? year, double? minRating,
   }) async {
-    if (apiKey.isEmpty) {
-      throw const TmdbException(
-        'Не задан TMDB API key. Запустите приложение с --dart-define=TMDB_API_KEY=ВАШ_КЛЮЧ.',
-      );
-    }
-
-    final uri = Uri.parse('$_baseUrl$path').replace(queryParameters: {
-      'api_key': apiKey,
-      'language': 'ru-RU',
-      ...?queryParameters,
-    });
-    final response = await _client.get(uri).timeout(const Duration(seconds: 20));
-
-    if (response.statusCode != 200) {
-      throw TmdbException('TMDB вернул ошибку ${response.statusCode}.');
-    }
-
-    final decoded = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
-    final results = decoded['results'] as List<dynamic>? ?? const [];
-    return results.whereType<Map<String, dynamic>>().where((item) {
-      if (!mixed) return true;
-      return item['media_type'] == 'movie' || item['media_type'] == 'tv';
-    }).map((item) {
-      final itemType = mixed && item['media_type'] == 'tv' ? MediaType.tv : type;
-      return MediaItem.fromJson(item, itemType);
-    }).toList();
+    final params = <String, dynamic>{'sort_by': sortBy, 'include_adult': false};
+    if (genreId != null) params['with_genres'] = genreId;
+    if (year != null) params['primary_release_year'] = year;
+    if (minRating != null) params['vote_average.gte'] = minRating;
+    return _list('/discover/$type', extra: params);
   }
 
-  void dispose() => _client.close();
+  Future<Map<String, dynamic>> details(int id, {String type = 'movie'}) async {
+    if (!isConfigured) throw StateError('TMDB API key не настроен.');
+    final response = await _dio.get('/$type/$id', queryParameters: {
+      'api_key': _key, 'append_to_response': 'credits,videos,similar,recommendations',
+    });
+    return Map<String, dynamic>.from(response.data);
+  }
+
+  Future<List<MediaItem>> recommendations(int id, {String type = 'movie'}) =>
+      _list('/$type/$id/recommendations');
+
+  Future<List<MediaItem>> _list(String path, {Map<String, dynamic> extra = const {}}) async {
+    if (!isConfigured) return const [];
+    final response = await _dio.get(path, queryParameters: {'api_key': _key, ...extra});
+    final results = (response.data['results'] as List? ?? const []);
+    return results.whereType<Map>()
+      .map((e) => MediaItem.fromJson(Map<String, dynamic>.from(e)))
+      .where((e) => e.posterPath != null && e.id != 0).toList();
+  }
 }

@@ -1,179 +1,119 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
-import '../services/local_library_service.dart';
 import '../services/tmdb_service.dart';
+import '../services/local_database.dart';
+import '../widgets/poster_card.dart';
 
 class MediaDetailsScreen extends StatefulWidget {
-  const MediaDetailsScreen({
-    required this.item,
-    required this.tmdb,
-    super.key,
-  });
-
+  const MediaDetailsScreen({super.key, required this.item});
   final MediaItem item;
-  final TmdbService tmdb;
-
   @override
   State<MediaDetailsScreen> createState() => _MediaDetailsScreenState();
 }
 
 class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
-  final _library = LocalLibraryService();
-  bool _favorite = false;
+  final _tmdb = TmdbService();
+  Map<String, dynamic>? _details;
+  List<MediaItem> _recommendations = [];
   bool _loading = true;
+  String? _error;
+  double _rating = 0;
 
   @override
   void initState() {
     super.initState();
-    _initialize();
+    _load();
+    LocalDatabase.recordOpen(widget.item.id, widget.item.title, widget.item.posterPath);
   }
 
-  Future<void> _initialize() async {
-    await _library.addToHistory(widget.item);
-    final favorite = await _library.isFavorite(widget.item);
-    if (!mounted) return;
-    setState(() {
-      _favorite = favorite;
-      _loading = false;
-    });
+  Future<void> _load() async {
+    try {
+      final d = await _tmdb.details(widget.item.id, type: widget.item.mediaType == 'tv' ? 'tv' : 'movie');
+      final r = await _tmdb.recommendations(widget.item.id, type: widget.item.mediaType == 'tv' ? 'tv' : 'movie');
+      if (mounted) setState(() { _details = d; _recommendations = r; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
   }
 
-  Future<void> _toggleFavorite() async {
-    await _library.toggleFavorite(widget.item);
-    if (!mounted) return;
-    setState(() => _favorite = !_favorite);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(_favorite ? 'Добавлено в избранное' : 'Удалено из избранного')),
-    );
+  Future<void> _saveRating(double value) async {
+    setState(() => _rating = value);
+    await LocalDatabase.setRating(widget.item.id, widget.item.title, widget.item.posterPath, value);
   }
 
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final backdrop = widget.tmdb.imageUrl(item.backdropPath, size: 'w1280');
-    final poster = widget.tmdb.imageUrl(item.posterPath, size: 'w500');
-
+    final d = _details ?? {};
+    final genres = (d['genres'] as List? ?? const [])
+      .whereType<Map>().map((e) => e['name'].toString()).join(' · ');
+    final cast = ((d['credits'] as Map?)?['cast'] as List? ?? const [])
+      .take(8).whereType<Map>().map((e) => e['name'].toString()).join(', ');
+    final backdrop = d['backdrop_path'] ?? item.backdropPath;
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            pinned: true,
-            expandedHeight: 280,
-            backgroundColor: const Color(0xFF090D16),
-            flexibleSpace: FlexibleSpaceBar(
-              title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  if (backdrop.isNotEmpty)
-                    Image.network(backdrop, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _backdropFallback())
-                  else
-                    _backdropFallback(),
-                  const DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Colors.black26, Color(0xFF090D16)],
-                        stops: [0.1, 1],
-                      ),
-                    ),
-                  ),
-                ],
+      appBar: AppBar(title: Text(item.title)),
+      body: _loading ? const Center(child: CircularProgressIndicator())
+      : ListView(children: [
+        if (backdrop != null)
+          SizedBox(height: 220, child: CachedNetworkImage(
+            imageUrl: 'https://image.tmdb.org/t/p/w780$backdrop', fit: BoxFit.cover,
+            errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFF172235)),
+          )),
+        Padding(padding: const EdgeInsets.all(18), child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(item.title, style: Theme.of(context).textTheme.headlineMedium),
+            const SizedBox(height: 8),
+            Wrap(spacing: 12, children: [
+              Chip(label: Text('TMDB ★ \${item.voteAverage.toStringAsFixed(1)}')),
+              Chip(label: Text(item.mediaType == 'tv' ? 'Сериал' : 'Фильм')),
+              if (item.releaseDate.isNotEmpty) Chip(label: Text(item.releaseDate.split('-').first)),
+            ]),
+            if (genres.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(genres)),
+            const SizedBox(height: 16),
+            Text(item.overview.isEmpty ? 'Описание отсутствует.' : item.overview),
+            if (cast.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              const Text('В ролях', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 6), Text(cast),
+            ],
+            const SizedBox(height: 20),
+            const Text('Твоя оценка', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 4, children: List.generate(10, (i) {
+              final value = (i + 1).toDouble();
+              return IconButton(
+                tooltip: '$value из 10',
+                onPressed: () => _saveRating(value),
+                icon: Icon(value <= _rating ? Icons.star : Icons.star_border, color: Colors.amber),
+              );
+            })),
+            Row(children: [
+              FilledButton.icon(
+                onPressed: () async {
+                  await LocalDatabase.setFavorite(item.id, item.title, item.posterPath, true);
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Добавлено в избранное')));
+                },
+                icon: const Icon(Icons.favorite), label: const Text('В избранное'),
               ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (poster.isNotEmpty)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(poster, width: 112, height: 168, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _posterFallback()),
-                        )
-                      else
-                        _posterFallback(),
-                      const SizedBox(width: 18),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(item.title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 8),
-                            Text('${item.typeLabel}  •  ${item.year}', style: const TextStyle(color: Colors.white60)),
-                            const SizedBox(height: 8),
-                            Row(children: [
-                              const Icon(Icons.star_rounded, color: Color(0xFFFFC857), size: 19),
-                              const SizedBox(width: 4),
-                              Text(item.voteAverage.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold)),
-                              const Text(' / 10', style: TextStyle(color: Colors.white54)),
-                            ]),
-                            const SizedBox(height: 16),
-                            FilledButton.tonalIcon(
-                              onPressed: _loading ? null : _toggleFavorite,
-                              icon: Icon(_favorite ? Icons.favorite : Icons.favorite_border),
-                              label: Text(_favorite ? 'В избранном' : 'В избранное'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 28),
-                  const Text('Описание', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 10),
-                  Text(
-                    item.overview.isEmpty ? 'Описание для этого материала пока отсутствует.' : item.overview,
-                    style: const TextStyle(color: Colors.white70, height: 1.55, fontSize: 15),
-                  ),
-                  const SizedBox(height: 26),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF182235),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.info_outline, color: Color(0xFF8DBBFF)),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Полное видео не предоставляется TMDB. Здесь отображаются метаданные каталога; просмотр будет доступен только при подключении разрешённого источника.',
-                            style: TextStyle(color: Colors.white70, height: 1.4),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+            ]),
+            if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text('Дополнительные данные недоступны: $_error')),
+          ],
+        )),
+        if (_recommendations.isNotEmpty) ...[
+          const Padding(padding: EdgeInsets.fromLTRB(18, 8, 18, 12),
+            child: Text('Похожие и рекомендованные', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+          SizedBox(height: 250, child: ListView.separated(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            scrollDirection: Axis.horizontal, itemCount: _recommendations.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 12),
+            itemBuilder: (_, i) => PosterCard(item: _recommendations[i], onTap: () {
+              Navigator.push(context, MaterialPageRoute(
+                builder: (_) => MediaDetailsScreen(item: _recommendations[i])));
+            }),
+          )),
         ],
-      ),
+      ]),
     );
   }
-
-  Widget _backdropFallback() => Container(
-        color: const Color(0xFF182235),
-        child: const Center(child: Icon(Icons.movie_outlined, size: 72, color: Colors.white24)),
-      );
-
-  Widget _posterFallback() => Container(
-        width: 112,
-        height: 168,
-        decoration: BoxDecoration(color: const Color(0xFF182235), borderRadius: BorderRadius.circular(12)),
-        child: const Icon(Icons.movie_outlined, color: Colors.white38, size: 38),
-      );
 }
