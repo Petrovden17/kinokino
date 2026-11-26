@@ -77,7 +77,13 @@ class InternetArchiveService {
     return (actualSeconds - expected).abs() <= tolerance;
   }
 
-  int? _yearFrom(dynamic value) {\n    if (value == null) return null;\n    final match = RegExp(r'(?<!\\d)(19\\d{2}|20\\d{2})(?!\\d)').firstMatch(value.toString());\n    return match == null ? null : int.tryParse(match.group(1)!);\n  }\n\n  int _qualityRank(Map file) {
+  int? _yearFrom(dynamic value) {
+    if (value == null) return null;
+    final match = RegExp(r'(?<!\\d)(19\\d{2}|20\\d{2})(?!\\d)').firstMatch(value.toString());
+    return match == null ? null : int.tryParse(match.group(1)!);
+  }
+
+  int _qualityRank(Map file) {
     final h = int.tryParse(file['height']?.toString() ?? '') ?? 0;
     final name = (file['name'] ?? '').toString().toLowerCase();
     if (h >= 2160 || name.contains('2160')) return 2160;
@@ -89,7 +95,11 @@ class InternetArchiveService {
   }
 
   Future<ArchiveVideo?> findLicensedVideo(String title, {
-    required int expectedRuntimeMinutes,\n    required int expectedYear,\n    String? displayTitle,\n    CancelToken? cancelToken,\n    bool isSeries = false,
+    required int expectedRuntimeMinutes,
+    required int expectedYear,
+    String? displayTitle,
+    CancelToken? cancelToken,
+    bool isSeries = false,
   }) async {
     // A series title is not an episode. Never select an arbitrary clip as an episode.
     if (isSeries || expectedRuntimeMinutes <= 0 || expectedYear <= 0) return null;
@@ -99,13 +109,16 @@ class InternetArchiveService {
     final words = cleanTitle.split(RegExp(r'\s+')).where((word) => word.length > 1).toList();
     final tokenQuery = words.isEmpty ? cleanTitle : words.map((word) => 'title:"$word"').join(' AND ');
     final queries = <String>[
-      'title:"$cleanTitle" AND year:$expectedYear AND mediatype:movies',\n      '($tokenQuery) AND year:$expectedYear AND mediatype:movies',
+      'title:"$cleanTitle" AND year:$expectedYear AND mediatype:movies',
+      '($tokenQuery) AND year:$expectedYear AND mediatype:movies',
     ];
     final seen = <String>{};
     final docs = <Map>[];
     for (final query in queries) {
       try {
-        cancelToken?.throwIfCancellationRequested();\n        final response = await _dio.get<dynamic>(\n          'https://archive.org/advancedsearch.php',
+        cancelToken?.throwIfCancellationRequested();
+        final response = await _dio.get<dynamic>(
+          'https://archive.org/advancedsearch.php',
           queryParameters: {
             'q': query,
             'fl[]': ['identifier', 'title'],
@@ -114,21 +127,32 @@ class InternetArchiveService {
             'output': 'json',
             'sort[]': ['downloads desc'],
           },
-          options: Options(responseType: ResponseType.json),\n          cancelToken: cancelToken,\n        );\n        final results = (response.data['response']?['docs'] as List? ?? const []);
+          options: Options(responseType: ResponseType.json),
+          cancelToken: cancelToken,
+        );
+        final results = (response.data['response']?['docs'] as List? ?? const []);
         for (final row in results.whereType<Map>()) {
           final id = row['identifier']?.toString() ?? '';
           if (id.isNotEmpty && seen.add(id)) docs.add(row);
         }
-      } catch (_) { if (cancelToken?.isCancelled == true) rethrow; }\n    }\n\n    for (final doc in docs) {\n      cancelToken?.throwIfCancellationRequested();
+      } catch (_) { if (cancelToken?.isCancelled == true) rethrow; }
+    }
+
+    for (final doc in docs) {
+      cancelToken?.throwIfCancellationRequested();
       final id = doc['identifier']?.toString();
       if (id == null || id.isEmpty) continue;
       try {
-        final response = await _dio.get<dynamic>('https://archive.org/metadata/$id',\n          options: Options(responseType: ResponseType.json), cancelToken: cancelToken);
+        final response = await _dio.get<dynamic>('https://archive.org/metadata/$id',
+          options: Options(responseType: ResponseType.json), cancelToken: cancelToken);
         final data = response.data as Map<String, dynamic>;
         final metadata = data['metadata'] as Map<String, dynamic>? ?? {};
         final archiveTitle = (metadata['title'] ?? doc['title'] ?? '').toString();
         // Search results are fuzzy. Require an exact normalized title match.
-        if (_normalize(archiveTitle) != wanted) continue;\n        final archiveYear = _yearFrom(metadata['year']) ?? _yearFrom(metadata['date']) ??\n            _yearFrom(archiveTitle) ?? _yearFrom(id);\n        if (archiveYear != expectedYear) continue;
+        if (_normalize(archiveTitle) != wanted) continue;
+        final archiveYear = _yearFrom(metadata['year']) ??
+            _yearFrom(archiveTitle) ?? _yearFrom(id);
+        if (archiveYear != expectedYear) continue;
         final license = (metadata['licenseurl']?.toString().trim().isNotEmpty == true
             ? metadata['licenseurl'] : metadata['rights'] ?? '').toString();
         if (!_isAllowedLicense(license)) continue;
@@ -167,7 +191,10 @@ class InternetArchiveService {
           variants: variants,
           durationSeconds: chosen.durationSeconds,
         );
-      } catch (_) {\n        if (cancelToken?.isCancelled == true) rethrow;\n        // Skip malformed, unlicensed, mismatched or unavailable items.\n      }
+      } catch (_) {
+        if (cancelToken?.isCancelled == true) rethrow;
+        // Skip malformed, unlicensed, mismatched or unavailable items.
+      }
     }
     return null;
   }
