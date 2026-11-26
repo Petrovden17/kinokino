@@ -153,7 +153,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(_time(position), style: const TextStyle(color: Colors.white70, fontFeatures: [])),
+                                Text(_time(position), style: const TextStyle(color: Colors.white70)),
                                 Text(_time(duration), style: const TextStyle(color: Colors.white70)),
                               ],
                             ),
