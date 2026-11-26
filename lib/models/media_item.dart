@@ -35,6 +35,8 @@ class MediaItem {
     voteCount: (json['vote_count'] as num?)?.toInt() ?? 0,
     popularity: (json['popularity'] as num?)?.toDouble() ?? 0,
     genreIds: (json['genre_ids'] as List? ?? const []).whereType<num>().map((e) => e.toInt()).toList(),
-    mediaType: (json['media_type'] ?? (json.containsKey('name') ? 'tv' : 'movie')).toString(),
+    mediaType: ((json['media_type']?.toString() == 'tv' || json.containsKey('first_air_date') || json.containsKey('number_of_episodes'))
+      ? 'tv'
+      : 'movie'),
   );
 }
