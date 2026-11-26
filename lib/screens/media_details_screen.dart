@@ -166,12 +166,42 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final genres = (d['genres'] as List? ?? const []).whereType<Map>().map((e) => e['name'].toString()).join(' · ');
     final cast = ((d['credits'] as Map?)?['cast'] as List? ?? const []).take(8).whereType<Map>().map((e) => e['name'].toString()).join(', ');
     final backdrop = d['backdrop_path'] ?? item.backdropPath;
+    final poster = d['poster_path'] ?? item.posterPath;
     return Scaffold(
       appBar: AppBar(title: Text(_displayTitle)),
       body: _loading ? const Center(child: CircularProgressIndicator()) : ListView(children: [
-        if (backdrop != null) SizedBox(height: 220, child: CachedNetworkImage(
-          imageUrl: 'https://image.tmdb.org/t/p/w780$backdrop', fit: BoxFit.cover,
-          errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFF172235)))),
+        SizedBox(
+          height: 290,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Positioned.fill(
+                child: backdrop != null
+                  ? CachedNetworkImage(
+                      imageUrl: 'https://image.tmdb.org/t/p/w780$backdrop',
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => const ColoredBox(color: Color(0xFF172235)),
+                    )
+                  : const ColoredBox(color: Color(0xFF172235)),
+              ),
+              Positioned.fill(
+                child: ColoredBox(color: Colors.black.withValues(alpha: 0.58)),
+              ),
+              if (poster != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: CachedNetworkImage(
+                    imageUrl: 'https://image.tmdb.org/t/p/w500$poster',
+                    fit: BoxFit.contain,
+                    placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
+                    errorWidget: (_, __, ___) => const Icon(Icons.movie, size: 64),
+                  ),
+                )
+              else
+                const Icon(Icons.movie, size: 64),
+            ],
+          ),
+        ),
         Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(_displayTitle, style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 8),
