@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen>{
   Future<void> _openPage(Widget page) async {await Navigator.push(context,MaterialPageRoute(builder:(_)=>page));if(mounted)setState((){});}
   @override Widget build(BuildContext context){
     final profile=widget.profileService.activeProfile;
-    return Scaffold(appBar:AppBar(title:const Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+    return Scaffold(appBar:AppBar(title:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       Text('KinoKino',style:TextStyle(fontWeight:FontWeight.bold)),Text(_isCreator?'by Osirisvectory · Создатель':'by Osirisvectory',style:TextStyle(fontSize:10,color:Colors.white60))]),
       actions: [
         if (profile != null)
