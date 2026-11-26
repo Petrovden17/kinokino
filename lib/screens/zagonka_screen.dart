@@ -336,7 +336,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                           IconButton(
                             tooltip: 'Обновить поиск',
                             visualDensity: VisualDensity.compact,
-                            onPressed: () {\n                              final controller = _controller;\n                              if (controller != null) _inspectPlayers(controller);\n                            },
+                            onPressed: () {
+                              final controller = _controller;
+                              if (controller != null) _inspectPlayers(controller);
+                            },
                             icon: const Icon(Icons.refresh, color: Colors.white),
                           ),
                           IconButton(
