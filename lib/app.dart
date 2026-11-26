@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart' show timeDilation;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home_screen.dart';
@@ -103,10 +104,20 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
     animation: _settings,
-    builder: (context, _) => MaterialApp(
+    builder: (context, _) {
+      final settings = _settings.settings;
+      timeDilation = settings.animationsEnabled ? 1 / settings.animationSpeed : 1.0;
+      return MaterialApp(
     title: 'KinoKino',
     debugShowCheckedModeBanner: false,
-    theme: AppTheme.darkWithAccent(Color(_settings.settings.accentColorValue)),
+    theme: AppTheme.darkWithAccent(Color(settings.accentColorValue)),
+    builder: (context, child) {
+      final media = MediaQuery.of(context);
+      return MediaQuery(
+        data: media.copyWith(disableAnimations: !settings.animationsEnabled || media.disableAnimations),
+        child: child ?? const SizedBox.shrink(),
+      );
+    },
     home: StreamBuilder<AuthState>(
       stream: Supabase.instance.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
@@ -122,5 +133,7 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
           : const Scaffold(body: Center(child: CircularProgressIndicator()));
       },
     ),
-  ));
+    );
+    },
+  );
 }
