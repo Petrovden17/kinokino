@@ -19,6 +19,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   final _tmdb = TmdbService();
   Map<String, dynamic>? _details;
   List<MediaItem> _recommendations = [];
+  List<MediaItem> _similar = [];
   Map<String, dynamic> _externalIds = {};
   bool _loading = true;
   String? _error;
@@ -58,45 +59,82 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     } catch (e) {
       error = e.toString();
     }
-    // Load both lists independently and merge them: one empty endpoint must
-    // not suppress useful similar/recommended titles from the other endpoint.
-    final related = <String, MediaItem>{};
+    // Keep similar titles and recommendations separate so neither endpoint
+    // can hide the other and each section can be loaded independently.
+    List<MediaItem> recommendations = [];
+    List<MediaItem> similar = [];
     try {
-      final rows = await _tmdb.recommendations(widget.item.id, type: _type);
-      for (final row in rows) {
-        if (row.id != widget.item.id) related['${row.mediaType}:${row.id}'] = row;
-      }
+      recommendations = await _tmdb.recommendations(widget.item.id, type: _type);
     } catch (_) {}
     try {
-      final rows = await _tmdb.similar(widget.item.id, type: _type);
-      for (final row in rows) {
-        if (row.id != widget.item.id) related['${row.mediaType}:${row.id}'] = row;
-      }
+      similar = await _tmdb.similar(widget.item.id, type: _type);
     } catch (_) {}
-    picks = related.values.toList();
-    if (picks.isEmpty && details != null) {
-      final fallback = <String, MediaItem>{};
-      for (final key in ['recommendations', 'similar']) {
-        final section = details[key];
-        final rows = (section is Map ? section['results'] : null) as List? ?? const [];
-        for (final row in rows.whereType<Map>()) {
-          final data = Map<String, dynamic>.from(row);
-          data.putIfAbsent('media_type', () => _type);
-          final item = MediaItem.fromJson(data);
-          if (item.id != widget.item.id && item.hasRussianTitle && item.hasConfirmedRelease) {
-            fallback['${item.mediaType}:${item.id}'] = item;
-          }
-        }
+    if (details != null) {
+      if (recommendations.isEmpty) {
+        recommendations = _relatedFallback(details, 'recommendations');
       }
-      picks = fallback.values.toList();
+      if (similar.isEmpty) {
+        similar = _relatedFallback(details, 'similar');
+      }
     }
+    final recommendationsById = <String, MediaItem>{
+      for (final item in recommendations)
+        if (item.id != widget.item.id) '${item.mediaType}:${item.id}': item,
+    };
+    final similarById = <String, MediaItem>{
+      for (final item in similar)
+        if (item.id != widget.item.id) '${item.mediaType}:${item.id}': item,
+    };
     if (mounted) setState(() {
       _details = details;
-      _recommendations = picks;
+      _recommendations = recommendationsById.values.toList();
+      _similar = similarById.values.toList();
       _externalIds = externalIds;
       _error = error;
       _loading = false;
     });
+  }
+
+  List<MediaItem> _relatedFallback(Map<String, dynamic> details, String key) {
+    final section = details[key];
+    final rows = (section is Map ? section['results'] : null) as List? ?? const [];
+    final found = <String, MediaItem>{};
+    for (final row in rows.whereType<Map>()) {
+      final data = Map<String, dynamic>.from(row);
+      data.putIfAbsent('media_type', () => _type);
+      final item = MediaItem.fromJson(data);
+      if (item.id != widget.item.id && item.hasRussianTitle &&
+          item.hasConfirmedRelease &&
+          (item.mediaType == 'movie' || item.mediaType == 'tv')) {
+        found['${item.mediaType}:${item.id}'] = item;
+      }
+    }
+    return found.values.toList();
+  }
+
+  Widget _relatedSection(String title, List<MediaItem> items) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+        child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+      ),
+      SizedBox(height: 250, child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, i) => PosterCard(
+          item: items[i],
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
+            MediaDetailsScreen(
+              item: items[i],
+              preferredAudioLanguage: widget.preferredAudioLanguage,
+              preferredVideoQuality: widget.preferredVideoQuality,
+            ))),
+        ),
+      )),
+    ]);
   }
 
   Future<Map<String, dynamic>?> _chooseEpisode() async {
@@ -531,15 +569,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             child: Text('Некоторые сведения временно недоступны. Попробуйте обновить страницу позже.'),
           ),
         ])),
-        if (_recommendations.isNotEmpty) ...[
-          const Padding(padding: EdgeInsets.fromLTRB(18, 8, 18, 12), child: Text('Похожие и рекомендованные', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
-          SizedBox(height: 250, child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 18), scrollDirection: Axis.horizontal,
-            itemCount: _recommendations.length, separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, i) => PosterCard(item: _recommendations[i], onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => MediaDetailsScreen(item: _recommendations[i], preferredAudioLanguage: widget.preferredAudioLanguage, preferredVideoQuality: widget.preferredVideoQuality)))),
-          )),
-        ],
+        _relatedSection('Рекомендации', _recommendations),
+        _relatedSection('Похожие', _similar),
       ]),
     );
   }
