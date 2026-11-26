@@ -53,7 +53,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await next.setLooping(false);
       if (!mounted) return;
       setState(() => _busy = false);
-      if (autoplay) await next.play();
+      if (autoplay) {
+        await next.play();
+        _scheduleControlsHide();
+      }
     } catch (e) {
       next?.removeListener(_onChanged);
       await next?.dispose();
