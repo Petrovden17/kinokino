@@ -32,7 +32,24 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
-  Future<void> _toggleFullscreen() => _setFullscreen(!_isFullscreen);
+  Future<void> _toggleFullscreen() async {
+    if (_isFullscreen) {
+      await _setFullscreen(false);
+      return;
+    }
+    await _controller?.evaluateJavascript(source: r"""
+      (() => {
+        const video = document.querySelector('video');
+        const frame = document.querySelector('iframe[allowfullscreen], iframe');
+        const target = video || frame || document.documentElement;
+        if (target && target.requestFullscreen) {
+          const result = target.requestFullscreen();
+          if (result && result.catch) result.catch(() => {});
+        }
+      })();
+    """);
+    await _setFullscreen(true);
+  }
 
   Future<void> _goBack() async {
     if (_isFullscreen) {
@@ -176,11 +193,36 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             )
           else
             SafeArea(
-              child: Align(
-                alignment: Alignment.topRight,
-                child: Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: _overlayButton(Icons.fullscreen_exit, 'Выйти из полного экрана', _toggleFullscreen),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: IgnorePointer(
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 3),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.48),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            widget.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _overlayButton(Icons.fullscreen_exit, 'Выйти из полного экрана', _toggleFullscreen),
+                  ],
                 ),
               ),
             ),
