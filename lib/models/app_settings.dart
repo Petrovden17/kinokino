@@ -33,6 +33,7 @@ class AppSettings {
     double? defaultPlaybackSpeed, bool? adultContentAllowed, int? maxChildRating,
     bool? autoUpdatesEnabled, int? updateIntervalHours, int? accentColorValue,
     bool? animationsEnabled, double? animationSpeed,
+    String? preferredAudioLanguage, String? preferredVideoQuality,
   }) => AppSettings(
     language: language ?? this.language,
     notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
