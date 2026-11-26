@@ -50,6 +50,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       final update = await _updates.checkForUpdate();
+      await widget.service.markUpdateCheck();
       if (!mounted) return;
       if (update == null) {
         setState(() => _notice = 'У вас установлена последняя версия KinoKino.');
@@ -118,9 +119,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const ListTile(title: Text('Диагностика'), subtitle: Text('Проверка соединения и доступности сервисов будет расширена в следующем обновлении.')),
       SwitchListTile(
         title: const Text('Автоматическая проверка обновлений'),
-        subtitle: const Text('Проверять новые версии при запуске программы'),
+        subtitle: const Text('Проверять наличие новых версий автоматически по выбранному интервалу'),
         value: _value.autoUpdatesEnabled,
         onChanged: (v) => _save(_value.copyWith(autoUpdatesEnabled: v)),
+      ),
+      ListTile(
+        title: const Text('Интервал автоматической проверки'),
+        subtitle: const Text('Как часто KinoKino обращается к GitHub, пока приложение запущено'),
+        trailing: DropdownButton<int>(
+          value: _value.updateIntervalHours,
+          items: const [
+            DropdownMenuItem(value: 1, child: Text('1 час')),
+            DropdownMenuItem(value: 3, child: Text('3 часа')),
+            DropdownMenuItem(value: 6, child: Text('6 часов')),
+            DropdownMenuItem(value: 12, child: Text('12 часов')),
+            DropdownMenuItem(value: 24, child: Text('24 часа')),
+            DropdownMenuItem(value: 48, child: Text('2 дня')),
+            DropdownMenuItem(value: 168, child: Text('7 дней')),
+          ],
+          onChanged: _value.autoUpdatesEnabled
+            ? (v) { if (v != null) _save(_value.copyWith(updateIntervalHours: v)); }
+            : null,
+        ),
       ),
       ListTile(
         title: const Text('Проверить обновления сейчас'),
