@@ -104,9 +104,7 @@ class InternetArchiveService {
     required int expectedYear,
     String? displayTitle,
     CancelToken? cancelToken,
-    bool isSeries = false,
   }) async {
-    // A series title is not an episode. Never select an arbitrary clip as an episode.
     if (expectedRuntimeMinutes <= 0 || expectedYear <= 0) return null;
     final wanted = _normalize(title, expectedYear);
     if (wanted.isEmpty) return null;
