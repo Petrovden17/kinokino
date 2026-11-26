@@ -54,13 +54,11 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     setState(() => _rating = value);
     await LocalDatabase.setRating(widget.item.id, widget.item.title, widget.item.posterPath, value, mediaType: _type);
   }
+  bool _searchingPlayback = false;
+
   Future<void> _startPlayback() async {
-    if (_type == 'tv') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Автоматический поиск легальных видеоархивов пока поддерживает фильмы.')),
-      );
-      return;
-    }
+    if (_searchingPlayback) return;
+    setState(() => _searchingPlayback = true);
     showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -68,35 +66,40 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         content: Row(children: [
           CircularProgressIndicator(),
           SizedBox(width: 16),
-          Expanded(child: Text('Ищем легальную видеокопию…')),
+          Expanded(child: Text('Ищем доступное видео…')),
         ]),
       ),
     );
+    var dialogClosed = false;
     try {
-      final source = await InternetArchiveService().findLicensedVideo(_displayTitle);
+      final source = await InternetArchiveService().findLicensedVideo(
+        _displayTitle,
+        isSeries: _type == 'tv',
+      );
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
+      dialogClosed = true;
       if (source == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Не найдено видео с подтверждённой подходящей лицензией и совместимым форматом.')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_type == 'tv'
+            ? 'В открытом каталоге пока не найден эпизод этого сериала.'
+            : 'В открытом каталоге пока не найден совместимый фильм.'),
+        ));
         return;
       }
       await Navigator.push(context, MaterialPageRoute(builder: (_) =>
         PlayerScreen(streamUrl: source.url.toString(), title: source.title)));
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Источник: Internet Archive · ${source.creator} · ${source.license}'),
-        duration: const Duration(seconds: 6),
-      ));
     } catch (e) {
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pop();
+      if (!dialogClosed) Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось выполнить поиск видео: $e')),
+        SnackBar(content: Text('Не удалось найти видео: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _searchingPlayback = false);
     }
   }
+
   Widget _buildProviders() {
     final groups = <String, List<Map<String, dynamic>>>{
       'Подписка': (_providers['flatrate'] as List? ?? const []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(),
@@ -190,7 +193,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           _buildProviders(),
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 8, children: [
-            FilledButton.icon(onPressed: _startPlayback, icon: const Icon(Icons.play_arrow), label: const Text('Начать просмотр')),
+            FilledButton.icon(onPressed: _searchingPlayback ? null : _startPlayback, icon: _searchingPlayback ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_arrow), label: const Text('Начать просмотр')),
             OutlinedButton.icon(onPressed: () async {
               await LocalDatabase.setFavorite(item.id, item.title, item.posterPath, true, mediaType: _type);
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Добавлено в избранное')));
