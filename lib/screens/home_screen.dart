@@ -81,12 +81,14 @@ class _HomeScreenState extends State<HomeScreen> {
           : _type == 'all' && _genreId == null && _minRating == 0 && _sort == 'popularity.desc'
               ? await _tmdb.trending(page: next)
               : _type == 'all' ? await _loadAllTypesPage(next)
-          : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre, sortBy: _sort,
+          : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre,
+              sortBy: _sort == 'primary_release_date.desc' && _apiType == 'tv' ? 'first_air_date.desc' : _sort,
               minRating: _minRating == 0 ? null : _minRating, page: next);
       if (!mounted) return;
       setState(() {
         final seen = _items.map((e) => '${e.mediaType}:${e.id}').toSet();
         _items.addAll(results.where((e) => !seen.contains('${e.mediaType}:${e.id}')));
+        if (_type == 'all' && _sort != 'popularity.desc') _sortMediaItems(_items);
         _page = next;
         _hasMore = results.isNotEmpty;
       });
@@ -124,7 +126,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final results = await Future.wait([
       _tmdb.discover(type: 'movie', genreId: _genreId, sortBy: _sort,
         minRating: _minRating == 0 ? null : _minRating, page: page),
-      _tmdb.discover(type: 'tv', genreId: _genreId, sortBy: _sort,
+      _tmdb.discover(type: 'tv', genreId: _genreId,
+        sortBy: _sort == 'primary_release_date.desc' ? 'first_air_date.desc' : _sort,
         minRating: _minRating == 0 ? null : _minRating, page: page),
     ]);
     final unique = <String, MediaItem>{};
@@ -133,9 +136,26 @@ class _HomeScreenState extends State<HomeScreen> {
         unique['${item.mediaType}:${item.id}'] = item;
       }
     }
-    final merged = unique.values.toList()
-      ..sort((a, b) => b.popularity.compareTo(a.popularity));
+    final merged = unique.values.toList();
+    _sortMediaItems(merged);
     return merged;
+  }
+
+  int _releaseYear(MediaItem item) {
+    final date = item.releaseDate;
+    if (date.length < 4) return 0;
+    final year = int.tryParse(date.substring(0, 4)) ?? 0;
+    return year <= DateTime.now().year + 2 ? year : 0;
+  }
+
+  void _sortMediaItems(List<MediaItem> items) {
+    if (_sort == 'primary_release_date.desc') {
+      items.sort((a, b) => _releaseYear(b).compareTo(_releaseYear(a)));
+    } else if (_sort == 'vote_average.desc') {
+      items.sort((a, b) => b.voteAverage.compareTo(a.voteAverage));
+    } else {
+      items.sort((a, b) => b.popularity.compareTo(a.popularity));
+    }
   }
 
   Future<void> _savePlaybackPreferences() async {
@@ -351,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> {
           itemBuilder: (_) => const [
             PopupMenuItem(value: 'popularity.desc', child: Text('Популярные')),
             PopupMenuItem(value: 'vote_average.desc', child: Text('По рейтингу')),
-            PopupMenuItem(value: 'primary_release_date.desc', child: Text('Сначала новые')),
+            PopupMenuItem(value: 'primary_release_date.desc', child: Text('По году выпуска · новые сначала')),
             PopupMenuItem(value: 'revenue.desc', child: Text('По сборам')),
           ],
         ),
