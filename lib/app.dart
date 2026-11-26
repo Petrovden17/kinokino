@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home_screen.dart';
+import 'screens/auth_screen.dart';
+import 'services/auth_service.dart';
 import 'services/profile_service.dart';
 import 'services/settings_service.dart';
 import 'services/app_update_service.dart';
@@ -17,6 +20,7 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
   final AppUpdateService _updates = AppUpdateService();
   bool _ready = false;
   bool _updatePromptShown = false;
+  String? _profileEnsuredForUser;
   Timer? _updateTimer;
 
   @override
@@ -95,8 +99,20 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
     title: 'KinoKino',
     debugShowCheckedModeBanner: false,
     theme: AppTheme.dark,
-    home: _ready
-      ? HomeScreen(profileService: _profiles, settingsService: _settings)
-      : const Scaffold(body: Center(child: CircularProgressIndicator())),
+    home: StreamBuilder<AuthState>(
+      stream: Supabase.instance.client.auth.onAuthStateChange,
+      builder: (context, snapshot) {
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user == null) return const AuthScreen();
+        if (_profileEnsuredForUser != user.id) {
+          _profileEnsuredForUser = user.id;
+          AuthService().ensureProfile(user.id, user.userMetadata?['display_name'] as String?)
+            .catchError((_) { _profileEnsuredForUser = null; });
+        }
+        return _ready
+          ? HomeScreen(profileService: _profiles, settingsService: _settings)
+          : const Scaffold(body: Center(child: CircularProgressIndicator()));
+      },
+    ),
   );
 }
