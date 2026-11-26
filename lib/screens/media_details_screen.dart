@@ -34,7 +34,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   void initState() {
     super.initState();
     _load();
-    LocalDatabase.recordOpen(widget.item.id, widget.item.title, widget.item.posterPath, mediaType: _type);
+    LocalDatabase.recordOpen(widget.item.id, widget.item.title, widget.item.posterPath, mediaType: _type).catchError((_) {});
   }
   Future<void> _load() async {
     try {
