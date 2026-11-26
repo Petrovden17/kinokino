@@ -13,181 +13,390 @@ import 'library_screen.dart';
 import 'about_screen.dart';
 import 'media_details_screen.dart';
 import 'creator_console_screen.dart';
+
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key,required this.profileService,required this.settingsService});
-  final ProfileService profileService;final SettingsService settingsService;
-  @override State<HomeScreen> createState()=>_HomeScreenState();
+  const HomeScreen({super.key, required this.profileService, required this.settingsService});
+  final ProfileService profileService;
+  final SettingsService settingsService;
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
 }
-class _HomeScreenState extends State<HomeScreen>{
-  final _tmdb=TmdbService();final _search=TextEditingController();final _scroll=ScrollController();int _page=1;bool _hasMore=true;bool _loadingMore=false;
-  List<MediaItem> _items=[];List<Map<String,dynamic>> _genres=[];
-  bool _loading=false;bool _isCreator=false;String? _error;String _type='movie';String _sort='popularity.desc';int? _genreId;double _minRating=0;
-  String get _apiType => _type=='tv'||_type=='animated_tv'?'tv':'movie';
-  int? get _effectiveGenre => _type=='animation'||_type=='animated_tv'?16:_genreId;
-  @override void initState(){super.initState();_scroll.addListener(_onScroll);_loadGenres();_loadTrending();_loadCreatorAccess();}
-  Future<void> _loadCreatorAccess() async {try{final allowed=await CreatorService().isCreator();if(mounted)setState(()=>_isCreator=allowed);}catch(_){}}
-  void _onScroll(){if(_scroll.position.pixels>=_scroll.position.maxScrollExtent-700){_loadMore();}}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final _tmdb = TmdbService();
+  final _search = TextEditingController();
+  final _scroll = ScrollController();
+  int _page = 1;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+  bool _showTopSearch = false;
+  List<MediaItem> _items = [];
+  List<Map<String, dynamic>> _genres = [];
+  bool _loading = false;
+  bool _isCreator = false;
+  String? _error;
+  String _type = 'movie';
+  String _sort = 'popularity.desc';
+  int? _genreId;
+  double _minRating = 0;
+
+  String get _apiType => _type == 'tv' || _type == 'animated_tv' ? 'tv' : 'movie';
+  int? get _effectiveGenre => _type == 'animation' || _type == 'animated_tv' ? 16 : _genreId;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+    _loadGenres();
+    _loadTrending();
+    _loadCreatorAccess();
+  }
+
+  Future<void> _loadCreatorAccess() async {
+    try {
+      final allowed = await CreatorService().isCreator();
+      if (mounted) setState(() => _isCreator = allowed);
+    } catch (_) {}
+  }
+
+  void _onScroll() {
+    if (_scroll.hasClients) {
+      final compact = _scroll.offset > 150;
+      if (compact != _showTopSearch && mounted) setState(() => _showTopSearch = compact);
+      if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 700) _loadMore();
+    }
+  }
+
   Future<void> _loadMore() async {
-    if(_loading||_loadingMore||!_hasMore)return;
-    _loadingMore=true;final next=_page+1;
-    try{
-      final results=_search.text.trim().isNotEmpty
-        ? await _tmdb.search(_search.text,page:next)
-        : await _tmdb.discover(type:_apiType,genreId:_effectiveGenre,sortBy:_sort,minRating:_minRating==0?null:_minRating,page:next);
-      if(!mounted)return;
-      setState((){final seen=_items.map((e)=>e.id).toSet();_items.addAll(results.where((e)=>!seen.contains(e.id)));_page=next;_hasMore=results.isNotEmpty;});
-    }catch(_){}finally{_loadingMore=false;}
+    if (_loading || _loadingMore || !_hasMore) return;
+    _loadingMore = true;
+    final next = _page + 1;
+    try {
+      final results = _search.text.trim().isNotEmpty
+          ? await _tmdb.search(_search.text, page: next)
+          : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre, sortBy: _sort,
+              minRating: _minRating == 0 ? null : _minRating, page: next);
+      if (!mounted) return;
+      setState(() {
+        final seen = _items.map((e) => '${e.mediaType}:${e.id}').toSet();
+        _items.addAll(results.where((e) => !seen.contains('${e.mediaType}:${e.id}')));
+        _page = next;
+        _hasMore = results.isNotEmpty;
+      });
+    } catch (_) {
+    } finally {
+      _loadingMore = false;
+    }
   }
-  @override void dispose(){_scroll.removeListener(_onScroll);_scroll.dispose();_search.dispose();super.dispose();}
-  Future<void> _loadGenres() async {try{final r=await _tmdb.genres(type:_apiType);if(mounted)setState(()=>_genres=r);}catch(_){}}
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadGenres() async {
+    try {
+      final r = await _tmdb.genres(type: _apiType);
+      if (mounted) setState(() => _genres = r);
+    } catch (_) {}
+  }
+
   Future<void> _loadTrending() async {
-    setState(()=>_loading=true);_error=null;_page=1;_hasMore=true;
-    try{
-      final requests=<Future<List<MediaItem>>>[_tmdb.trending()];
-      for(var page=1;page<=10;page++){
-        requests.add(_tmdb.popular(type:'movie',page:page));
-        requests.add(_tmdb.popular(type:'tv',page:page));
+    setState(() => _loading = true);
+    _error = null;
+    _page = 1;
+    _hasMore = true;
+    try {
+      final requests = <Future<List<MediaItem>>>[_tmdb.trending()];
+      for (var page = 1; page <= 10; page++) {
+        requests.add(_tmdb.popular(type: 'movie', page: page));
+        requests.add(_tmdb.popular(type: 'tv', page: page));
       }
-      final groups=await Future.wait(requests);
-      final unique=<String,MediaItem>{};for(final group in groups){for(final item in group){unique['${item.mediaType}:${item.id}']=item;}}
-      if (mounted) {
-        setState(() {
-          _items = unique.values.toList();
-          _page = 10;
-          _hasMore = true;
-        });
+      final groups = await Future.wait(requests);
+      final unique = <String, MediaItem>{};
+      for (final group in groups) {
+        for (final item in group) {
+          unique['${item.mediaType}:${item.id}'] = item;
+        }
       }
-    }catch(_){if(mounted)setState(()=>_error='Не удалось загрузить каталог. Проверьте подключение к интернету и попробуйте обновить страницу.');}
-    finally{if(mounted)setState(()=>_loading=false);}
+      if (mounted) setState(() {
+        _items = unique.values.toList();
+        _page = 10;
+        _hasMore = true;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Не удалось загрузить каталог. Проверьте подключение и попробуйте ещё раз.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
+
   Future<void> _applyFilters() async {
-    setState(()=>_loading=true);_error=null;
-    try{final r=await _tmdb.discover(type:_apiType,genreId:_effectiveGenre,sortBy:_sort,minRating:_minRating==0?null:_minRating);if(mounted)setState((){_items=r;_page=1;_hasMore=r.isNotEmpty;});}
-    catch(_){if(mounted)setState(()=>_error='Не удалось применить фильтры.');}
-    finally{if(mounted)setState(()=>_loading=false);}
+    setState(() => _loading = true);
+    _error = null;
+    try {
+      final r = await _tmdb.discover(type: _apiType, genreId: _effectiveGenre,
+          sortBy: _sort, minRating: _minRating == 0 ? null : _minRating);
+      if (mounted) setState(() { _items = r; _page = 1; _hasMore = r.isNotEmpty; });
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Не удалось применить фильтры.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
+
   Future<void> _searchMedia(String value) async {
-    if(value.trim().isEmpty){_loadTrending();return;}setState(()=>_loading=true);_error=null;
-    try{final r=await _tmdb.search(value);if(mounted)setState((){_items=r;_page=1;_hasMore=r.isNotEmpty;});}
-    catch(_){if(mounted)setState(()=>_error='Ошибка поиска. Проверьте подключение к интернету.');}
-    finally{if(mounted)setState(()=>_loading=false);}
+    if (value.trim().isEmpty) { _loadTrending(); return; }
+    setState(() => _loading = true);
+    _error = null;
+    try {
+      final r = await _tmdb.search(value);
+      if (mounted) setState(() { _items = r; _page = 1; _hasMore = r.isNotEmpty; });
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Ошибка поиска. Проверьте подключение к интернету.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
-  Future<void> _open(MediaItem item) async {await Navigator.push(context,MaterialPageRoute(builder:(_)=>MediaDetailsScreen(item:item)));if(mounted)setState((){});}
-  Future<void> _openPage(Widget page) async {await Navigator.push(context,MaterialPageRoute(builder:(_)=>page));if(mounted)setState((){});}
-  @override Widget build(BuildContext context){
-    final profile=widget.profileService.activeProfile;
-    return Scaffold(appBar:AppBar(title:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      Text('KinoKino',style:TextStyle(fontWeight:FontWeight.bold)),Text(_isCreator?'by Osirisvectory · Создатель':'by Osirisvectory',style:TextStyle(fontSize:10,color:Colors.white60))]),
-      actions: [
-        if (profile != null)
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: Center(
-              child: Text(profile.name, style: const TextStyle(color: Colors.white70)),
-            ),
+
+  Future<void> _showSearchDialog() async {
+    final controller = TextEditingController(text: _search.text);
+    final query = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Найти фильм или сериал'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          onSubmitted: (value) => Navigator.pop(dialogContext, value),
+          decoration: const InputDecoration(
+            hintText: 'Введите название',
+            prefixIcon: Icon(Icons.search),
           ),
-        PopupMenuButton<String>(
-          onSelected: (value) async {
-            switch (value) {
-              case 'profiles':
-                await _openPage(ProfilesScreen(service: widget.profileService));
-                break;
-              case 'creator':
-                await _openPage(const CreatorConsoleScreen());
-                break;
-              case 'library':
-                await _openPage(const LibraryScreen());
-                break;
-              case 'settings':
-                await _openPage(SettingsScreen(service: widget.settingsService));
-                break;
-              case 'about':
-                await _openPage(const AboutScreen());
-                break;
-              case 'logout':
-                await AuthService().signOut();
-                break;
-            }
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            icon: const Icon(Icons.search),
+            label: const Text('Найти'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (query == null) return;
+    _search.text = query;
+    await _searchMedia(query);
+    if (_scroll.hasClients) _scroll.animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+  }
+
+  Future<void> _open(MediaItem item) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => MediaDetailsScreen(item: item)));
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _openPage(Widget page) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+    if (mounted) setState(() {});
+  }
+
+  Widget _filters() => Container(
+    margin: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+    padding: const EdgeInsets.fromLTRB(13, 13, 13, 14),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        colors: [Color(0xE51A2C49), Color(0xE5121D31), Color(0xE52D2541)],
+        begin: Alignment.topLeft, end: Alignment.bottomRight,
+      ),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: Colors.white.withValues(alpha: .09)),
+      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .2), blurRadius: 18, offset: const Offset(0, 7))],
+    ),
+    child: Column(children: [
+      Row(children: [
+        const Expanded(child: Text('КАТАЛОГ', style: TextStyle(fontSize: 11, letterSpacing: 1.6,
+            color: AppTheme.aqua, fontWeight: FontWeight.w900))),
+        Text('Подбери по настроению', style: TextStyle(fontSize: 10, color: Colors.white.withValues(alpha: .62))),
+      ]),
+      const SizedBox(height: 12),
+      TextField(
+        controller: _search,
+        onSubmitted: _searchMedia,
+        decoration: InputDecoration(
+          hintText: 'Поиск фильмов и сериалов',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: IconButton(
+            tooltip: 'Очистить поиск',
+            icon: const Icon(Icons.close),
+            onPressed: () { _search.clear(); _loadTrending(); },
+          ),
+        ),
+      ),
+      const SizedBox(height: 12),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SegmentedButton<String>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: 'movie', label: Text('Фильмы')),
+            ButtonSegment(value: 'tv', label: Text('Сериалы')),
+            ButtonSegment(value: 'animation', label: Text('Мультфильмы')),
+            ButtonSegment(value: 'animated_tv', label: Text('Мультсериалы')),
+          ],
+          selected: {_type},
+          onSelectionChanged: (v) {
+            setState(() { _type = v.first; _genreId = (v.first == 'animation' || v.first == 'animated_tv') ? 16 : null; });
+            _loadGenres();
+            _applyFilters();
           },
-          itemBuilder: (context) => [
-            if (_isCreator)
-              const PopupMenuItem(
-                value: 'creator',
-                child: ListTile(leading: Icon(Icons.admin_panel_settings_outlined), title: Text('Панель создателя')),
-              ),
-            const PopupMenuItem(
-              value: 'profiles',
-              child: ListTile(leading: Icon(Icons.people), title: Text('Профили')),
-            ),
-            PopupMenuItem(
-              value: 'library',
-              child: ListTile(leading: Icon(Icons.video_library), title: Text('Библиотека')),
-            ),
-            PopupMenuItem(
-              value: 'settings',
-              child: ListTile(leading: Icon(Icons.settings), title: Text('Настройки')),
-            ),
-            PopupMenuItem(
-              value: 'about',
-              child: ListTile(leading: Icon(Icons.info_outline), title: Text('О приложении')),
-            ),
-            PopupMenuItem(
-              value: 'logout',
-              child: ListTile(leading: Icon(Icons.logout), title: Text('Выйти из аккаунта')),
-            ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: DropdownButtonFormField<int?>(
+          value: _genreId,
+          decoration: const InputDecoration(labelText: 'Жанр', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+          items: [
+            const DropdownMenuItem<int?>(value: null, child: Text('Все жанры')),
+            ..._genres.map((g) => DropdownMenuItem<int?>(value: g['id'] as int, child: Text(g['name'].toString()))),
+          ],
+          onChanged: (v) { setState(() => _genreId = v); _applyFilters(); },
+        )),
+        const SizedBox(width: 10),
+        Expanded(child: DropdownButtonFormField<double>(
+          value: _minRating,
+          decoration: const InputDecoration(labelText: 'Рейтинг от', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+          items: [0.0, 5.0, 6.0, 7.0, 8.0, 9.0].map((v) =>
+              DropdownMenuItem(value: v, child: Text(v == 0 ? 'Любой' : '$v+'))).toList(),
+          onChanged: (v) { setState(() => _minRating = v ?? 0); _applyFilters(); },
+        )),
+        const SizedBox(width: 6),
+        PopupMenuButton<String>(
+          tooltip: 'Сортировка',
+          icon: const Icon(Icons.sort_rounded),
+          onSelected: (v) { setState(() => _sort = v); _applyFilters(); },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'popularity.desc', child: Text('Популярные')),
+            PopupMenuItem(value: 'vote_average.desc', child: Text('По рейтингу')),
+            PopupMenuItem(value: 'primary_release_date.desc', child: Text('Сначала новые')),
+            PopupMenuItem(value: 'revenue.desc', child: Text('По сборам')),
           ],
         ),
       ]),
-      body:Column(children:[
-        Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 12), child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 17),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFF293C63), Color(0xFF182A45), Color(0xFF432C45)],
-              begin: Alignment.topLeft, end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withValues(alpha: .09)),
-            boxShadow: [BoxShadow(color: const Color(0xFF182A45).withValues(alpha: .45), blurRadius: 18, offset: const Offset(0, 7))],
-          ),
-          child: Row(children: [
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('ТВОЁ КИНОПРОСТРАНСТВО', style: TextStyle(color: AppTheme.aqua, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.3)),
-              const SizedBox(height: 5),
-              const Text('Время выбрать кино', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
-              const SizedBox(height: 3),
-              Text('Фильмы, сериалы и истории на вечер', style: TextStyle(color: Colors.white.withValues(alpha: .72), fontSize: 11)),
-            ])),
-            const SizedBox(width: 10),
-            Container(width: 54, height: 54,
-              decoration: BoxDecoration(color: AppTheme.accent.withValues(alpha: .18), borderRadius: BorderRadius.circular(17)),
-              child: const Icon(Icons.local_movies_rounded, color: AppTheme.gold, size: 30)),
-          ]),
-        )),
-        Padding(padding:const EdgeInsets.fromLTRB(16,0,16,12),child:TextField(controller:_search,onSubmitted:_searchMedia,decoration:InputDecoration(hintText:'Поиск фильмов, сериалов и мультфильмов',prefixIcon:const Icon(Icons.search),suffixIcon:IconButton(icon:const Icon(Icons.clear),onPressed:(){_search.clear();_loadTrending();})))) ,
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 13),
-          decoration: BoxDecoration(
-            color: AppTheme.surface, borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withValues(alpha: .07)),
-          ),
-          child: Column(children:[
-          Row(children:[Expanded(child:SingleChildScrollView(scrollDirection:Axis.horizontal,child:SegmentedButton<String>(showSelectedIcon:false,segments:const[ButtonSegment(value:'movie',label:Text('Фильмы')),ButtonSegment(value:'tv',label:Text('Сериалы')),ButtonSegment(value:'animation',label:Text('Мультфильмы')),ButtonSegment(value:'animated_tv',label:Text('Мультсериалы'))],selected:{_type},onSelectionChanged:(v){setState((){_type=v.first;_genreId=(v.first=='animation'||v.first=='animated_tv')?16:null;});_loadGenres();_applyFilters();}))),
-            const SizedBox(width:8),PopupMenuButton<String>(tooltip:'Сортировка',icon:const Icon(Icons.sort),onSelected:(v){setState(()=>_sort=v);_applyFilters();},itemBuilder:(_)=>const[PopupMenuItem(value:'popularity.desc',child:Text('Популярные')),PopupMenuItem(value:'vote_average.desc',child:Text('По рейтингу')),PopupMenuItem(value:'primary_release_date.desc',child:Text('Сначала новые')),PopupMenuItem(value:'revenue.desc',child:Text('По сборам'))])]),
-          const SizedBox(height:8),Row(children:[
-            Expanded(child:DropdownButtonFormField<int?>(value:_genreId,decoration:const InputDecoration(labelText:'Жанр',contentPadding:EdgeInsets.symmetric(horizontal:12,vertical:8)),items:[const DropdownMenuItem<int?>(value:null,child:Text('Все жанры')),..._genres.map((g)=>DropdownMenuItem<int?>(value:g['id'] as int,child:Text(g['name'].toString())))],onChanged:(v){setState(()=>_genreId=v);_applyFilters();})),
-            const SizedBox(width:12),Expanded(child:DropdownButtonFormField<double>(value:_minRating,decoration:const InputDecoration(labelText:'Рейтинг от',contentPadding:EdgeInsets.symmetric(horizontal:12,vertical:8)),items:[0.0,5.0,6.0,7.0,8.0,9.0].map((v)=>DropdownMenuItem(value:v,child:Text(v==0?'Любой':'$v+'))).toList(),onChanged:(v){setState(()=>_minRating=v??0);_applyFilters();}))]),
+    ]),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final profile = widget.profileService.activeProfile;
+    return Scaffold(
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: const Color(0xEE080D19),
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('KinoKino', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(_isCreator ? 'by Osirisvectory · Создатель' : 'by Osirisvectory',
+              style: const TextStyle(fontSize: 10, color: Colors.white60)),
         ]),
+        actions: [
+          if (_showTopSearch)
+            IconButton(
+              tooltip: 'Поиск',
+              onPressed: _showSearchDialog,
+              icon: const Icon(Icons.search_rounded),
+            ),
+          if (profile != null)
+            Padding(padding: const EdgeInsets.only(right: 6),
+              child: Center(child: Text(profile.name, style: const TextStyle(color: Colors.white70)))),
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              switch (value) {
+                case 'profiles': await _openPage(ProfilesScreen(service: widget.profileService)); break;
+                case 'creator': await _openPage(const CreatorConsoleScreen()); break;
+                case 'library': await _openPage(const LibraryScreen()); break;
+                case 'settings': await _openPage(SettingsScreen(service: widget.settingsService)); break;
+                case 'about': await _openPage(const AboutScreen()); break;
+                case 'logout': await AuthService().signOut(); break;
+              }
+            },
+            itemBuilder: (context) => [
+              if (_isCreator) const PopupMenuItem(value: 'creator',
+                  child: ListTile(leading: Icon(Icons.admin_panel_settings_outlined), title: Text('Панель создателя'))),
+              const PopupMenuItem(value: 'profiles', child: ListTile(leading: Icon(Icons.people), title: Text('Профили'))),
+              const PopupMenuItem(value: 'library', child: ListTile(leading: Icon(Icons.video_library), title: Text('Библиотека'))),
+              const PopupMenuItem(value: 'settings', child: ListTile(leading: Icon(Icons.settings), title: Text('Настройки'))),
+              const PopupMenuItem(value: 'about', child: ListTile(leading: Icon(Icons.info_outline), title: Text('О приложении'))),
+              const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('Выйти из аккаунта'))),
+            ],
+          ),
+        ],
+      ),
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [Color(0xFF101B30), Color(0xFF080D19), Color(0xFF171329)],
+            stops: [0, .55, 1],
+          ),
         ),
-        const SizedBox(height:12),
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 18), child: Row(children:[const Text('Подборка для тебя', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)), const Spacer(), Icon(Icons.auto_awesome, color: AppTheme.gold, size: 18)])),
-        const SizedBox(height:8),
-        Expanded(child:_loading?const Center(child:CircularProgressIndicator()):_error!=null?Center(child:Padding(padding:const EdgeInsets.all(24),child:Column(mainAxisSize:MainAxisSize.min,children:[Text(_error!,textAlign:TextAlign.center),const SizedBox(height:12),FilledButton.icon(onPressed:_loadTrending,icon:const Icon(Icons.refresh),label:const Text('Повторить'))]))):_items.isEmpty?const Center(child:Text('Ничего не найдено.')):LayoutBuilder(builder:(context,c){
-          final columns=c.maxWidth>1200?6:c.maxWidth>900?5:c.maxWidth>650?4:2;
-          return GridView.builder(controller:_scroll,padding:const EdgeInsets.all(16),gridDelegate:SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount:columns,childAspectRatio:.58,crossAxisSpacing:14,mainAxisSpacing:16),itemCount:_items.length+(_hasMore?1:0),itemBuilder:(_,i)=>i>=_items.length?const Center(child:Padding(padding:EdgeInsets.all(20),child:CircularProgressIndicator())):PosterCard(item:_items[i],onTap:()=>_open(_items[i])));
-        }))
-      ]));
+        child: Stack(children: [
+          Positioned(top: 30, right: -120, child: IgnorePointer(child: Container(
+            width: 340, height: 340,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [Theme.of(context).colorScheme.primary.withValues(alpha: .13), Colors.transparent])),
+          ))),
+          CustomScrollView(
+            controller: _scroll,
+            slivers: [
+              const SliverToBoxAdapter(child: SizedBox(height: kToolbarHeight + 8)),
+              SliverToBoxAdapter(child: _filters()),
+              SliverToBoxAdapter(child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 5, 18, 10),
+                child: Row(children: [
+                  const Text('Подборка для тебя', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  const Spacer(),
+                  Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.secondary, size: 18),
+                ]),
+              )),
+              if (_loading)
+                const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))
+              else if (_error != null)
+                SliverFillRemaining(hasScrollBody: false, child: Center(child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text(_error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(onPressed: _loadTrending, icon: const Icon(Icons.refresh), label: const Text('Повторить')),
+                  ]),
+                )))
+              else if (_items.isEmpty)
+                const SliverFillRemaining(hasScrollBody: false, child: Center(child: Text('Ничего не найдено.')))
+              else
+                SliverLayoutBuilder(builder: (context, constraints) {
+                  final width = MediaQuery.sizeOf(context).width;
+                  final columns = width > 1200 ? 6 : width > 900 ? 5 : width > 650 ? 4 : 2;
+                  return SliverGrid(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns, childAspectRatio: .58,
+                      crossAxisSpacing: 14, mainAxisSpacing: 16,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, i) => i >= _items.length
+                          ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
+                          : PosterCard(item: _items[i], onTap: () => _open(_items[i])),
+                      childCount: _items.length + (_hasMore ? 1 : 0),
+                    ),
+                  );
+                }),
+              const SliverToBoxAdapter(child: SizedBox(height: 22)),
+            ],
+          ),
+        ]),
+      ),
+    );
   }
 }
