@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:async';
+import 'package:window_manager/window_manager.dart';
 import 'package:video_player/video_player.dart';
 import '../services/legal_source_service.dart';
 import '../services/internet_archive_service.dart';
@@ -22,6 +24,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _busy = true;
   bool _fullscreen = false;
   double _speed = 1;
+  bool _controlsVisible = true;
+  BoxFit _videoFit = BoxFit.contain;
+  Timer? _controlsTimer;
   late String _activeUrl;
   late String _activeTitle;
   late List<ArchiveVideoVariant> _activeVariants;
@@ -33,6 +38,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _activeTitle = widget.title;
     _activeVariants = widget.variants;
     _initialize();
+    _scheduleControlsHide();
   }
 
   Future<void> _initialize({bool autoplay = true}) async {
@@ -136,22 +142,53 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _initialize(autoplay: wasPlaying);
   }
 
+  void _scheduleControlsHide() {
+    _controlsTimer?.cancel();
+    if (!_controlsVisible || _controller?.value.isPlaying != true) return;
+    _controlsTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (mounted && _controller?.value.isPlaying == true) {
+        setState(() => _controlsVisible = false);
+      }
+    });
+  }
+
+  void _revealControls() {
+    if (!_controlsVisible) setState(() => _controlsVisible = true);
+    _scheduleControlsHide();
+  }
+
+  Future<void> _exitFullscreen() async {
+    if (!_fullscreen) return;
+    await windowManager.setFullScreen(false);
+    if (mounted) {
+      setState(() {
+        _fullscreen = false;
+        _controlsVisible = true;
+      });
+      _scheduleControlsHide();
+    }
+  }
+
   Future<void> _toggleFullscreen() async {
     final entering = !_fullscreen;
     if (entering) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+      await windowManager.setFullScreen(true);
     } else {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+      await windowManager.setFullScreen(false);
     }
-    if (mounted) setState(() => _fullscreen = entering);
+    if (mounted) {
+      setState(() {
+        _fullscreen = entering;
+        _controlsVisible = true;
+      });
+      _scheduleControlsHide();
+    }
   }
 
   @override
   void dispose() {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    _controlsTimer?.cancel();
+    if (_fullscreen) windowManager.setFullScreen(false);
     _controller?.removeListener(_onChanged);
     _controller?.dispose();
     super.dispose();
@@ -177,145 +214,232 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final position = ready ? value!.position : Duration.zero;
     final totalMs = duration.inMilliseconds;
     final currentMs = totalMs <= 0 ? 0.0 : position.inMilliseconds.clamp(0, totalMs).toDouble();
+    final wide = MediaQuery.sizeOf(context).width > 700;
 
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: _fullscreen ? null : AppBar(
-        title: Text(_activeTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-        backgroundColor: Colors.black,
-      ),
-      body: SafeArea(
-        child: _busy
-          ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-              CircularProgressIndicator(), SizedBox(height: 14),
-              Text('Загружаем видео…'),
-            ]))
-          : _error != null
-            ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(
-                mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.error_outline, color: Colors.orange, size: 52),
-                  const SizedBox(height: 16),
-                  Text(_error!, textAlign: TextAlign.center),
-                  const SizedBox(height: 16),
-                  FilledButton.icon(onPressed: _initialize, icon: const Icon(Icons.refresh), label: const Text('Повторить')),
+    Widget controlBar() => Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _control(Icons.replay_10, 'Назад 10 секунд', () => _seek(const Duration(seconds: -10)), size: wide ? 34 : 28),
+        _control(value?.isPlaying == true ? Icons.pause : Icons.play_arrow,
+          value?.isPlaying == true ? 'Пауза' : 'Воспроизвести',
+          () async {
+            if (value?.isPlaying == true) {
+              await c?.pause();
+              _revealControls();
+            } else {
+              await c?.play();
+              _revealControls();
+            }
+          }, size: wide ? 46 : 38),
+        _control(Icons.forward_10, 'Вперёд 10 секунд', () => _seek(const Duration(seconds: 10)), size: wide ? 34 : 28),
+        PopupMenuButton<BoxFit>(
+          tooltip: 'Размер изображения',
+          initialValue: _videoFit,
+          onSelected: (fit) => setState(() => _videoFit = fit),
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: BoxFit.contain, child: Text('Вписать целиком')),
+            PopupMenuItem(value: BoxFit.cover, child: Text('Заполнить экран')),
+            PopupMenuItem(value: BoxFit.fill, child: Text('Растянуть')),
+          ],
+          child: const Padding(
+            padding: EdgeInsets.all(9),
+            child: Icon(Icons.fit_screen, color: Colors.white),
+          ),
+        ),
+        if (_activeVariants.length > 1)
+          PopupMenuButton<ArchiveVideoVariant>(
+            tooltip: 'Качество видео',
+            onSelected: _selectQuality,
+            itemBuilder: (_) => _activeVariants.map((variant) => PopupMenuItem(
+              value: variant,
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.hd_outlined, size: 18),
+                const SizedBox(width: 8),
+                Text(variant.label),
+                if (variant.url.toString() == _activeUrl) ...[
+                  const SizedBox(width: 10), const Icon(Icons.check, size: 16),
                 ],
-              )))
-            : !ready || c == null
-              ? const Center(child: Text('Плеер не инициализирован'))
-              : LayoutBuilder(builder: (context, constraints) {
-                  final v = c.value;
-                  final wide = constraints.maxWidth > 700;
-                  return Center(child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1200),
-                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                      Expanded(child: Center(child: AspectRatio(
-                        aspectRatio: v.aspectRatio > 0 ? v.aspectRatio : 16 / 9,
-                        child: Stack(fit: StackFit.expand, alignment: Alignment.center, children: [
-                          VideoPlayer(c),
-                          if (v.isBuffering)
-                            const Center(child: CircularProgressIndicator()),
-                          if (v.isPlaying)
-                            Align(alignment: Alignment.center, child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                _control(Icons.replay_10, 'Назад на 10 секунд', () => _seek(const Duration(seconds: -10)), size: wide ? 44 : 34),
-                                const SizedBox(width: 20),
-                                _control(Icons.pause_circle_filled, 'Пауза', c.pause, size: wide ? 64 : 52),
-                                const SizedBox(width: 20),
-                                _control(Icons.forward_10, 'Вперёд на 10 секунд', () => _seek(const Duration(seconds: 10)), size: wide ? 44 : 34),
-                              ],
-                            ))
-                          else
-                            Center(child: _control(Icons.play_circle_fill, 'Воспроизвести', c.play, size: 68)),
-                        ]),
-                      ))),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: wide ? 28 : 12, vertical: 8),
-                        child: Column(children: [
-                          SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 4,
-                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+              ]),
+            )).toList(),
+            child: const Padding(
+              padding: EdgeInsets.all(9),
+              child: Icon(Icons.hd_outlined, color: Colors.white),
+            ),
+          ),
+        if (widget.onChooseEpisode != null && widget.onResolveEpisode != null)
+          IconButton(
+            tooltip: 'Выбрать серию',
+            onPressed: _selectEpisode,
+            color: Colors.white,
+            icon: const Icon(Icons.video_library_outlined),
+          ),
+        PopupMenuButton<double>(
+          tooltip: 'Скорость',
+          initialValue: _speed,
+          onSelected: (speed) async {
+            await c?.setPlaybackSpeed(speed);
+            if (mounted) setState(() => _speed = speed);
+          },
+          itemBuilder: (_) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+            .map((speed) => PopupMenuItem(value: speed, child: Text('${speed}×'))).toList(),
+          child: Padding(
+            padding: const EdgeInsets.all(9),
+            child: Text('${_speed}×', style: const TextStyle(color: Colors.white)),
+          ),
+        ),
+        IconButton(
+          tooltip: 'Громкость',
+          color: Colors.white,
+          onPressed: () => c?.setVolume((value?.volume ?? 1) > 0 ? 0 : 1),
+          icon: Icon((value?.volume ?? 1) > 0 ? Icons.volume_up : Icons.volume_off),
+        ),
+        IconButton(
+          tooltip: _fullscreen ? 'Выйти из полного экрана' : 'Полный экран',
+          color: Colors.white,
+          onPressed: _toggleFullscreen,
+          icon: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+        ),
+        if (_fullscreen)
+          IconButton(
+            tooltip: 'Закрыть плеер',
+            color: Colors.white,
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: const Icon(Icons.close),
+          ),
+      ],
+    );
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.escape): _exitFullscreen,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          appBar: _fullscreen ? null : AppBar(
+            title: Text(_activeTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+            backgroundColor: Colors.black,
+          ),
+          body: SafeArea(
+            child: _busy
+              ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  CircularProgressIndicator(), SizedBox(height: 14),
+                  Text('Загружаем видео…'),
+                ]))
+              : _error != null
+                ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(
+                    mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.error_outline, color: Colors.orange, size: 52),
+                      const SizedBox(height: 16),
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton.icon(onPressed: _initialize, icon: const Icon(Icons.refresh), label: const Text('Повторить')),
+                    ],
+                  )))
+                : !ready || c == null
+                  ? const Center(child: Text('Плеер не инициализирован'))
+                  : MouseRegion(
+                      onHover: (_) => _revealControls(),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: _revealControls,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Center(
+                              child: FittedBox(
+                                fit: _videoFit,
+                                child: SizedBox(
+                                  width: value!.size.width > 0 ? value.size.width : 1280,
+                                  height: value.size.height > 0 ? value.size.height : 720,
+                                  child: VideoPlayer(c),
+                                ),
+                              ),
                             ),
-                            child: Slider(
-                              min: 0,
-                              max: totalMs > 0 ? totalMs.toDouble() : 1,
-                              value: totalMs > 0 ? currentMs : 0,
-                              onChanged: totalMs <= 0 ? null : (v) => c.seekTo(Duration(milliseconds: v.round())),
-                            ),
-                          ),
-                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                            Text(_time(position), style: const TextStyle(color: Colors.white70)),
-                            Text(_time(duration), style: const TextStyle(color: Colors.white70)),
-                          ]),
-                          const SizedBox(height: 4),
-                          Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 10, children: [
-                            _control(Icons.replay_10, 'Назад 10 секунд', () => _seek(const Duration(seconds: -10)), size: 30),
-                            _control(v.isPlaying ? Icons.pause : Icons.play_arrow,
-                              v.isPlaying ? 'Пауза' : 'Воспроизвести',
-                              () => v.isPlaying ? c.pause() : c.play(), size: 42),
-                            _control(Icons.forward_10, 'Вперёд 10 секунд', () => _seek(const Duration(seconds: 10)), size: 30),
-                            if (_activeVariants.length > 1)
-                              PopupMenuButton<ArchiveVideoVariant>(
-                                tooltip: 'Качество видео',
-                                onSelected: _selectQuality,
-                                itemBuilder: (_) => _activeVariants.map((variant) =>
-                                  PopupMenuItem(
-                                    value: variant,
-                                    child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                      const Icon(Icons.hd_outlined, size: 18),
-                                      const SizedBox(width: 8),
-                                      Text(variant.label),
-                                      if (variant.url.toString() == _activeUrl) ...[
-                                        const SizedBox(width: 10), const Icon(Icons.check, size: 16),
-                                      ],
+                            if (value.isBuffering)
+                              const Center(child: CircularProgressIndicator()),
+                            if (_controlsVisible) ...[
+                              Positioned(
+                                left: 0, right: 0, top: 0,
+                                child: DecoratedBox(
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                                      colors: [Colors.black87, Colors.transparent]),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
+                                    child: Row(children: [
+                                      Expanded(child: Text(_activeTitle,
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.white, fontSize: 16))),
+                                      if (_fullscreen)
+                                        IconButton(
+                                          tooltip: 'Выйти из полного экрана',
+                                          onPressed: _exitFullscreen,
+                                          color: Colors.white,
+                                          icon: const Icon(Icons.fullscreen_exit),
+                                        ),
+                                      IconButton(
+                                        tooltip: 'Закрыть плеер',
+                                        onPressed: () => Navigator.of(context).maybePop(),
+                                        color: Colors.white,
+                                        icon: const Icon(Icons.close),
+                                      ),
                                     ]),
-                                  )).toList(),
-                                child: Padding(padding: const EdgeInsets.all(10), child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.hd_outlined),
-                                    const SizedBox(width: 4),
-                                    Text(widget.variants.firstWhere(
-                                      (v) => v.url.toString() == _activeUrl,
-                                      orElse: () => widget.variants.first,
-                                    ).label),
-                                  ],
-                                )),
+                                  ),
+                                ),
                               ),
-                            if (widget.onChooseEpisode != null && widget.onResolveEpisode != null)
-                              FilledButton.tonalIcon(
-                                onPressed: _selectEpisode,
-                                icon: const Icon(Icons.video_library_outlined),
-                                label: const Text('Серия'),
+                              if (!value.isPlaying)
+                                Center(child: _control(Icons.play_circle_fill, 'Воспроизвести', () {
+                                  c.play();
+                                  _revealControls();
+                                }, size: 72)),
+                              Positioned(
+                                left: 0, right: 0, bottom: 0,
+                                child: DecoratedBox(
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                                      colors: [Colors.black87, Colors.transparent]),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+                                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                      SliderTheme(
+                                        data: SliderTheme.of(context).copyWith(
+                                          trackHeight: 4,
+                                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                                        ),
+                                        child: Slider(
+                                          min: 0,
+                                          max: totalMs > 0 ? totalMs.toDouble() : 1,
+                                          value: totalMs > 0 ? currentMs : 0,
+                                          onChanged: totalMs <= 0 ? null : (ms) {
+                                            c.seekTo(Duration(milliseconds: ms.round()));
+                                            _revealControls();
+                                          },
+                                        ),
+                                      ),
+                                      Row(children: [
+                                        Text(_time(position), style: const TextStyle(color: Colors.white70)),
+                                        const Spacer(),
+                                        Flexible(child: controlBar()),
+                                        const Spacer(),
+                                        Text(_time(duration), style: const TextStyle(color: Colors.white70)),
+                                      ]),
+                                    ]),
+                                  ),
+                                ),
                               ),
-                            PopupMenuButton<double>(
-                              tooltip: 'Скорость',
-                              initialValue: _speed,
-                              onSelected: (v) async { await c.setPlaybackSpeed(v); if (mounted) setState(() => _speed = v); },
-                              itemBuilder: (_) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-                                .map((v) => PopupMenuItem(value: v, child: Text('${v}×'))).toList(),
-                              child: Padding(padding: const EdgeInsets.all(10), child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                const Icon(Icons.speed), const SizedBox(width: 4), Text('${_speed}×'),
-                              ])),
-                            ),
-                            IconButton(
-                              tooltip: 'Громкость',
-                              onPressed: () => c.setVolume(v.volume > 0 ? 0 : 1),
-                              icon: Icon(v.volume > 0 ? Icons.volume_up : Icons.volume_off),
-                            ),
-                            IconButton(
-                              tooltip: _fullscreen ? 'Обычный режим' : 'Полный экран',
-                              onPressed: _toggleFullscreen,
-                              icon: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
-                            ),
-                          ]),
-                        ]),
+                            ],
+                          ],
+                        ),
                       ),
-                    ]),
-                  ));
-                }),
+                    ),
+          ),
+        ),
       ),
     );
   }
