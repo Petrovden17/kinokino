@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/app_settings.dart';
 
-class SettingsService {
+class SettingsService extends ChangeNotifier {
   static const _key = 'kinokino_settings_v1';
   static const _lastUpdateCheckKey = 'kinokino_last_update_check';
   AppSettings _settings = const AppSettings();
@@ -37,5 +38,6 @@ class SettingsService {
     _settings = value;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(value.toJson()));
+    notifyListeners();
   }
 }
