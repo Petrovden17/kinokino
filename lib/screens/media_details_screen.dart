@@ -34,20 +34,91 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     LocalDatabase.recordOpen(widget.item.id, widget.item.title, widget.item.posterPath, mediaType: _type).catchError((_) {});
   }
   Future<void> _load() async {
+    Map<String, dynamic>? details;
+    List<MediaItem> picks = [];
+    String? error;
     try {
-      final d = await _tmdb.details(widget.item.id, type: _type);
-      final r = await _tmdb.recommendations(widget.item.id, type: _type);
-      if (mounted) setState(() {
-        _details = d;
-        _recommendations = r;
-        _loading = false;
-      });
+      details = await _tmdb.details(widget.item.id, type: _type);
     } catch (e) {
-      if (mounted) setState(() {
-        _error = e.toString();
-        _loading = false;
-      });
+      error = e.toString();
     }
+    // Recommendations are loaded independently: a failure in one endpoint
+    // must not hide the rest of the details page.
+    try {
+      picks = await _tmdb.recommendations(widget.item.id, type: _type);
+    } catch (_) {}
+    if (picks.isEmpty) {
+      try { picks = await _tmdb.similar(widget.item.id, type: _type); } catch (_) {}
+    }
+    if (picks.isEmpty && details != null) {
+      final section = details['recommendations'] ?? details['similar'];
+      final rows = (section is Map ? section['results'] : null) as List? ?? const [];
+      picks = rows.whereType<Map>().map((e) => MediaItem.fromJson(Map<String, dynamic>.from(e)
+        ..putIfAbsent('media_type', () => _type))).where((e) => e.id != widget.item.id).toList();
+    }
+    if (mounted) setState(() {
+      _details = details;
+      _recommendations = picks;
+      _error = error;
+      _loading = false;
+    });
+  }
+
+  Future<Map<String, dynamic>?> _chooseEpisode() async {
+    final seasons = (_details?['seasons'] as List? ?? const [])
+        .whereType<Map>()
+        .where((s) => (s['episode_count'] as num? ?? 0) > 0)
+        .toList();
+    if (seasons.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('TMDB пока не содержит список сезонов этого сериала.')));
+      return null;
+    }
+    final season = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Выбери сезон'),
+        content: SizedBox(width: 420, child: ListView(
+          shrinkWrap: true,
+          children: seasons.map((s) => ListTile(
+            title: Text((s['name'] ?? 'Сезон ${s['season_number']}').toString()),
+            subtitle: Text('${s['episode_count']} эпизодов'),
+            onTap: () => Navigator.pop(ctx, Map<String, dynamic>.from(s)),
+          )).toList(),
+        )),
+      ),
+    );
+    if (season == null || !mounted) return null;
+    final seasonNumber = (season['season_number'] as num?)?.toInt() ?? 1;
+    final seasonData = await _tmdb.seasonDetails(widget.item.id, seasonNumber);
+    final episodes = (seasonData['episodes'] as List? ?? const []).whereType<Map>().toList();
+    if (episodes.isEmpty || !mounted) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('В этом сезоне нет доступных данных об эпизодах.')));
+      return null;
+    }
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text((season['name'] ?? 'Сезон $seasonNumber').toString()),
+        content: SizedBox(width: 520, height: 420, child: ListView.builder(
+          itemCount: episodes.length,
+          itemBuilder: (_, i) {
+            final ep = Map<String, dynamic>.from(episodes[i]);
+            final number = (ep['episode_number'] as num?)?.toInt() ?? i + 1;
+            final runtime = (ep['runtime'] as num?)?.toInt() ??
+                ((_details?['episode_run_time'] as List?)?.whereType<num>().firstOrNull?.toInt() ?? 0);
+            return ListTile(
+              title: Text('$number. ${ep['name'] ?? 'Эпизод $number'}'),
+              subtitle: Text(runtime > 0 ? '$runtime мин.' : 'Хронометраж не указан'),
+              onTap: () => Navigator.pop(ctx, {
+                ...ep,
+                'season_number': seasonNumber,
+                'runtime': runtime,
+              }),
+            );
+          },
+        )),
+      ),
+    );
   }
   Future<void> _saveRating(double value) async {
     setState(() => _rating = value);
@@ -57,6 +128,19 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
 
   Future<void> _startPlayback() async {
     if (_searchingPlayback) return;
+    String sourceTitle = _playbackSearchTitle;
+    int expectedRuntime = (_details?['runtime'] as num?)?.toInt() ?? 0;
+    Map<String, dynamic>? selectedEpisode;
+    if (_type == 'tv') {
+      selectedEpisode = await _chooseEpisode();
+      if (selectedEpisode == null || !mounted) return;
+      sourceTitle = (selectedEpisode['name'] ?? '').toString();
+      expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
+    }
+    if (expectedRuntime <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен хронометраж. Не буду запускать непроверенный ролик.')));
+      return;
+    }
     setState(() => _searchingPlayback = true);
     showDialog<void>(
       context: context,
@@ -72,8 +156,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     var dialogClosed = false;
     try {
       final source = await InternetArchiveService().findLicensedVideo(
-        _playbackSearchTitle,
-        isSeries: _type == 'tv',
+        sourceTitle,
+        expectedRuntimeMinutes: expectedRuntime,
       );
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
@@ -87,7 +171,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         return;
       }
       await Navigator.push(context, MaterialPageRoute(builder: (_) =>
-        PlayerScreen(streamUrl: source.url.toString(), title: source.title)));
+        PlayerScreen(streamUrl: source.url.toString(), title: source.title, variants: source.variants)));
     } catch (e) {
       if (!mounted) return;
       if (!dialogClosed) Navigator.of(context, rootNavigator: true).pop();
@@ -149,6 +233,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             Chip(label: Text('TMDB ★ ${item.voteAverage.toStringAsFixed(1)}')),
             Chip(label: Text(item.mediaType == 'tv' ? 'Сериал' : 'Фильм')),
             if (item.releaseDate.isNotEmpty) Chip(label: Text(item.releaseDate.split('-').first)),
+            if (_type == 'movie' && (_details?['runtime'] as num? ?? 0) > 0) Chip(label: Text('${_details!['runtime']} мин.')),
           ]),
           if (genres.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(genres)),
           const SizedBox(height: 16),
