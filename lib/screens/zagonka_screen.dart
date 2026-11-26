@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 class ZagonkaScreen extends StatefulWidget {
@@ -14,8 +15,30 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _controller;
   double _progress = 0;
   String? _pageError;
+  bool _isFullscreen = false;
+
+  Future<void> _setFullscreen(bool enabled) async {
+    if (!mounted || _isFullscreen == enabled) return;
+    setState(() => _isFullscreen = enabled);
+    if (enabled) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      await SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      await SystemChrome.setPreferredOrientations(const []);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
+  }
+
+  Future<void> _toggleFullscreen() => _setFullscreen(!_isFullscreen);
 
   Future<void> _goBack() async {
+    if (_isFullscreen) {
+      await _setFullscreen(false);
+      return;
+    }
     final controller = _controller;
     if (controller != null && await controller.canGoBack()) {
       await controller.goBack();
@@ -31,36 +54,47 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
+  Future<void> _hideSiteBranding(InAppWebViewController controller) async {
+    // Hide only the small site-brand label; do not remove the player or its controls.
+    await controller.evaluateJavascript(source: r"""
+      (() => {
+        const hideBrand = () => {
+          const nodes = Array.from(document.querySelectorAll('body *'));
+          for (const node of nodes) {
+            if (node.children.length > 2) continue;
+            const label = (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!/^(?:az|аз)\s*фильм$/i.test(label)) continue;
+            const rect = node.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0 && rect.height < 120) {
+              node.style.setProperty('display', 'none', 'important');
+              node.setAttribute('data-kinokino-hidden-brand', 'true');
+            }
+          }
+        };
+        hideBrand();
+        if (!window.__kinokinoBrandObserver) {
+          window.__kinokinoBrandObserver = new MutationObserver(hideBrand);
+          window.__kinokinoBrandObserver.observe(document.documentElement, {
+            childList: true, subtree: true, characterData: true
+          });
+        }
+      })();
+    """);
+  }
+
+  @override
+  void dispose() {
+    SystemChrome.setPreferredOrientations(const []);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('${widget.title} · Zagonka', maxLines: 1, overflow: TextOverflow.ellipsis),
-        leading: IconButton(
-          tooltip: 'Назад',
-          onPressed: _goBack,
-          icon: const Icon(Icons.arrow_back),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Вперёд',
-            onPressed: _goForward,
-            icon: const Icon(Icons.arrow_forward),
-          ),
-          IconButton(
-            tooltip: 'Обновить',
-            onPressed: () => _controller?.reload(),
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-        bottom: _progress > 0 && _progress < 1
-            ? PreferredSize(
-                preferredSize: const Size.fromHeight(3),
-                child: LinearProgressIndicator(value: _progress),
-              )
-            : null,
-      ),
+      backgroundColor: Colors.black,
       body: Stack(
+        fit: StackFit.expand,
         children: [
           InAppWebView(
             initialUrlRequest: URLRequest(url: WebUri('https://8.zagonka.xyz/')),
@@ -68,9 +102,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               javaScriptEnabled: true,
               mediaPlaybackRequiresUserGesture: false,
               allowsInlineMediaPlayback: true,
+              isElementFullscreenEnabled: true,
               useShouldOverrideUrlLoading: true,
               supportMultipleWindows: false,
               transparentBackground: false,
+              supportZoom: false,
+              useWideViewPort: true,
+              loadWithOverviewMode: true,
             ),
             onWebViewCreated: (controller) => _controller = controller,
             onLoadStart: (controller, url) {
@@ -84,11 +122,12 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               if (mounted) setState(() => _progress = progress / 100);
             },
             onLoadStop: (controller, url) async {
+              await _hideSiteBranding(controller);
               if (!mounted) return;
-              setState(() {
-                _progress = 1;
-              });
+              setState(() => _progress = 1);
             },
+            onEnterFullscreen: (controller) => _setFullscreen(true),
+            onExitFullscreen: (controller) => _setFullscreen(false),
             onReceivedError: (controller, request, error) {
               if (request.isForMainFrame != true || !mounted) return;
               setState(() {
@@ -97,36 +136,100 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             },
             onCreateWindow: (controller, action) async => false,
           ),
-          if (_pageError != null)
-            Positioned(
-              left: 20,
-              right: 20,
-              bottom: 20,
-              child: Material(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(14),
-                elevation: 8,
+          if (_progress > 0 && _progress < 1)
+            Align(
+              alignment: Alignment.topCenter,
+              child: LinearProgressIndicator(value: _progress, minHeight: 2),
+            ),
+          if (!_isFullscreen)
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topCenter,
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.wifi_off),
-                      const SizedBox(width: 12),
-                      Expanded(child: Text(_pageError!)),
-                      IconButton(
-                        tooltip: 'Повторить',
-                        onPressed: () {
-                          setState(() => _pageError = null);
-                          _controller?.reload();
-                        },
-                        icon: const Icon(Icons.refresh),
+                      _overlayButton(Icons.arrow_back, 'Назад', _goBack),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: IgnorePointer(
+                          child: Container(
+                            margin: const EdgeInsets.only(top: 3),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.58),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              widget.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
+                      const SizedBox(width: 8),
+                      _overlayButton(Icons.fullscreen, 'На весь экран', _toggleFullscreen),
                     ],
                   ),
                 ),
               ),
+            )
+          else
+            SafeArea(
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: _overlayButton(Icons.fullscreen_exit, 'Выйти из полного экрана', _toggleFullscreen),
+                ),
+              ),
+            ),
+          if (_pageError != null)
+            Center(
+              child: Container(
+                margin: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF202020),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.wifi_off, color: Colors.white),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(_pageError!, style: const TextStyle(color: Colors.white))),
+                    IconButton(
+                      tooltip: 'Повторить',
+                      onPressed: () {
+                        setState(() => _pageError = null);
+                        _controller?.reload();
+                      },
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _overlayButton(IconData icon, String tooltip, VoidCallback onPressed) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.62),
+      shape: const CircleBorder(),
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onPressed,
+        icon: Icon(icon, color: Colors.white),
       ),
     );
   }
