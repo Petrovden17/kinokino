@@ -17,7 +17,6 @@ class ZagonkaScreen extends StatefulWidget {
 
 class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _controller;
-  int? _popupWindowId;
   double _progress = 0;
   String? _pageError;
   bool _isFullscreen = false;
@@ -123,12 +122,64 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       onCreateWindow: (controller, action) async {
         debugPrint('[KinoKino popup] requested windowId=${action.windowId} url=${action.request.url}');
         if (!mounted) return false;
-        setState(() => _popupWindowId = action.windowId);
+
+        // Android creates target=_blank/window.open pages as a separate native
+        // WebView. Host it in a real fullscreen route so Hybrid Composition
+        // cannot leave the popup behind the parent WebView in the Flutter Stack.
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          useSafeArea: false,
+          builder: (dialogContext) => PopScope(
+            canPop: true,
+            child: Scaffold(
+              backgroundColor: Colors.black,
+              body: InAppWebView(
+                key: ValueKey('kinokino-popup-${action.windowId}'),
+                windowId: action.windowId,
+                initialSettings: InAppWebViewSettings(
+                  javaScriptEnabled: true,
+                  javaScriptCanOpenWindowsAutomatically: true,
+                  mediaPlaybackRequiresUserGesture: false,
+                  allowsInlineMediaPlayback: true,
+                  domStorageEnabled: true,
+                  thirdPartyCookiesEnabled: true,
+                  hardwareAcceleration: true,
+                  enableEncryptedMedia: true,
+                  enableMedia: true,
+                  isElementFullscreenEnabled: true,
+                  supportMultipleWindows: true,
+                  useHybridComposition: defaultTargetPlatform == TargetPlatform.android,
+                  mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+                ),
+                onWebViewCreated: (popupController) {
+                  debugPrint('[KinoKino popup] native popup attached');
+                },
+                onLoadStart: (popupController, url) {
+                  debugPrint('[KinoKino popup] load start: $url');
+                },
+                onLoadStop: (popupController, url) {
+                  debugPrint('[KinoKino popup] load finished: $url');
+                },
+                onReceivedError: (popupController, request, error) {
+                  debugPrint('[KinoKino popup] load error main=${request.isForMainFrame}: ${error.description} ${request.url}');
+                },
+                onReceivedHttpError: (popupController, request, response) {
+                  debugPrint('[KinoKino popup] HTTP ${response.statusCode} main=${request.isForMainFrame}: ${request.url}');
+                },
+                onCloseWindow: (popupController) {
+                  debugPrint('[KinoKino popup] close callback');
+                  if (Navigator.of(dialogContext).canPop()) {
+                    Navigator.of(dialogContext).pop();
+                  }
+                },
+                onEnterFullscreen: (popupController) => _setFullscreen(true),
+                onExitFullscreen: (popupController) => _setFullscreen(false),
+              ),
+            ),
+          ),
+        );
         return true;
-      },
-      onCloseWindow: (controller) {
-        debugPrint('[KinoKino popup] closed');
-        if (mounted) setState(() => _popupWindowId = null);
       },
       onLoadStart: (controller, url) {
         debugPrint('[KinoKino WebView] load start: $url');
@@ -180,43 +231,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         fit: StackFit.expand,
         children: [
           _buildPlayerView(),
-          if (_popupWindowId != null)
-            Positioned.fill(
-              child: InAppWebView(
-                windowId: _popupWindowId,
-                initialSettings: InAppWebViewSettings(
-                  javaScriptEnabled: true,
-                  javaScriptCanOpenWindowsAutomatically: true,
-                  mediaPlaybackRequiresUserGesture: false,
-                  allowsInlineMediaPlayback: true,
-                  domStorageEnabled: true,
-                  thirdPartyCookiesEnabled: true,
-                  hardwareAcceleration: true,
-                  enableEncryptedMedia: true,
-                  enableMedia: true,
-                  isElementFullscreenEnabled: true,
-                  supportMultipleWindows: true,
-                  useHybridComposition: defaultTargetPlatform == TargetPlatform.android,
-                  useOnLoadResource: defaultTargetPlatform == TargetPlatform.android,
-                  mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-                ),
-                onWebViewCreated: (popupController) {
-                  debugPrint('[KinoKino popup] WebView created');
-                },
-                onLoadStart: (popupController, url) {
-                  debugPrint('[KinoKino popup] load start: $url');
-                },
-                onLoadStop: (popupController, url) {
-                  debugPrint('[KinoKino popup] load finished: $url');
-                },
-                onCloseWindow: (popupController) {
-                  debugPrint('[KinoKino popup] close callback');
-                  if (mounted) setState(() => _popupWindowId = null);
-                },
-                onEnterFullscreen: (popupController) => _setFullscreen(true),
-                onExitFullscreen: (popupController) => _setFullscreen(false),
-              ),
-            ),
           if (_progress > 0 && _progress < 1)
             Align(
               alignment: Alignment.topCenter,
