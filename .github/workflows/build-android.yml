@@ -35,6 +35,23 @@ jobs:
       - name: Generate Android runner
         run: flutter create --platforms=android --org com.osirisvectory --project-name=kinokino .
 
+      - name: Ensure Android internet permission
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          content = manifest.read_text(encoding="utf-8")
+          permission = '    <uses-permission android:name="android.permission.INTERNET" />\\n'
+          if "android.permission.INTERNET" not in content:
+              marker = "    <application"
+              if marker not in content:
+                  raise SystemExit("Android manifest has no application element")
+              content = content.replace(marker, permission + marker, 1)
+              manifest.write_text(content, encoding="utf-8")
+          PY
+          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
+
       - name: Get Flutter dependencies
         run: flutter pub get
 
