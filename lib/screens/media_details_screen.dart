@@ -89,7 +89,14 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     );
     if (season == null || !mounted) return null;
     final seasonNumber = (season['season_number'] as num?)?.toInt() ?? 1;
-    final seasonData = await _tmdb.seasonDetails(widget.item.id, seasonNumber);
+    Map<String, dynamic> seasonData;
+    try {
+      seasonData = await _tmdb.seasonDetails(widget.item.id, seasonNumber);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось загрузить список эпизодов. Попробуй ещё раз.')));
+      return null;
+    }
     final episodes = (seasonData['episodes'] as List? ?? const []).whereType<Map>().toList();
     if (episodes.isEmpty || !mounted) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('В этом сезоне нет доступных данных об эпизодах.')));
@@ -104,8 +111,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           itemBuilder: (_, i) {
             final ep = Map<String, dynamic>.from(episodes[i]);
             final number = (ep['episode_number'] as num?)?.toInt() ?? i + 1;
-            final runtime = (ep['runtime'] as num?)?.toInt() ??
-                ((_details?['episode_run_time'] as List?)?.whereType<num>().firstOrNull?.toInt() ?? 0);
+            final runtimeList = _details?['episode_run_time'] as List? ?? const [];
+            final defaultRuntime = runtimeList.whereType<num>().isEmpty
+                ? 0 : runtimeList.whereType<num>().first.toInt();
+            final runtime = (ep['runtime'] as num?)?.toInt() ?? defaultRuntime;
             return ListTile(
               title: Text('$number. ${ep['name'] ?? 'Эпизод $number'}'),
               subtitle: Text(runtime > 0 ? '$runtime мин.' : 'Хронометраж не указан'),
