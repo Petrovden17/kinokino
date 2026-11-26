@@ -25,7 +25,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _value = widget.service.settings;
   }
 
-  Future<void> _save(AppSettings next) async {
+  Widget _colorChoice(Color color, String label) {\n    final selected = _value.accentColorValue == color.value;\n    return InkWell(\n      borderRadius: BorderRadius.circular(12),\n      onTap: () => _save(_value.copyWith(accentColorValue: color.value)),\n      child: Container(\n        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),\n        decoration: BoxDecoration(\n          color: selected ? color.withValues(alpha: .16) : Colors.white.withValues(alpha: .035),\n          borderRadius: BorderRadius.circular(12),\n          border: Border.all(color: selected ? color : Colors.white24, width: selected ? 1.6 : 1),\n        ),\n        child: Row(mainAxisSize: MainAxisSize.min, children: [\n          Container(width: 18, height: 18, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),\n          const SizedBox(width: 7), Text(label),\n          if (selected) ...[const SizedBox(width: 5), Icon(Icons.check, size: 15, color: color)],\n        ]),\n      ),\n    );\n  }\n\n  Future<void> _save(AppSettings next) async {
     await widget.service.update(next);
     if (mounted) setState(() { _value = next; _notice = 'Настройки сохранены.'; });
   }
@@ -109,7 +109,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Настройки')),
     body: ListView(padding: const EdgeInsets.all(16), children: [
-      if (_notice != null) Padding(padding: const EdgeInsets.only(bottom: 12), child: SelectableText(_notice!)),
+      if (_notice != null) Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: (_notice!.contains('последняя версия') ? Colors.green : Theme.of(context).colorScheme.primary).withValues(alpha: .13),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: (_notice!.contains('последняя версия') ? Colors.green : Theme.of(context).colorScheme.primary).withValues(alpha: .45)),
+          ),
+          child: Row(children: [
+            Icon(_notice!.contains('последняя версия') ? Icons.check_circle_outline : Icons.info_outline,
+                color: _notice!.contains('последняя версия') ? Colors.greenAccent : Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 10),
+            Expanded(child: SelectableText(_notice!, style: const TextStyle(fontWeight: FontWeight.w600))),
+          ]),
+        ),
+      ),
+      const Text('Цвет приложения', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+      const SizedBox(height: 5),
+      const Text('Выбери акцентный цвет для кнопок, выделений и элементов интерфейса.'),
+      const SizedBox(height: 12),
+      Wrap(spacing: 12, runSpacing: 12, children: [
+        _colorChoice(const Color(0xFFFF765E), 'Коралловый'),
+        _colorChoice(const Color(0xFF5B9BFF), 'Синий'),
+        _colorChoice(const Color(0xFF9B7BFF), 'Фиолетовый'),
+        _colorChoice(const Color(0xFF35C99A), 'Изумрудный'),
+        _colorChoice(const Color(0xFFFFC45C), 'Золотой'),
+        _colorChoice(const Color(0xFFFF5C9A), 'Розовый'),
+        _colorChoice(const Color(0xFF5ED8D0), 'Бирюзовый'),
+      ]),
+      const SizedBox(height: 14),
       const Text('Язык', style: TextStyle(fontWeight: FontWeight.bold)),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
