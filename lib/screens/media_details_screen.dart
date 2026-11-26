@@ -185,7 +185,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
                   : const ColoredBox(color: Color(0xFF172235)),
               ),
               Positioned.fill(
-                child: ColoredBox(color: Colors.black.withValues(alpha: 0.58)),
+                child: ColoredBox(color: Colors.black.withOpacity(0.58)),
               ),
               if (poster != null)
                 Padding(
