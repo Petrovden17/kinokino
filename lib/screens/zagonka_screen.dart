@@ -100,7 +100,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               enableMedia: true,
               isElementFullscreenEnabled: true,
               useShouldOverrideUrlLoading: true,
-              supportMultipleWindows: true,
+              // Keep window.open navigations in the current WebView. Some video
+              // providers create an about:blank popup and assign its URL later;
+              // intercepting only the initial request leaves the player black.
+              supportMultipleWindows: false,
+              javaScriptCanOpenWindowsAutomatically: true,
+              mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+              useHybridComposition: true,
               transparentBackground: false,
               supportZoom: false,
               useWideViewPort: false,
@@ -134,16 +140,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               if ((errorResponse.statusCode ?? 0) >= 400) {
                 setState(() => _pageError = 'KinoKino вернул ошибку HTTP ${errorResponse.statusCode}. Нажми «Обновить», чтобы попробовать снова.');
               }
-            },
-            // Some embedded players open their stream through window.open.
-            // Keep that navigation inside this WebView instead of blocking it
-            // or sending playback to an external browser.
-            onCreateWindow: (controller, action) async {
-              final targetUrl = action.request.url;
-              if (targetUrl != null) {
-                await controller.loadUrl(urlRequest: URLRequest(url: targetUrl));
-              }
-              return false;
             },
           ),
           if (_progress > 0 && _progress < 1)
