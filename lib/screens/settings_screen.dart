@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_settings.dart';
 import '../services/settings_service.dart';
@@ -165,67 +164,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     } finally {
       if (mounted) setState(() => _betaLoading = false);
     }
-  }
-
-  Future<void> _openBetaRelease() async {
-    final asset = _betaRelease?['beta_asset'];
-    final url = asset is Map ? (asset['browser_download_url'] ?? '').toString() : '';
-    final uri = Uri.tryParse(url);
-    if (uri == null || uri.scheme != 'https') return;
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
-      setState(() => _notice = 'Не удалось открыть бета-сборку.');
-    }
-  }
-
-  Future<void> _openBetaWorkflow() async {
-    if (!_isCreator) return;
-    final uri = Uri.parse('https://github.com/Petrovden17/kinokino/actions/workflows/build-windows.yml');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
-      setState(() => _notice = 'Не удалось открыть страницу сборки.');
-    }
-  }
-
-  Widget _betaSettingsSection() {
-    final release = _betaRelease;
-    final tag = (release?['tag_name'] ?? '').toString();
-    final name = (release?['name'] ?? tag).toString();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Row(children: [
-            Icon(Icons.science_outlined),
-            SizedBox(width: 10),
-            Text('Бета-версии', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          ]),
-          const SizedBox(height: 8),
-          Text(_betaLoading
-              ? 'Проверяем тестовые сборки…'
-              : release == null
-                  ? 'Новых тестовых сборок пока нет.'
-                  : 'Последняя сборка: $name'),
-          const SizedBox(height: 10),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            OutlinedButton.icon(
-              onPressed: _betaLoading ? null : _loadBetaAccess,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Обновить'),
-            ),
-            if (release != null)
-              FilledButton.icon(
-                onPressed: _openBetaRelease,
-                icon: const Icon(Icons.download),
-                label: const Text('Скачать бета-версию'),
-              ),
-            OutlinedButton.icon(
-              onPressed: _openBetaWorkflow,
-              icon: const Icon(Icons.build_outlined),
-              label: const Text('Открыть сборку'),
-            ),
-          ]),
-        ]),
-      ),
-    );
   }
 
   Future<void> _checkForUpdates() async {
