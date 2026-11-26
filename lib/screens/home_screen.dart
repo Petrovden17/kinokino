@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/creator_service.dart';
@@ -216,6 +217,25 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _surpriseMe() async {
+    var candidates = _items.where((item) => item.hasRussianTitle).toList();
+    if (candidates.isEmpty) {
+      try {
+        candidates = (await _tmdb.trending(page: 1))
+            .where((item) => item.hasRussianTitle).toList();
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    if (candidates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Пока нет подходящих фильмов для случайного выбора.')),
+      );
+      return;
+    }
+    final item = candidates[Random().nextInt(candidates.length)];
+    await _open(item);
+  }
+
   Future<void> _showSearchDialog() async {
     final controller = TextEditingController(text: _search.text);
     final query = await showDialog<String>(
@@ -393,6 +413,11 @@ class _HomeScreenState extends State<HomeScreen> {
               style: const TextStyle(fontSize: 10, color: Colors.white60)),
         ]),
         actions: [
+          IconButton(
+            tooltip: 'Удиви меня',
+            onPressed: _loading ? null : _surpriseMe,
+            icon: const Icon(Icons.shuffle_rounded),
+          ),
           if (_showTopSearch)
             IconButton(
               tooltip: 'Поиск',
