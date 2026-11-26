@@ -37,6 +37,7 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
   }
 
   void _scheduleUpdateChecks() {
+    if (defaultTargetPlatform != TargetPlatform.windows) return;
     _checkIfUpdateCheckDue();
     _updateTimer?.cancel();
     _updateTimer = Timer.periodic(const Duration(minutes: 1), (_) => _checkIfUpdateCheckDue());
