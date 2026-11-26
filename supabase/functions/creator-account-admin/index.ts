@@ -53,24 +53,23 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 100 });
       if (error) return json({ error: error.message }, 400);
 
-      const users = await Promise.all(data.users.map(async (user) => {
-        const { data: role } = await admin
-          .from("kinokino_creator_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        return {
-          id: user.id,
-          email: user.email ?? "",
-          display_name: user.user_metadata?.display_name ?? "",
-          created_at: user.created_at,
-          last_sign_in_at: user.last_sign_in_at,
-          banned_until: user.banned_until,
-          email_confirmed_at: user.email_confirmed_at,
-          is_creator: role?.role === "creator",
-        };
+      const { data: roles, error: rolesError } = await admin
+        .from("kinokino_creator_roles")
+        .select("user_id")
+        .in("user_id", data.users.map((user) => user.id));
+      if (rolesError) return json({ error: rolesError.message }, 400);
+      const creatorIds = new Set((roles ?? []).map((role) => role.user_id));
+      const users = data.users.map((user) => ({
+        id: user.id,
+        email: user.email ?? "",
+        display_name: user.user_metadata?.display_name ?? "",
+        created_at: user.created_at,
+        last_sign_in_at: user.last_sign_in_at,
+        banned_until: user.banned_until,
+        email_confirmed_at: user.email_confirmed_at,
+        is_creator: creatorIds.has(user.id),
       }));
-      return json({ users, page, last_page: data.lastPage ?? null, total: data.total ?? null });
+      return json({ users, page });
     }
 
     const targetId = String(body?.user_id ?? "");
