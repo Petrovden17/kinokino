@@ -151,7 +151,7 @@ class InternetArchiveService {
           final format = (file['format'] ?? '').toString().toLowerCase();
           if (format.contains('mpeg4') == false && format.contains('h.264') == false &&
               !lower.endsWith('.mp4')) continue;
-          final duration = _seconds(file['length']) ?? _seconds(metadata['runtime']);
+          final duration = _seconds(file['length']);
           if (!_durationMatches(duration, expectedRuntimeMinutes)) continue;
           final height = int.tryParse(file['height']?.toString() ?? '') ?? _qualityRank(file);
           final encodedName = Uri.encodeComponent(name);
