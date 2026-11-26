@@ -46,7 +46,13 @@ class _HomeScreenState extends State<HomeScreen>{
       }
       final groups=await Future.wait(requests);
       final unique=<String,MediaItem>{};for(final group in groups){for(final item in group){unique['${item.mediaType}:${item.id}']=item;}}
-      if(mounted)setState((){_items=unique.values.toList();_page=10;_hasMore=true;});
+      if (mounted) {
+        setState(() {
+          _items = unique.values.toList();
+          _page = 10;
+          _hasMore = true;
+        });
+      }
     }catch(_){if(mounted)setState(()=>_error='Не удалось загрузить каталог. Проверьте подключение к интернету и попробуйте обновить страницу.');}
     finally{if(mounted)setState(()=>_loading=false);}
   }
@@ -68,9 +74,58 @@ class _HomeScreenState extends State<HomeScreen>{
     final profile=widget.profileService.activeProfile;
     return Scaffold(appBar:AppBar(title:const Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       Text('KinoKino',style:TextStyle(fontWeight:FontWeight.bold)),Text('by Osirisvectory',style:TextStyle(fontSize:10,color:Colors.white60))]),
-      actions:[if(profile!=null)Padding(padding:const EdgeInsets.only(right:6),child:Center(child:Text(profile.name,style:const TextStyle(color:Colors.white70)))),
-        PopupMenuButton<String>(onSelected:(v){if(v=='profiles')_openPage(ProfilesScreen(service:widget.profileService));if(v=='library')_openPage(const LibraryScreen());if(v=='settings')_openPage(SettingsScreen(service:widget.settingsService));if(v=='about')_openPage(const AboutScreen());if(v=='logout')AuthService().signOut();},
-          itemBuilder:(_)=>const[PopupMenuItem(value:'profiles',child:ListTile(leading:Icon(Icons.people),title:Text('Профили'))),PopupMenuItem(value:'library',child:ListTile(leading:Icon(Icons.video_library),title:Text('Библиотека'))),PopupMenuItem(value:'settings',child:ListTile(leading:Icon(Icons.settings),title:Text('Настройки'))),PopupMenuItem(value:'about',child:ListTile(leading:Icon(Icons.info_outline),title:Text('О приложении'))),PopupMenuItem(value:'logout',child:ListTile(leading:Icon(Icons.logout),title:Text('Выйти из аккаунта')))])]),
+      actions: [
+        if (profile != null)
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Center(
+              child: Text(profile.name, style: const TextStyle(color: Colors.white70)),
+            ),
+          ),
+        PopupMenuButton<String>(
+          onSelected: (value) async {
+            switch (value) {
+              case 'profiles':
+                await _openPage(ProfilesScreen(service: widget.profileService));
+                break;
+              case 'library':
+                await _openPage(const LibraryScreen());
+                break;
+              case 'settings':
+                await _openPage(SettingsScreen(service: widget.settingsService));
+                break;
+              case 'about':
+                await _openPage(const AboutScreen());
+                break;
+              case 'logout':
+                await AuthService().signOut();
+                break;
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(
+              value: 'profiles',
+              child: ListTile(leading: Icon(Icons.people), title: Text('Профили')),
+            ),
+            PopupMenuItem(
+              value: 'library',
+              child: ListTile(leading: Icon(Icons.video_library), title: Text('Библиотека')),
+            ),
+            PopupMenuItem(
+              value: 'settings',
+              child: ListTile(leading: Icon(Icons.settings), title: Text('Настройки')),
+            ),
+            PopupMenuItem(
+              value: 'about',
+              child: ListTile(leading: Icon(Icons.info_outline), title: Text('О приложении')),
+            ),
+            PopupMenuItem(
+              value: 'logout',
+              child: ListTile(leading: Icon(Icons.logout), title: Text('Выйти из аккаунта')),
+            ),
+          ],
+        ),
+      ],
       body:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(16,8,16,10),child:TextField(controller:_search,onSubmitted:_searchMedia,decoration:InputDecoration(hintText:'Поиск фильмов, сериалов и мультфильмов',prefixIcon:const Icon(Icons.search),suffixIcon:IconButton(icon:const Icon(Icons.clear),onPressed:(){_search.clear();_loadTrending();})))),
         Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:Column(children:[
