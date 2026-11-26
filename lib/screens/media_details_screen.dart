@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
+import '../services/kinopoisk_service.dart';
 import '../services/internet_archive_service.dart';
 import '../services/local_database.dart';
 import '../widgets/poster_card.dart';
@@ -16,6 +17,11 @@ class MediaDetailsScreen extends StatefulWidget {
 }
 class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   final _tmdb = TmdbService();
+  final _kinopoisk = KinopoiskService();
+  Map<String, dynamic>? _kpFilm;
+  List<Map<String, dynamic>> _kpSeasons = [];
+  List<Map<String, dynamic>> _kpVideos = [];
+
   Map<String, dynamic>? _details;
   List<MediaItem> _recommendations = [];
   List<MediaItem> _similar = [];
@@ -54,6 +60,25 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     } catch (e) {
       error = e.toString();
     }
+    // Kinopoisk supplements catalogue metadata. Its private token remains server-side.
+    Map<String, dynamic>? kpFilm;
+    List<Map<String, dynamic>> kpSeasons = [];
+    List<Map<String, dynamic>> kpVideos = [];
+    try {
+      final matches = await _kinopoisk.search(widget.item.title);
+      if (matches.isNotEmpty) {
+        final first = matches.first;
+        final rawId = first['filmId'] ?? first['kinopoiskId'] ?? first['id'];
+        final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
+        if (id > 0) {
+          kpFilm = await _kinopoisk.film(id);
+          if (_type == 'tv') kpSeasons = await _kinopoisk.seasons(id);
+          kpVideos = await _kinopoisk.videos(id);
+        }
+      }
+    } catch (_) {
+      // Keep the TMDB catalogue usable if the optional metadata API is unavailable.
+    }
     // Keep similar titles and recommendations separate so neither endpoint
     // can hide the other and each section can be loaded independently.
     List<MediaItem> recommendations = [];
@@ -82,6 +107,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     };
     if (mounted) setState(() {
       _details = details;
+      _kpFilm = kpFilm;
+      _kpSeasons = kpSeasons;
+      _kpVideos = kpVideos;
       _recommendations = recommendationsById.values.toList();
       _similar = similarById.values.toList();
       _error = error;
@@ -535,6 +563,25 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             child: Text('Некоторые сведения временно недоступны. Попробуйте обновить страницу позже.'),
           ),
         ])),
+        if (_kpVideos.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text('Видео-материалы (${_kpVideos.length})'),
+              subtitle: const Text('Трейлеры и дополнительные ролики из каталога'),
+              children: _kpVideos.take(8).map((video) {
+                final name = (video['name'] ?? video['site'] ?? 'Видео').toString();
+                final site = (video['site'] ?? '').toString();
+                return ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.video_library_outlined),
+                  title: Text(name),
+                  subtitle: site.isEmpty ? null : Text(site),
+                );
+              }).toList(),
+            ),
+          ),
         _relatedSection('Рекомендации', _recommendations),
         _relatedSection('Похожие', _similar),
       ]),
