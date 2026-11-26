@@ -22,6 +22,7 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
   bool _updatePromptShown = false;
   String? _profileEnsuredForUser;
   Timer? _updateTimer;
+  bool _updateCheckRunning = false;
 
   @override
   void initState() {
@@ -40,9 +41,14 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
   }
 
   Future<void> _checkIfUpdateCheckDue() async {
-    if (!_settings.settings.autoUpdatesEnabled || _updatePromptShown) return;
-    final due = await _settings.isUpdateCheckDue(_settings.settings.updateIntervalHours);
-    if (due && mounted) await _checkForUpdates();
+    if (_updateCheckRunning || !_settings.settings.autoUpdatesEnabled || _updatePromptShown) return;
+    _updateCheckRunning = true;
+    try {
+      final due = await _settings.isUpdateCheckDue(_settings.settings.updateIntervalHours);
+      if (due && mounted) await _checkForUpdates();
+    } finally {
+      _updateCheckRunning = false;
+    }
   }
 
   Future<void> _checkForUpdates() async {
