@@ -1,30 +1,46 @@
-
-name: Build KinoKino Windows installer
+name: Build KinoKino for Windows
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build-windows.yml"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "lib/**"
+      - "windows/**"
 
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
         with:
-          node-version: 22
+          channel: stable
+          cache: true
 
-      - name: Install dependencies
-        run: npm install
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
 
-      - name: Build installer
-        run: npm run dist -- --publish never
+      - name: Generate Windows runner
+        run: flutter create --platforms=windows --project-name=kinokino .
 
-      - name: Upload EXE
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
-          name: KinoKino-Windows-Installer
-          path: dist/*.exe
+          name: KinoKino-Windows-x64
+          path: build/windows/x64/runner/Release/
+          if-no-files-found: error
+          retention-days: 14
