@@ -22,6 +22,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
   String? _error;
   String? _diagnostics;
   bool _showExtraInfo = false;
+  bool _statsLoaded = false;
 
   @override
   void initState() {
@@ -35,12 +36,11 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
       if (!await _creator.isCreator()) {
         throw Exception('У этого аккаунта нет прав создателя.');
       }
-      final values = await Future.wait([_creator.loadStats(), _creator.announcements(), _creator.loadAccounts()]);
+      final values = await Future.wait([_creator.announcements(), _creator.loadAccounts()]);
       if (!mounted) return;
       setState(() {
-        _stats = values[0] as Map<String, dynamic>;
-        _announcements = values[1] as List<Map<String, dynamic>>;
-        _accounts = values[2] as List<Map<String, dynamic>>;
+        _announcements = values[0] as List<Map<String, dynamic>>;
+        _accounts = values[1] as List<Map<String, dynamic>>;
         _accountPage = 1;
         _accountsHasMore = _accounts.length == 100;
       });
@@ -74,6 +74,20 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
     if (raw == null || raw.isEmpty) return false;
     final date = DateTime.tryParse(raw);
     return date != null && date.isAfter(DateTime.now().toUtc());
+  }
+
+  Future<void> _toggleExtraInfo() async {
+    final show = !_showExtraInfo;
+    setState(() => _showExtraInfo = show);
+    if (!show || _statsLoaded) return;
+    try {
+      final stats = await _creator.loadStats();
+      if (mounted) setState(() { _stats = stats; _statsLoaded = true; });
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Подробная статистика пока недоступна.')),
+      );
+    }
   }
 
   Future<void> _loadMoreAccounts() async {
@@ -222,7 +236,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
           ])))
       : ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 96), children: [
           OutlinedButton.icon(
-            onPressed: () => setState(() => _showExtraInfo = !_showExtraInfo),
+            onPressed: _toggleExtraInfo,
             icon: Icon(_showExtraInfo ? Icons.visibility_off_outlined : Icons.analytics_outlined),
             label: Text(_showExtraInfo ? 'Скрыть подробную информацию' : 'Показать подробную информацию'),
           ),
@@ -306,6 +320,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
             label: const Text('Проверить Supabase и TMDB')),
           if (_diagnostics != null) Card(child: Padding(
             padding: const EdgeInsets.all(12), child: Text(_diagnostics!))),
+          ],
           const SizedBox(height: 18),
           const Text('Объявления и обновления', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           if (_announcements.isEmpty) const Text('Объявлений пока нет.'),
@@ -329,7 +344,6 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
           const SizedBox(height: 12),
           const Text('Каталог KinoKino использует TMDB для метаданных. Панель проверяет его доступность, но не изменяет и не размещает видеопотоки TMDB.',
             style: TextStyle(color: Colors.white60, fontSize: 12)),
-          ],
         ]),
   );
 }
