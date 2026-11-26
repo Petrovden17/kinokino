@@ -27,6 +27,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
   Future<void> _openRow(Map<String, Object?> row) async {
     final id = (row['id'] as num?)?.toInt() ?? 0;
     if (id == 0) return;
+    if (_tab == 'history') {
+      final openCard = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(row['title'] as String? ?? 'Без названия'),
+          content: Text('Тип: ${row['media_type'] == 'tv' ? 'Сериал' : 'Фильм'}\\nДата просмотра: ${_formatDate(row['last_opened'])}'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Закрыть')),
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(ctx, true),
+              icon: const Icon(Icons.info_outline),
+              label: const Text('Открыть карточку'),
+            ),
+          ],
+        ),
+      );
+      if (openCard != true || !mounted) return;
+    }
     final item = MediaItem(
       id: id,
       title: row['title'] as String? ?? 'Без названия',

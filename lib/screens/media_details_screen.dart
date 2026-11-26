@@ -21,7 +21,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Map<String, dynamic>? _details;
   List<MediaItem> _recommendations = [];
   List<MediaItem> _similar = [];
-  Map<String, dynamic> _externalIds = {};
   bool _loading = true;
   String? _error;
   double _rating = 0;
@@ -52,10 +51,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Future<void> _load() async {
     Map<String, dynamic>? details;
     String? error;
-    Map<String, dynamic> externalIds = {};
     try {
       details = await _tmdb.details(widget.item.id, type: _type);
-      try { externalIds = await _tmdb.externalIds(widget.item.id, type: _type); } catch (_) {}
     } catch (e) {
       error = e.toString();
     }
@@ -89,7 +86,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       _details = details;
       _recommendations = recommendationsById.values.toList();
       _similar = similarById.values.toList();
-      _externalIds = externalIds;
       _error = error;
       _loading = false;
     });
@@ -604,23 +600,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             const SizedBox(height: 6), Text(cast),
           ],
           const SizedBox(height: 12),
-          const Text('Внешние рейтинги', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            if ((_externalIds['imdb_id'] ?? '').toString().startsWith('tt'))
-              OutlinedButton.icon(
-                onPressed: () => _openRatingPage(Uri.parse('https://www.imdb.com/title/${_externalIds['imdb_id']}/')),
-                icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Оценка IMDb'),
-              ),
-            OutlinedButton.icon(
-              onPressed: () => _openRatingPage(Uri.https('www.google.com', '/search', {
-                'q': 'Кинопоиск $_displayTitle $_releaseYear рейтинг',
-              })),
-              icon: const Icon(Icons.open_in_new, size: 16),
-              label: const Text('Найти оценку Кинопоиска'),
-            ),
-          ]),
           const SizedBox(height: 20), const Text('Твоя оценка', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Wrap(spacing: 4, children: List.generate(10, (i) {

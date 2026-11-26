@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/scheduler.dart' show timeDilation;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
@@ -110,6 +111,9 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
       return MaterialApp(
     title: 'KinoKino',
     debugShowCheckedModeBanner: false,
+    locale: Locale(settings.language),
+    supportedLocales: const [Locale('ru'), Locale('en'), Locale('de')],
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
     theme: AppTheme.darkWithAccent(Color(settings.accentColorValue)),
     builder: (context, child) {
       final media = MediaQuery.of(context);

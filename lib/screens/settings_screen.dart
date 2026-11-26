@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_settings.dart';
 import '../services/settings_service.dart';
 import '../services/backup_service.dart';
@@ -8,6 +9,7 @@ import '../services/app_update_service.dart';
 import '../services/beta_release_service.dart';
 import '../services/creator_service.dart';
 import '../services/auth_service.dart';
+import '../services/tmdb_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.service});
@@ -22,6 +24,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _checkingUpdates = false;
   bool _isCreator = false;
   bool _betaLoading = false;
+  bool _diagnosticsRunning = false;
+  String? _diagnosticsResult;
   Map<String, dynamic>? _betaRelease;
   final AppUpdateService _updates = AppUpdateService();
 
@@ -57,6 +61,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _save(AppSettings next) async {
     await widget.service.update(next);
     if (mounted) setState(() { _value = next; _notice = 'Настройки сохранены.'; });
+  }
+
+
+  String _languageLabel(String code) => switch (code) {
+    'en' => 'English',
+    'de' => 'Deutsch',
+    _ => 'Русский',
+  };
+
+  Future<void> _changeLanguage(String? language) async {
+    if (language == null || language == _value.language) return;
+    final previous = _value.language;
+    await _save(_value.copyWith(language: language));
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(previous == 'ru' ? 'Язык изменён' : 'Language changed'),
+        content: Text(previous == 'ru'
+          ? 'Выбран язык: ${_languageLabel(language)}. Подтвердить изменение?'
+          : 'Selected language: ${_languageLabel(language)}. Confirm?'),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await _save(_value.copyWith(language: previous));
+            },
+            child: Text(previous == 'ru' ? 'Вернуть ${_languageLabel(previous)}' : 'Restore ${_languageLabel(previous)}'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(previous == 'ru' ? 'Подтвердить' : 'Confirm'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _runDiagnostics() async {
+    if (_diagnosticsRunning) return;
+    setState(() { _diagnosticsRunning = true; _diagnosticsResult = 'Проверяем…'; });
+    final lines = <String>[];
+    try {
+      await Supabase.instance.client.auth.getUser();
+      lines.add('Supabase: соединение успешно');
+    } catch (e) {
+      lines.add('Supabase: ошибка — $e');
+    }
+    try {
+      final items = await TmdbService().trending();
+      lines.add('TMDB: доступен (${items.length} карточек получено)');
+    } catch (e) {
+      lines.add('TMDB: ошибка — $e');
+    }
+    if (!mounted) return;
+    setState(() {
+      _diagnosticsResult = lines.join('\\n');
+      _diagnosticsRunning = false;
+    });
   }
 
   Future<void> _backup() async {
@@ -253,13 +316,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       const Text('Язык', style: TextStyle(fontWeight: FontWeight.bold)),
       const SizedBox(height: 8),
       DropdownButtonFormField<String>(
-        value: _value.language,
+        initialValue: _value.language,
         items: const [
           DropdownMenuItem(value: 'ru', child: Text('Русский')),
           DropdownMenuItem(value: 'en', child: Text('English')),
           DropdownMenuItem(value: 'de', child: Text('Deutsch')),
         ],
-        onChanged: (v) { if (v != null) _save(_value.copyWith(language: v)); },
+        onChanged: _changeLanguage,
       ),
       SwitchListTile(title: const Text('Уведомления'), value: _value.notificationsEnabled,
         onChanged: (v) => _save(_value.copyWith(notificationsEnabled: v))),
@@ -304,7 +367,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ListTile(title: const Text('Резервная копия настроек'),
         subtitle: const Text('Создаёт JSON-файл без паролей и PIN'),
         trailing: const Icon(Icons.backup), onTap: _backup),
-      const ListTile(title: Text('Диагностика'), subtitle: Text('Проверка соединения и доступности сервисов будет расширена в следующем обновлении.')),
+      Card(child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            Icon(Icons.health_and_safety_outlined),
+            SizedBox(width: 8),
+            Text('Диагностика', style: TextStyle(fontWeight: FontWeight.bold)),
+          ]),
+          const SizedBox(height: 6),
+          const Text('Проверить подключение к Supabase и каталогу TMDB.'),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _diagnosticsRunning ? null : _runDiagnostics,
+            icon: _diagnosticsRunning
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.play_arrow),
+            label: Text(_diagnosticsRunning ? 'Проверяем…' : 'Запустить диагностику'),
+          ),
+          if (_diagnosticsResult != null)
+            Padding(padding: const EdgeInsets.only(top: 8), child: SelectableText(_diagnosticsResult!)),
+        ]),
+      )),
       ListTile(
         leading: const Icon(Icons.logout),
         title: const Text('Выйти из аккаунта'),
