@@ -217,7 +217,7 @@ jobs:
           from pathlib import Path
 
           log = Path("player-smoke-logcat.txt").read_text(errors="replace")
-          probes = re.findall(r"PLAYER_PROBE[^\\n]*?(\\{.*\\})", log)
+          probes = re.findall(r"PLAYER_PROBE[^\n]*?(\{.*\})", log)
           parsed = []
           for raw in probes:
               try:
