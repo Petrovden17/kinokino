@@ -83,7 +83,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           final data = Map<String, dynamic>.from(row);
           data.putIfAbsent('media_type', () => _type);
           final item = MediaItem.fromJson(data);
-          if (item.id != widget.item.id && item.hasRussianTitle) {
+          if (item.id != widget.item.id && item.hasRussianTitle && item.hasConfirmedRelease) {
             fallback['${item.mediaType}:${item.id}'] = item;
           }
         }
@@ -132,7 +132,17 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         const SnackBar(content: Text('Не удалось загрузить список эпизодов. Попробуй ещё раз.')));
       return null;
     }
-    final episodes = (seasonData['episodes'] as List? ?? const []).whereType<Map>().toList();
+    final today = DateTime.now();
+    final episodes = (seasonData['episodes'] as List? ?? const [])
+        .whereType<Map>()
+        .where((episode) {
+          final raw = (episode['air_date'] ?? '').toString();
+          if (raw.length < 10) return false;
+          final date = DateTime.tryParse(raw.substring(0, 10));
+          if (date == null) return false;
+          return !DateTime(date.year, date.month, date.day)
+              .isAfter(DateTime(today.year, today.month, today.day));
+        }).toList();
     if (episodes.isEmpty || !mounted) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('В этом сезоне нет доступных данных об эпизодах.')));
       return null;
@@ -266,8 +276,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         expectedYear = int.tryParse(episodeDate.length >= 4 ? episodeDate.substring(0, 4) : '') ?? _releaseYear;
       }
     }
-    if (expectedYear <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен год выхода. Не буду запускать неподтверждённую версию.')));
+    if (!widget.item.hasConfirmedRelease) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Эта карточка не прошла проверку даты выхода и недоступна для просмотра.'),
+      ));
       return;
     }
     final cancelToken = CancelToken();
