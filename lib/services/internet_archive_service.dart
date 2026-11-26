@@ -48,10 +48,10 @@ class InternetArchiveService {
         license.contains('creativecommons.org/licenses/by-sa/4.0');
   }
 
-  String _normalize(String value) => value.toLowerCase()
-      .replaceAll(RegExp(r'\(?\s*\d{4}\s*\)?'), ' ')
+  String _normalize(String value, int expectedYear) => value.toLowerCase()
+      .replaceAll(RegExp('\\\\(?\\\\s*$expectedYear\\\\s*\\\\)?'), ' ')
       .replaceAll(RegExp(r'[^a-z0-9а-яё]+', unicode: true), ' ')
-      .replaceAll(RegExp(r'\s+'), ' ')
+      .replaceAll(RegExp(r'\\s+'), ' ')
       .trim();
 
   double? _seconds(dynamic value) {
@@ -73,7 +73,8 @@ class InternetArchiveService {
   bool _durationMatches(double? actualSeconds, int expectedMinutes) {
     if (actualSeconds == null || actualSeconds <= 0 || expectedMinutes <= 0) return false;
     final expected = expectedMinutes * 60.0;
-    final tolerance = (expected * .18).clamp(300.0, 900.0);
+    // Tight duration matching prevents short clips and unrelated edits from passing.
+    final tolerance = (expected * .06).clamp(90.0, 240.0);
     return (actualSeconds - expected).abs() <= tolerance;
   }
 
@@ -103,7 +104,7 @@ class InternetArchiveService {
   }) async {
     // A series title is not an episode. Never select an arbitrary clip as an episode.
     if (isSeries || expectedRuntimeMinutes <= 0 || expectedYear <= 0) return null;
-    final wanted = _normalize(title);
+    final wanted = _normalize(title, expectedYear);
     if (wanted.isEmpty) return null;
     final cleanTitle = title.replaceAll('"', '').trim();
     final words = cleanTitle.split(RegExp(r'\s+')).where((word) => word.length > 1).toList();
@@ -139,7 +140,7 @@ class InternetArchiveService {
     }
 
     for (final doc in docs) {
-      cancelToken?.throwIfCancellationRequested();
+      if (cancelToken?.isCancelled == true) return null;
       final id = doc['identifier']?.toString();
       if (id == null || id.isEmpty) continue;
       try {
@@ -149,9 +150,13 @@ class InternetArchiveService {
         final metadata = data['metadata'] as Map<String, dynamic>? ?? {};
         final archiveTitle = (metadata['title'] ?? doc['title'] ?? '').toString();
         // Search results are fuzzy. Require an exact normalized title match.
-        if (_normalize(archiveTitle) != wanted) continue;
-        final archiveYear = _yearFrom(metadata['year']) ??
-            _yearFrom(archiveTitle) ?? _yearFrom(id);
+        if (_normalize(archiveTitle, expectedYear) != wanted) continue;
+        // Never infer a release year from an archive identifier: IDs often contain
+        // upload dates or unrelated event years. Prefer explicit metadata, then title.
+        final titleYear = _yearFrom(archiveTitle);
+        final metadataYear = _yearFrom(metadata['year']) ?? _yearFrom(metadata['date']);
+        if (titleYear != null && titleYear != expectedYear) continue;
+        final archiveYear = metadataYear ?? titleYear;
         if (archiveYear != expectedYear) continue;
         final license = (metadata['licenseurl']?.toString().trim().isNotEmpty == true
             ? metadata['licenseurl'] : metadata['rights'] ?? '').toString();
