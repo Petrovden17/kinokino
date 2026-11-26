@@ -39,8 +39,8 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
       final values = await Future.wait([_creator.announcements(), _creator.loadAccounts()]);
       if (!mounted) return;
       setState(() {
-        _announcements = values[0] as List<Map<String, dynamic>>;
-        _accounts = values[1] as List<Map<String, dynamic>>;
+        _announcements = values[0];
+        _accounts = values[1];
         _accountPage = 1;
         _accountsHasMore = _accounts.length == 100;
       });
