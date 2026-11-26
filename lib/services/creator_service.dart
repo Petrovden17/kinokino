@@ -8,9 +8,20 @@ class CreatorService {
     return result == true;
   }
 
-  Future<Map<String, dynamic>> loadStats() async {
-    final result = await _client.rpc('kinokino_creator_stats');
-    return Map<String, dynamic>.from(result as Map);
+  Future<List<Map<String, dynamic>>> loadWatchHistory({int limit = 200}) async {
+    final response = await _client.functions.invoke(
+      'creator-account-admin',
+      body: {'action': 'watch_history', 'limit': limit},
+    );
+    final data = response.data is Map
+        ? Map<String, dynamic>.from(response.data as Map)
+        : <String, dynamic>{};
+    if (response.status < 200 || response.status >= 300) {
+      throw Exception(data['error'] ?? 'Не удалось загрузить историю просмотров');
+    }
+    return (data['history'] as List? ?? const [])
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
   }
 
   Future<List<Map<String, dynamic>>> announcements() async {
