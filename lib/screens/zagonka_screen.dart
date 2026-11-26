@@ -21,7 +21,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   double _progress = 0;
   String? _pageError;
   bool _isFullscreen = false;
-  bool _playerRedirected = false;
 
   @override
   void initState() {
@@ -59,17 +58,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
-  void _onResourceLoaded(InAppWebViewController controller, LoadedResource resource) {
-    final url = resource.url.toString();
-    debugPrint('[KinoKino resource] $url');
-    if (defaultTargetPlatform == TargetPlatform.android &&
-        !_playerRedirected &&
-        RegExp(r'^https?://inplayer\.ru/video/black\.jpg(?:[?#]|$)', caseSensitive: false).hasMatch(url)) {
-      _playerRedirected = true;
-      debugPrint('[KinoKino] InPlayer resource observed; opening endpoint in same WebView session');
-      controller.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
-    }
-  }
 
   Future<void> _toggleFullscreen() async {
     if (_isFullscreen) {
@@ -126,7 +114,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         javaScriptCanOpenWindowsAutomatically: true,
         mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
         useHybridComposition: defaultTargetPlatform == TargetPlatform.android,
-        useOnLoadResource: defaultTargetPlatform == TargetPlatform.android,
         transparentBackground: false,
         supportZoom: false,
         useWideViewPort: false,
@@ -143,7 +130,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         debugPrint('[KinoKino popup] closed');
         if (mounted) setState(() => _popupWindowId = null);
       },
-      onLoadResource: (controller, resource) => _onResourceLoaded(controller, resource),
       onLoadStart: (controller, url) {
         debugPrint('[KinoKino WebView] load start: $url');
         if (!mounted) return;
