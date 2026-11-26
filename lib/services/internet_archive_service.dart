@@ -154,9 +154,12 @@ class InternetArchiveService {
         // Never infer a release year from an archive identifier: IDs often contain
         // upload dates or unrelated event years. Prefer explicit metadata, then title.
         final titleYear = _yearFrom(archiveTitle);
-        final metadataYear = _yearFrom(metadata['year']) ?? _yearFrom(metadata['date']);
+        final metadataYear = _yearFrom(metadata['year']);
+        final dateYear = _yearFrom(metadata['date']);
         if (titleYear != null && titleYear != expectedYear) continue;
-        final archiveYear = metadataYear ?? titleYear;
+        if (metadataYear != null && dateYear != null && metadataYear != dateYear) continue;
+        if (metadataYear != null && titleYear != null && metadataYear != titleYear) continue;
+        final archiveYear = metadataYear ?? dateYear ?? titleYear;
         if (archiveYear != expectedYear) continue;
         final license = (metadata['licenseurl']?.toString().trim().isNotEmpty == true
             ? metadata['licenseurl'] : metadata['rights'] ?? '').toString();
