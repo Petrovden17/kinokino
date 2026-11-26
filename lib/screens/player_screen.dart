@@ -299,7 +299,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         if (widget.onChooseEpisode != null && widget.onResolveEpisode != null)
           IconButton(
-            tooltip: 'Выбрать серию',
+            tooltip: 'Выбрать сезон и серию',
             onPressed: _selectEpisode,
             color: Colors.white,
             icon: const Icon(Icons.video_library_outlined),
