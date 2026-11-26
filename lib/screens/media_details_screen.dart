@@ -26,6 +26,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final d = _details ?? {};
     return (d['title'] ?? d['name'] ?? widget.item.title).toString();
   }
+  String get _playbackSearchTitle {
+    final d = _details ?? {};
+    return (d['original_title'] ?? d['original_name'] ?? d['title'] ?? d['name'] ?? widget.item.title).toString();
+  }
   @override
   void initState() {
     super.initState();
@@ -73,7 +77,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     var dialogClosed = false;
     try {
       final source = await InternetArchiveService().findLicensedVideo(
-        _displayTitle,
+        _playbackSearchTitle,
         isSeries: _type == 'tv',
       );
       if (!mounted) return;
