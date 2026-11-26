@@ -37,8 +37,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isCreator = false;
   String? _error;
   String _type = 'all';
-  String _audioLanguage = 'auto';
-  String _videoQuality = 'auto';
   String _sort = 'popularity.desc';
   int? _genreId;
   double _minRating = 0;
@@ -50,8 +48,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _scroll.addListener(_onScroll);
-    _audioLanguage = widget.settingsService.settings.preferredAudioLanguage;
-    _videoQuality = widget.settingsService.settings.preferredVideoQuality;
     _loadGenres();
     _loadTrending();
     _loadCreatorAccess();
@@ -159,13 +155,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _savePlaybackPreferences() async {
-    await widget.settingsService.update(widget.settingsService.settings.copyWith(
-      preferredAudioLanguage: _audioLanguage,
-      preferredVideoQuality: _videoQuality,
-    ));
-  }
-
   Future<void> _loadTrending() async {
     setState(() => _loading = true);
     _error = null;
@@ -270,7 +259,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _open(MediaItem item) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => MediaDetailsScreen(
-      item: item, preferredAudioLanguage: _audioLanguage, preferredVideoQuality: _videoQuality,
+      item: item,
     )));
     if (mounted) setState(() {});
   }
@@ -332,39 +321,6 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         ),
       ),
-      const SizedBox(height: 10),
-      Row(children: [
-        Expanded(child: DropdownButtonFormField<String>(
-          value: _audioLanguage,
-          decoration: const InputDecoration(labelText: 'Озвучка', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-          items: const [
-            DropdownMenuItem(value: 'auto', child: Text('Авто')),
-            DropdownMenuItem(value: 'ru', child: Text('Русская')),
-            DropdownMenuItem(value: 'original', child: Text('Оригинал')),
-          ],
-          onChanged: (value) {
-            if (value == null) return;
-            setState(() => _audioLanguage = value);
-            _savePlaybackPreferences();
-          },
-        )),
-        const SizedBox(width: 10),
-        Expanded(child: DropdownButtonFormField<String>(
-          value: _videoQuality,
-          decoration: const InputDecoration(labelText: 'Качество', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
-          items: const [
-            DropdownMenuItem(value: 'auto', child: Text('Авто')),
-            DropdownMenuItem(value: '1080', child: Text('До 1080p')),
-            DropdownMenuItem(value: '720', child: Text('До 720p')),
-            DropdownMenuItem(value: '480', child: Text('До 480p')),
-          ],
-          onChanged: (value) {
-            if (value == null) return;
-            setState(() => _videoQuality = value);
-            _savePlaybackPreferences();
-          },
-        )),
-      ]),
       const SizedBox(height: 10),
       Row(children: [
         Expanded(child: DropdownButtonFormField<int?>(
