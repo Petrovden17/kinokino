@@ -35,7 +35,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows release
-        run: flutter build windows --release --dart-define=APP_BUILD=4
+        run: flutter build windows --release --dart-define=APP_BUILD=6
 
       - name: Upload Windows application
         uses: actions/upload-artifact@v4
