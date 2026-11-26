@@ -18,6 +18,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Map<String, dynamic>? _details;
   List<MediaItem> _recommendations = [];
   Map<String, dynamic> _externalIds = {};
+  String? _providerLink;
   bool _loading = true;
   String? _error;
   double _rating = 0;
@@ -45,20 +46,33 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     List<MediaItem> picks = [];
     String? error;
     Map<String, dynamic> externalIds = {};
+    String? providerLink;
     try {
       details = await _tmdb.details(widget.item.id, type: _type);
       try { externalIds = await _tmdb.externalIds(widget.item.id, type: _type); } catch (_) {}
     } catch (e) {
       error = e.toString();
     }
-    // Recommendations are loaded independently: a failure in one endpoint
-    // must not hide the rest of the details page.
+    // Load both lists independently and merge them: one empty endpoint must
+    // not suppress useful similar/recommended titles from the other endpoint.
+    final related = <String, MediaItem>{};
     try {
-      picks = await _tmdb.recommendations(widget.item.id, type: _type);
+      final rows = await _tmdb.recommendations(widget.item.id, type: _type);
+      for (final row in rows) {
+        if (row.id != widget.item.id) related['${row.mediaType}:${row.id}'] = row;
+      }
     } catch (_) {}
-    if (picks.isEmpty) {
-      try { picks = await _tmdb.similar(widget.item.id, type: _type); } catch (_) {}
-    }
+    try {
+      final rows = await _tmdb.similar(widget.item.id, type: _type);
+      for (final row in rows) {
+        if (row.id != widget.item.id) related['${row.mediaType}:${row.id}'] = row;
+      }
+    } catch (_) {}
+    picks = related.values.toList();
+    try {
+      final providers = await _tmdb.watchProviders(widget.item.id, type: _type, region: 'NL');
+      providerLink = providers['link']?.toString();
+    } catch (_) {}
     if (picks.isEmpty && details != null) {
       final section = details['recommendations'] ?? details['similar'];
       final rows = (section is Map ? section['results'] : null) as List? ?? const [];
@@ -69,6 +83,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       _details = details;
       _recommendations = picks;
       _externalIds = externalIds;
+      _providerLink = providerLink;
       _error = error;
       _loading = false;
     });
@@ -139,10 +154,18 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       ),
     );
   }
-  Future<void> _openRatingPage(Uri uri) async {
+  Future<void> _openExternalPage(Uri uri) async {
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось открыть страницу рейтинга.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось открыть страницу.')));
     }
+  }
+
+  Future<void> _openRatingPage(Uri uri) => _openExternalPage(uri);
+  Future<void> _openProviderPage() async {
+    final raw = _providerLink;
+    if (raw == null || raw.isEmpty) return;
+    final uri = Uri.tryParse(raw);
+    if (uri != null && uri.scheme == 'https') await _openExternalPage(uri);
   }
 
   Future<void> _saveRating(double value) async {
@@ -394,7 +417,19 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Добавлено в избранное')));
             }, icon: const Icon(Icons.favorite), label: const Text('В избранное')),
           ]),
-          if (_error != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text('Не удалось загрузить дополнительные данные: $_error')),
+          if (_providerLink != null && _providerLink!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: OutlinedButton.icon(
+                onPressed: _openProviderPage,
+                icon: const Icon(Icons.open_in_new),
+                label: const Text('Где посмотреть легально'),
+              ),
+            ),
+          if (_error != null) const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text('Некоторые сведения временно недоступны. Попробуйте обновить страницу позже.'),
+          ),
         ])),
         if (_recommendations.isNotEmpty) ...[
           const Padding(padding: EdgeInsets.fromLTRB(18, 8, 18, 12), child: Text('Похожие и рекомендованные', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
