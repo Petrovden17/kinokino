@@ -56,6 +56,7 @@ class TmdbService {
     final response = await _dio.get(path, queryParameters: extra);
     final results = (response.data['results'] as List? ?? const []);
     return results.whereType<Map>().map((e) => MediaItem.fromJson(Map<String, dynamic>.from(e)))
-      .where((e) => e.id != 0 && e.hasRussianTitle && (e.mediaType == 'movie' || e.mediaType == 'tv')).toList();
+      .where((e) => e.id != 0 && e.hasRussianTitle && e.hasConfirmedRelease &&
+        (e.mediaType == 'movie' || e.mediaType == 'tv')).toList();
   }
 }
