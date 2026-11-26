@@ -503,7 +503,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           Text(_displayTitle, style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 8),
           Wrap(spacing: 12, children: [
-            Chip(label: Text('TMDB ★ ${item.voteAverage.toStringAsFixed(1)}')),
             Chip(label: Text(item.mediaType == 'tv' ? 'Сериал' : 'Фильм')),
             if (item.releaseDate.isNotEmpty) Chip(label: Text(item.releaseDate.split('-').first)),
             if (_type == 'movie' && (_details?['runtime'] as num? ?? 0) > 0) Chip(label: Text('${_details!['runtime']} мин.')),
