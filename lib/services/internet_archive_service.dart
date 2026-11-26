@@ -45,7 +45,7 @@ class InternetArchiveService {
 
   String _normalize(String value) => value
       .toLowerCase()
-      .replaceAll(RegExp(r'\\(\d{4}\\)'), ' ')
+      .replaceAll(RegExp(r'\(\d{4}\)'), ' ')
       .replaceAll(RegExp(r'[^a-z0-9а-яё]+', unicode: true), ' ')
       .trim();
 
