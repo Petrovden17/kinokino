@@ -93,7 +93,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               });
             },
             onReceivedError: (controller, request, error) {
-              if (!request.isForMainFrame || !mounted) return;
+              if (request.isForMainFrame != true || !mounted) return;
               setState(() {
                 _pageError = 'Не удалось загрузить страницу Zagonka. Проверь подключение и нажми «Обновить».';
               });

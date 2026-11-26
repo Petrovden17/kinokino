@@ -10,7 +10,7 @@ class AppUpdateInfo {
 }
 
 class AppUpdateService {
-  static const int currentBuild = int.fromEnvironment('APP_BUILD', defaultValue: 6);
+  static const int currentBuild = int.fromEnvironment('APP_BUILD', defaultValue: 7);
   static const String releasesApi = 'https://api.github.com/repos/Petrovden17/kinokino/releases/latest';
   final Dio _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15), receiveTimeout: const Duration(minutes: 5)));
 
@@ -47,26 +47,40 @@ param([string]$Archive, [string]$InstallDir, [string]$Exe, [int]$ParentPid)
 $ErrorActionPreference = 'Stop'
 $stage = Join-Path $env:TEMP ("KinoKino-stage-" + [guid]::NewGuid().ToString("N"))
 $backup = Join-Path $env:TEMP ("KinoKino-backup-" + [guid]::NewGuid().ToString("N"))
+$installStarted = $false
 try {
-  try {
-    if (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {
-      Wait-Process -Id $ParentPid -Timeout 60 -ErrorAction SilentlyContinue
-    }
-  } catch {}
   New-Item -ItemType Directory -Path $stage -Force | Out-Null
+  New-Item -ItemType Directory -Path $backup -Force | Out-Null
   Expand-Archive -LiteralPath $Archive -DestinationPath $stage -Force
   $exeName = [IO.Path]::GetFileName($Exe)
   $newExe = Get-ChildItem -LiteralPath $stage -Filter $exeName -Recurse -File | Select-Object -First 1
   if ($null -eq $newExe) { throw "В архиве отсутствует $exeName" }
   $sourceDir = $newExe.Directory.FullName
   if (-not (Test-Path -LiteralPath $InstallDir)) { throw "Папка приложения не найдена: $InstallDir" }
-  Copy-Item -LiteralPath $InstallDir -Destination $backup -Recurse -Force
+
+  try {
+    if (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {
+      Wait-Process -Id $ParentPid -Timeout 90 -ErrorAction Stop
+    }
+  } catch {
+    if (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) {
+      throw "KinoKino не завершилось перед установкой. Обновление отменено, файлы не изменены."
+    }
+  }
+
+  Copy-Item -Path (Join-Path $InstallDir '*') -Destination $backup -Recurse -Force
   try {
     Copy-Item -Path (Join-Path $sourceDir '*') -Destination $InstallDir -Recurse -Force
+    if (-not (Test-Path -LiteralPath (Join-Path $InstallDir $exeName))) {
+      throw "После копирования не найден исполняемый файл $exeName"
+    }
   } catch {
+    Get-ChildItem -LiteralPath $InstallDir -Force | Remove-Item -Recurse -Force
     Copy-Item -Path (Join-Path $backup '*') -Destination $InstallDir -Recurse -Force
     throw
   }
+
+  $installStarted = $true
   Start-Process -FilePath $Exe -WorkingDirectory $InstallDir
   Remove-Item -LiteralPath $Archive -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
@@ -74,11 +88,11 @@ try {
 } catch {
   Add-Type -AssemblyName PresentationFramework
   [System.Windows.MessageBox]::Show("Не удалось установить обновление KinoKino: $($_.Exception.Message)")
-  if (Test-Path -LiteralPath $Exe) {
+  if (-not $installStarted -and (Test-Path -LiteralPath $Exe)) {
     Start-Process -FilePath $Exe -WorkingDirectory $InstallDir
   }
-}
-''');
+  Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
+}''');
     await Process.start('powershell.exe', [
       '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath,
       '-Archive', zipPath,

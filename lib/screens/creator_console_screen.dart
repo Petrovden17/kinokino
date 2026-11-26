@@ -21,9 +21,6 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
   String? _error;
   String? _diagnostics;
   bool _showExtraInfo = false;
-  bool _historyLoading = false;
-  List<Map<String, dynamic>> _watchHistory = [];
-  bool _historyLoaded = false;
 
   @override
   void initState() {
@@ -79,24 +76,6 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
 
   void _toggleExtraInfo() {
     setState(() => _showExtraInfo = !_showExtraInfo);
-  }
-
-  Future<void> _loadWatchHistory() async {
-    if (_historyLoading) return;
-    setState(() => _historyLoading = true);
-    try {
-      final rows = await _creator.loadWatchHistory();
-      if (mounted) setState(() {
-        _watchHistory = rows;
-        _historyLoaded = true;
-      });
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось загрузить историю: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _historyLoading = false);
-    }
   }
 
   Future<void> _loadMoreAccounts() async {
@@ -304,36 +283,6 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
               child: _accountsLoadingMore
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Text('Загрузить ещё'),
-            )),
-          ],
-          if (_showExtraInfo) ...[
-          const SizedBox(height: 18),
-          const Text('История просмотров пользователей', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: _historyLoading ? null : _loadWatchHistory,
-            icon: _historyLoading
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.history),
-            label: Text(_historyLoading ? 'Загружаем историю…' : _historyLoaded ? 'Обновить историю' : 'Показать записи истории'),
-          ),
-          if (_historyLoaded && _watchHistory.isEmpty)
-            const Padding(padding: EdgeInsets.all(12), child: Text('Записей истории пока нет.')),
-          for (final entry in _watchHistory)
-            Card(child: ListTile(
-              leading: const Icon(Icons.play_circle_outline),
-              title: Text(
-                ((entry['media'] as Map?)?['title'] ?? (entry['media'] as Map?)?['name'] ?? 'Медиа #${entry['media_id']}').toString(),
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text([
-                entry['media_type'] == 'tv' ? 'Сериал' : 'Фильм',
-                (entry['display_name']?.toString().isNotEmpty == true)
-                  ? entry['display_name'].toString()
-                  : (entry['email']?.toString().isNotEmpty == true ? entry['email'].toString() : 'Пользователь'),
-                _dateLabel(entry['watched_at']),
-                'Прогресс: ${entry['progress_seconds'] ?? 0} сек.',
-              ].join(' • ')),
             )),
           ],
           if (_showExtraInfo) ...[
