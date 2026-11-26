@@ -43,13 +43,19 @@ class InternetArchiveService {
   final Dio _dio;
 
   bool _isAllowedLicense(String value) {
-    final license = value.toLowerCase();
-    return license.contains('creativecommons.org/publicdomain/zero/1.0') ||
-        license.contains('creativecommons.org/publicdomain/mark/1.0') ||
-        license.contains('creativecommons.org/licenses/by/3.0') ||
-        license.contains('creativecommons.org/licenses/by/4.0') ||
-        license.contains('creativecommons.org/licenses/by-sa/3.0') ||
-        license.contains('creativecommons.org/licenses/by-sa/4.0');
+    final license = value.toLowerCase().trim();
+    if (license.isEmpty) return false;
+    // Accept only explicit public-domain or well-known Creative Commons grants.
+    // Unknown/copyrighted/ambiguous rights remain excluded.
+    return license.contains('creativecommons.org/publicdomain/zero/') ||
+        license.contains('creativecommons.org/publicdomain/mark/') ||
+        license.contains('creativecommons.org/licenses/by/') ||
+        license.contains('creativecommons.org/licenses/by-sa/') ||
+        license.contains('creativecommons.org/licenses/cc0/') ||
+        license == 'public domain' ||
+        license.contains('public domain dedication') ||
+        license.contains('no known copyright restrictions') ||
+        license.contains('no known copyright');
   }
 
   String _normalize(String value, int expectedYear) => value.toLowerCase()
@@ -132,10 +138,14 @@ class InternetArchiveService {
         'title:"$cleanTitle" AND year:$expectedYear AND language:$languageCode AND mediatype:movies',
       'title:"$cleanTitle" AND year:$expectedYear AND mediatype:movies',
       '($tokenQuery) AND year:$expectedYear AND mediatype:movies',
+      // Some openly licensed archive records omit the year field or use a
+      // different release date. Search title-only as a fallback, then verify
+      // title, rights and (when available) runtime against the TMDB record.
+      'title:"$cleanTitle" AND mediatype:movies',
       if (cleanSeriesTitle.isNotEmpty)
         'title:"$cleanSeriesTitle" AND title:"$cleanTitle" AND year:$expectedYear AND mediatype:movies',
       if (cleanSeriesTitle.isNotEmpty && episodeCode.isNotEmpty)
-        'title:"$cleanSeriesTitle" AND title:"$episodeCode" AND year:$expectedYear AND mediatype:movies',
+        'title:"$cleanSeriesTitle" AND title:"$episodeCode" AND mediatype:movies',
     ];
     final seen = <String>{};
     final docs = <Map>[];
@@ -198,10 +208,23 @@ class InternetArchiveService {
         if (metadataYear != null && dateYear != null && metadataYear != dateYear) continue;
         if (metadataYear != null && titleYear != null && metadataYear != titleYear) continue;
         final archiveYear = metadataYear ?? dateYear ?? titleYear;
-        if (archiveYear == null || archiveYear != expectedYear) continue;
+        if (archiveYear != null && archiveYear != expectedYear) continue;
         final license = (metadata['licenseurl']?.toString().trim().isNotEmpty == true
             ? metadata['licenseurl'] : metadata['rights'] ?? '').toString();
         if (!_isAllowedLicense(license)) continue;
+        // If the archive omitted its year, require a measurable runtime match
+        // rather than trusting a title-only hit.
+        if (archiveYear == null && expectedRuntimeMinutes > 0) {
+          final hasMatchingRuntime = (data['files'] as List? ?? const [])
+              .whereType<Map>()
+              .where((file) {
+                final name = file['name']?.toString().toLowerCase() ?? '';
+                if (!name.endsWith('.mp4') && !name.endsWith('.mov')) return false;
+                return _durationMatches(_seconds(file['length']), expectedRuntimeMinutes) &&
+                    (_seconds(file['length']) ?? 0) > 0;
+              }).isNotEmpty;
+          if (!hasMatchingRuntime) continue;
+        }
 
         final files = (data['files'] as List? ?? const []).whereType<Map>().toList();
         final variants = <ArchiveVideoVariant>[];
