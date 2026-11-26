@@ -96,7 +96,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (message.contains('https')) {
       return 'Источник видео не прошёл проверку безопасности.';
     }
-    return 'Не удалось запустить видео в этом плеере. Возможно, Windows не поддерживает его формат или кодек.';
+    return 'Не удалось запустить видео во встроенном плеере. Возможно, формат или кодек не поддерживается.';
   }
 
   String _time(Duration d) {
