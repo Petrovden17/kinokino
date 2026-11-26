@@ -34,8 +34,44 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Generate Android runner
-        run: flutter create --platforms=android --org com.osirisvectory --project-name=kinokino .
+      - name: Generate Android runner with a new non-conflicting application ID
+        run: |
+          flutter create --platforms=android --org com.osirisvectory --project-name=kinokino .
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle = Path("android/app/build.gradle.kts")
+          source = gradle.read_text(encoding="utf-8")
+          source, count = re.subn(
+              r'applicationId\\s*=\\s*"[^"]+"',
+              'applicationId = "com.osirisvectory.kinokino.next"',
+              source,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Could not set the new Android application ID")
+          gradle.write_text(source, encoding="utf-8")
+          PY
+
+      - name: Restore persistent Android signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: kinokino-android-signing-v1
+
+      - name: Create persistent Android signing key if needed
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \\
+              -keystore "$HOME/.android/debug.keystore" \\
+              -storepass android -alias androiddebugkey -keypass android \\
+              -keyalg RSA -keysize 2048 -validity 10000 \\
+              -dname "CN=KinoKino, OU=Android, O=KinoKino, L=Unknown, ST=Unknown, C=US"
+          fi
+          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android -alias androiddebugkey
 
       - name: Allow legacy WebView ProGuard configuration on AGP 9
         run: echo 'android.r8.proguardAndroidTxt.disallowed=false' >> android/gradle.properties
