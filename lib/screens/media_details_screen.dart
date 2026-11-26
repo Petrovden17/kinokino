@@ -33,6 +33,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final date = (_details?['release_date'] ?? _details?['first_air_date'] ?? widget.item.releaseDate).toString();
     return int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? 0;
   }
+  String get _preferredArchiveLanguage => widget.preferredAudioLanguage == 'original'
+      ? (_details?['original_language']?.toString() ?? 'auto')
+      : widget.preferredAudioLanguage;
   String get _playbackSearchTitle {
     final d = _details ?? {};
     return (d['original_title'] ?? d['original_name'] ?? d['title'] ?? d['name'] ?? widget.item.title).toString();
@@ -192,7 +195,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       expectedRuntimeMinutes: runtime,
       expectedYear: year,
       displayTitle: '$_displayTitle · Сезон $season · Серия $number',
-      preferredLanguage: widget.preferredAudioLanguage,
+      preferredLanguage: _preferredArchiveLanguage,
     );
     if (!mounted || source == null) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -454,7 +457,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 18), scrollDirection: Axis.horizontal,
             itemCount: _recommendations.length, separatorBuilder: (_, __) => const SizedBox(width: 12),
             itemBuilder: (_, i) => PosterCard(item: _recommendations[i], onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => MediaDetailsScreen(item: _recommendations[i])))),
+              MaterialPageRoute(builder: (_) => MediaDetailsScreen(item: _recommendations[i], preferredAudioLanguage: widget.preferredAudioLanguage, preferredVideoQuality: widget.preferredVideoQuality)))),
           )),
         ],
       ]),
