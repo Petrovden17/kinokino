@@ -21,7 +21,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   bool _loading = true;
   String? _error;
   double _rating = 0;
-  String get _type => widget.item.mediaType == 'tv' ? 'tv' : 'movie';
+  String get _type => ['tv', 'animated_tv'].contains(widget.item.mediaType.toLowerCase()) ? 'tv' : 'movie';
   String get _displayTitle {
     final d = _details ?? {};
     return (d['title'] ?? d['name'] ?? widget.item.title).toString();
