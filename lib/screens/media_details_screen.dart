@@ -16,7 +16,8 @@ class MediaDetailsScreen extends StatefulWidget {
 class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   final _tmdb = TmdbService();
   Map<String, dynamic>? _details;
-  List<MediaItem> _recommendations = [];\n  Map<String, dynamic> _externalIds = {};
+  List<MediaItem> _recommendations = [];
+  Map<String, dynamic> _externalIds = {};
   bool _loading = true;
   String? _error;
   double _rating = 0;
@@ -25,7 +26,11 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final d = _details ?? {};
     return (d['title'] ?? d['name'] ?? widget.item.title).toString();
   }
-  int get _releaseYear {\n    final date = (_details?['release_date'] ?? _details?['first_air_date'] ?? widget.item.releaseDate).toString();\n    return int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? 0;\n  }\n  String get _playbackSearchTitle {
+  int get _releaseYear {
+    final date = (_details?['release_date'] ?? _details?['first_air_date'] ?? widget.item.releaseDate).toString();
+    return int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? 0;
+  }
+  String get _playbackSearchTitle {
     final d = _details ?? {};
     return (d['original_title'] ?? d['original_name'] ?? d['title'] ?? d['name'] ?? widget.item.title).toString();
   }
@@ -38,8 +43,11 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Future<void> _load() async {
     Map<String, dynamic>? details;
     List<MediaItem> picks = [];
-    String? error;\n    Map<String, dynamic> externalIds = {};\n    try {
-      details = await _tmdb.details(widget.item.id, type: _type);\n      try { externalIds = await _tmdb.externalIds(widget.item.id, type: _type); } catch (_) {}
+    String? error;
+    Map<String, dynamic> externalIds = {};
+    try {
+      details = await _tmdb.details(widget.item.id, type: _type);
+      try { externalIds = await _tmdb.externalIds(widget.item.id, type: _type); } catch (_) {}
     } catch (e) {
       error = e.toString();
     }
@@ -59,7 +67,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
     if (mounted) setState(() {
       _details = details;
-      _recommendations = picks;\n      _externalIds = externalIds;\n      _error = error;
+      _recommendations = picks;
+      _externalIds = externalIds;
+      _error = error;
       _loading = false;
     });
   }
@@ -145,27 +155,63 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     if (_searchingPlayback) return;
     String sourceTitle = _playbackSearchTitle;
     int expectedRuntime = (_details?['runtime'] as num?)?.toInt() ?? 0;
+    int expectedYear = _releaseYear;
     Map<String, dynamic>? selectedEpisode;
     if (_type == 'tv') {
       selectedEpisode = await _chooseEpisode();
       if (selectedEpisode == null || !mounted) return;
       sourceTitle = (selectedEpisode['name'] ?? '').toString();
       expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
+      final episodeDate = (selectedEpisode['air_date'] ?? '').toString();
+      expectedYear = int.tryParse(episodeDate.length >= 4 ? episodeDate.substring(0, 4) : '') ?? _releaseYear;
     }
-    if (_releaseYear <= 0) {\n      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен год выхода. Не буду запускать неподтверждённую версию.')));\n      return;\n    }\n    if (expectedRuntime <= 0) {
+    if (expectedYear <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен год выхода. Не буду запускать неподтверждённую версию.')));
+      return;
+    }
+    if (expectedRuntime <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен хронометраж. Не буду запускать непроверенный ролик.')));
       return;
     }
-    final cancelToken = CancelToken();\n    setState(() => _searchingPlayback = true);\n    showDialog<void>(
+    final cancelToken = CancelToken();
+    setState(() => _searchingPlayback = true);
+    showDialog<void>(
       context: context,
-      barrierDismissible: false,\n      builder: (dialogContext) => AlertDialog(\n        content: const Row(children: [\n          CircularProgressIndicator(),\n          SizedBox(width: 16),\n          Expanded(child: Text('Ищем точное совпадение по названию, году и длительности…')),\n        ]),\n        actions: [\n          TextButton.icon(\n            onPressed: () {\n              cancelToken.cancel('Пользователь отменил поиск');\n              Navigator.of(dialogContext).pop();\n            },\n            icon: const Icon(Icons.arrow_back),\n            label: const Text('Назад'),\n          ),\n        ],\n      ),
+      barrierDismissible: false,
+      builder: (dialogContext) => WillPopScope(
+        onWillPop: () async {
+          cancelToken.cancel('Пользователь вернулся назад');
+          return true;
+        },
+        child: AlertDialog(
+        content: const Row(children: [
+          CircularProgressIndicator(),
+          SizedBox(width: 16),
+          Expanded(child: Text('Ищем точное совпадение по названию, году и длительности…')),
+        ]),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              cancelToken.cancel('Пользователь отменил поиск');
+              Navigator.of(dialogContext).pop();
+            },
+            icon: const Icon(Icons.arrow_back),
+            label: const Text('Назад'),
+          ),
+        ],
+      )),
     );
     var dialogClosed = false;
     try {
       final source = await InternetArchiveService().findLicensedVideo(
         sourceTitle,
-        expectedRuntimeMinutes: expectedRuntime,\n        expectedYear: _releaseYear,\n        displayTitle: _displayTitle,\n        cancelToken: cancelToken,\n      );
-      if (!mounted || cancelToken.isCancelled) return;\n      Navigator.of(context, rootNavigator: true).pop();
+        expectedRuntimeMinutes: expectedRuntime,
+        expectedYear: expectedYear,
+        displayTitle: _displayTitle,
+        cancelToken: cancelToken,
+      );
+      if (!mounted || cancelToken.isCancelled) return;
+      Navigator.of(context, rootNavigator: true).pop();
       dialogClosed = true;
       if (source == null) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -177,7 +223,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       }
       await Navigator.push(context, MaterialPageRoute(builder: (_) =>
         PlayerScreen(streamUrl: source.url.toString(), title: _displayTitle, variants: source.variants)));
-    } catch (e) {\n      if (!mounted) return;\n      if (cancelToken.isCancelled) return;\n      if (!dialogClosed) Navigator.of(context, rootNavigator: true).pop();
+    } catch (e) {
+      if (!mounted) return;
+      if (cancelToken.isCancelled) return;
+      if (!dialogClosed) Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Не удалось найти видео: $e')),
       );
