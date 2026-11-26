@@ -22,9 +22,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   WebUri get _primaryUrl {
     final id = widget.kinopoiskId;
-    if (id == null || id <= 0) return WebUri('https://fixtyflux.cfd/');
+    if (id == null || id <= 0) return WebUri('https://kinokino.win/');
     final kind = widget.isSeries ? 'series' : 'film';
-    return WebUri('https://fixtyflux.cfd/$kind/$id/');
+    return WebUri('https://kinokino.win/$kind/$id/');
   }
 
   Future<void> _switchToFallback() async {
@@ -175,7 +175,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 _switchToFallback();
               } else {
                 setState(() {
-                  _pageError = 'Не удалось загрузить FixtyFlux и резервную Zagonka. Проверь подключение и нажми «Обновить».';
+                  _pageError = 'Не удалось загрузить KinoKino и резервную Zagonka. Проверь подключение и нажми «Обновить».';
                 });
               }
             },
@@ -215,7 +215,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              '${widget.title} · ${_usingFallback ? 'Zagonka' : 'FixtyFlux'}',
+                              '${widget.title} · ${_usingFallback ? 'Zagonka' : 'KinoKino'}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
