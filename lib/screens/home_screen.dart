@@ -51,7 +51,7 @@ class _HomeScreenState extends State<HomeScreen>{
   }
   Future<void> _applyFilters() async {
     setState(()=>_loading=true);_error=null;
-    try{final r=await _tmdb.discover(type:_apiType,genreId:_effectiveGenre,sortBy:_sort,minRating:_minRating==0?null:_minRating);if(mounted)setState(()=>{_items=r,_page=1,_hasMore:r.isNotEmpty});}
+    try{final r=await _tmdb.discover(type:_apiType,genreId:_effectiveGenre,sortBy:_sort,minRating:_minRating==0?null:_minRating);if(mounted)setState((){_items=r;_page=1;_hasMore=r.isNotEmpty;});}
     catch(_){if(mounted)setState(()=>_error='Не удалось применить фильтры.');}
     finally{if(mounted)setState(()=>_loading=false);}
   }
