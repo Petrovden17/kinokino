@@ -268,7 +268,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       final approved = await showDialog<bool>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          title: const Text('Проверь найденное видео'),
+          title: Text(_type == 'tv' ? 'Проверь найденную серию' : 'Проверь найденное видео'),
           content: Text(
             'Название в архиве: ${source.archiveTitle}\n'
             'Год в метаданных: ${source.releaseYear}\n'
@@ -282,7 +282,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             ),
             FilledButton(
               onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Это тот фильм'),
+              child: Text(_type == 'tv' ? 'Это та серия' : 'Это тот фильм'),
             ),
           ],
         ),
