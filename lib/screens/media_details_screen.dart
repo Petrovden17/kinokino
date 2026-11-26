@@ -665,14 +665,14 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         final rawId = selected?['filmId'] ?? selected?['kinopoiskId'] ??
             selected?['kinopoisk_id'] ?? selected?['id'];
         id = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
-        if (id != null && id! > 0 && mounted) {
+        if (id != null && id > 0 && mounted) {
           setState(() => _kinopoiskId = id);
         }
       } finally {
         if (mounted) setState(() => _resolvingKinopoisk = false);
       }
     }
-    if (!mounted || id == null || id! <= 0) return;
+    if (!mounted || id == null || id <= 0) return;
     await Navigator.push(context, MaterialPageRoute(
       builder: (_) => ZagonkaScreen(
         title: _displayTitle,
