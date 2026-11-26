@@ -296,6 +296,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
+  // Retained for compatibility with the native popup path; the current flow blocks popups.
+  // ignore: unused_element
   Future<bool> _showPlayerWindow(CreateWindowAction action) async {
     if (!mounted || _playerWindowOpened) {
       debugPrint('[KinoKino] ignoring extra popup: ${action.request.url}');
