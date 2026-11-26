@@ -79,7 +79,7 @@ class InternetArchiveService {
 
   int? _yearFrom(dynamic value) {
     if (value == null) return null;
-    final match = RegExp(r'(?<!\\d)(19\\d{2}|20\\d{2})(?!\\d)').firstMatch(value.toString());
+    final match = RegExp(r'(?<!\d)(19\d{2}|20\d{2})(?!\d)').firstMatch(value.toString());
     return match == null ? null : int.tryParse(match.group(1)!);
   }
 
