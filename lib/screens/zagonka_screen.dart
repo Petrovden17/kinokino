@@ -130,10 +130,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const key = parsed.href;
             if (sent.has(key)) return;
             const text = (hint || '').toLowerCase();
-            if (!/player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo|iframe/i.test(key + ' ' + text)) return;
+            if (!/player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo|iframe|m3u8|mpd|mp4/i.test(key + ' ' + text)) return;
             sent.add(key);
             window.flutter_inappwebview.callHandler('streamBridge', {
-              kind: /\\.(m3u8|mpd|mp4)(?:$|[?#])/i.test(key) ? 'media' : 'player',
+              kind: /\.(m3u8|mpd|mp4)(?:$|[?#])/i.test(key) ? 'media' : 'player',
               url: key,
               hint: text
             });
@@ -148,7 +148,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           });
           try {
             performance.getEntriesByType('resource').forEach((entry) => {
-              if (/\\.(m3u8|mpd|mp4)(?:$|[?#])/i.test(entry.name)) report(entry.name, 'media resource');
+              if (/\.(m3u8|mpd|mp4)(?:$|[?#])/i.test(entry.name)) report(entry.name, 'media resource');
             });
           } catch (_) {}
         };
@@ -203,7 +203,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               key: const ValueKey('kino-streambridge-player'),
               initialUrlRequest: URLRequest(url: WebUri(url)),
               initialSettings: _webSettings,
-              onWebViewCreated: (_) => debugPrint('[StreamBridge] player view attached'),
+              onWebViewCreated: (controller) {
+                controller.addJavaScriptHandler(
+                  handlerName: 'streamBridge',
+                  callback: (args) {
+                    _handleStreamBridgeCall(args);
+                    return {'accepted': true};
+                  },
+                );
+                debugPrint('[StreamBridge] player view attached');
+              },
               onLoadStart: (_, uri) => debugPrint('[StreamBridge] loading player: $uri'),
               onLoadStop: (controller, uri) {
                 debugPrint('[StreamBridge] player loaded: $uri');
