@@ -45,7 +45,7 @@ jobs:
 
           manifest = Path("android/app/src/main/AndroidManifest.xml")
           content = manifest.read_text(encoding="utf-8")
-          permission = '    <uses-permission android:name="android.permission.INTERNET" />\\n'
+          permission = '    <uses-permission android:name="android.permission.INTERNET" />\n'
           if "android.permission.INTERNET" not in content:
               marker = "    <application"
               if marker not in content:
@@ -77,15 +77,15 @@ jobs:
           app = android / "app"
           (app / "upload-keystore.jks").write_bytes(base64.b64decode(os.environ["ANDROID_KEYSTORE_BASE64"]))
           (android / "key.properties").write_text(
-              "storePassword=" + os.environ["ANDROID_KEYSTORE_PASSWORD"] + "\\n" +
-              "keyPassword=" + os.environ["ANDROID_KEY_PASSWORD"] + "\\n" +
-              "keyAlias=" + os.environ["ANDROID_KEY_ALIAS"] + "\\n" +
-              "storeFile=app/upload-keystore.jks\\n",
+              "storePassword=" + os.environ["ANDROID_KEYSTORE_PASSWORD"] + "\n" +
+              "keyPassword=" + os.environ["ANDROID_KEY_PASSWORD"] + "\n" +
+              "keyAlias=" + os.environ["ANDROID_KEY_ALIAS"] + "\n" +
+              "storeFile=app/upload-keystore.jks\n",
               encoding="utf-8",
           )
           gradle = app / "build.gradle.kts"
           source = gradle.read_text(encoding="utf-8")
-          imports = "import java.io.FileInputStream\\nimport java.util.Properties\\n"
+          imports = "import java.io.FileInputStream\nimport java.util.Properties\n"
           source = imports + source
           source = source.replace(
               "android {",
