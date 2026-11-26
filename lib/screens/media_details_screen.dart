@@ -27,11 +27,13 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   String get _type => ['tv', 'animated_tv'].contains(widget.item.mediaType.toLowerCase()) ? 'tv' : 'movie';
   String get _displayTitle {
     final d = _details ?? {};
-    return (d['title'] ?? d['name'] ?? widget.item.title).toString();
+    final localized = (d['title'] ?? d['name'] ?? '').toString().trim();
+    return RegExp(r'[А-Яа-яЁё]').hasMatch(localized) ? localized : widget.item.title;
   }
   int get _releaseYear {
     final date = (_details?['release_date'] ?? _details?['first_air_date'] ?? widget.item.releaseDate).toString();
-    return int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? 0;
+    final year = int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? 0;
+    return year >= 1888 && year <= DateTime.now().year ? year : 0;
   }
   String get _preferredArchiveLanguage => widget.preferredAudioLanguage == 'original'
       ? (_details?['original_language']?.toString() ?? 'auto')
