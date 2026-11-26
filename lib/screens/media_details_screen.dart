@@ -9,8 +9,10 @@ import '../services/local_database.dart';
 import '../widgets/poster_card.dart';
 import 'player_screen.dart';
 class MediaDetailsScreen extends StatefulWidget {
-  const MediaDetailsScreen({super.key, required this.item});
+  const MediaDetailsScreen({super.key, required this.item, this.preferredAudioLanguage = 'auto', this.preferredVideoQuality = 'auto'});
   final MediaItem item;
+  final String preferredAudioLanguage;
+  final String preferredVideoQuality;
   @override State<MediaDetailsScreen> createState() => _MediaDetailsScreenState();
 }
 class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
@@ -190,6 +192,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       expectedRuntimeMinutes: runtime,
       expectedYear: year,
       displayTitle: '$_displayTitle · Сезон $season · Серия $number',
+      preferredLanguage: widget.preferredAudioLanguage,
     );
     if (!mounted || source == null) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -276,6 +279,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         expectedRuntimeMinutes: expectedRuntime,
         expectedYear: expectedYear,
         displayTitle: _displayTitle,
+        preferredLanguage: widget.preferredAudioLanguage,
         cancelToken: cancelToken,
       );
       // Try the localized display title too: public archives often catalogue
@@ -286,6 +290,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           expectedRuntimeMinutes: expectedRuntime,
           expectedYear: expectedYear,
           displayTitle: _displayTitle,
+          preferredLanguage: widget.preferredAudioLanguage,
           cancelToken: cancelToken,
         );
       }
@@ -324,7 +329,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       );
       if (approved != true || !mounted) return;
       await Navigator.push(context, MaterialPageRoute(builder: (_) =>
-        PlayerScreen(streamUrl: source.url.toString(), title: selectedEpisode == null ? _displayTitle : '$_displayTitle · S${(selectedEpisode['season_number'] as num?)?.toInt() ?? 1}E${(selectedEpisode['episode_number'] as num?)?.toInt() ?? 1} — ${selectedEpisode['name'] ?? ''}', variants: source.variants, onChooseEpisode: _type == 'tv' ? _chooseEpisode : null, onResolveEpisode: _type == 'tv' ? _resolveEpisodeSource : null)));
+        PlayerScreen(streamUrl: source.url.toString(), title: selectedEpisode == null ? _displayTitle : '$_displayTitle · S${(selectedEpisode['season_number'] as num?)?.toInt() ?? 1}E${(selectedEpisode['episode_number'] as num?)?.toInt() ?? 1} — ${selectedEpisode['name'] ?? ''}', variants: source.variants, preferredVideoQuality: widget.preferredVideoQuality, onChooseEpisode: _type == 'tv' ? _chooseEpisode : null, onResolveEpisode: _type == 'tv' ? _resolveEpisodeSource : null)));
     } catch (e) {
       if (!mounted) return;
       if (cancelToken.isCancelled) return;
