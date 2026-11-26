@@ -113,9 +113,12 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
     theme: AppTheme.darkWithAccent(Color(settings.accentColorValue)),
     builder: (context, child) {
       final media = MediaQuery.of(context);
-      return MediaQuery(
-        data: media.copyWith(disableAnimations: !settings.animationsEnabled || media.disableAnimations),
-        child: child ?? const SizedBox.shrink(),
+      return TickerMode(
+        enabled: settings.animationsEnabled,
+        child: MediaQuery(
+          data: media.copyWith(disableAnimations: !settings.animationsEnabled || media.disableAnimations),
+          child: child ?? const SizedBox.shrink(),
+        ),
       );
     },
     home: StreamBuilder<AuthState>(
