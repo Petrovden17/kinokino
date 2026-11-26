@@ -221,6 +221,29 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         ));
         return;
       }
+      final approved = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Проверь найденное видео'),
+          content: Text(
+            'Название в архиве: ${source.archiveTitle}\\n'
+            'Год в метаданных: ${source.releaseYear}\\n'
+            'Длительность: ${(source.durationSeconds / 60).round()} мин.\\n'
+            'Лицензия: ${source.license}',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Не то видео'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Это тот фильм'),
+            ),
+          ],
+        ),
+      );
+      if (approved != true || !mounted) return;
       await Navigator.push(context, MaterialPageRoute(builder: (_) =>
         PlayerScreen(streamUrl: source.url.toString(), title: _displayTitle, variants: source.variants)));
     } catch (e) {
