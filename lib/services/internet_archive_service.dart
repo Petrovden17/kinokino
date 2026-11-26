@@ -116,7 +116,7 @@ class InternetArchiveService {
     final docs = <Map>[];
     for (final query in queries) {
       try {
-        cancelToken?.throwIfCancellationRequested();
+        if (cancelToken?.isCancelled == true) return null;
         final response = await _dio.get<dynamic>(
           'https://archive.org/advancedsearch.php',
           queryParameters: {
