@@ -43,7 +43,10 @@ class MediaItem {
     if (date.length < 10) return '';
     final day = date.substring(0, 10);
     final parsed = DateTime.tryParse(day);
-    if (parsed == null || parsed.year < 1888) return '';
+    if (parsed == null || parsed.year < 1888 ||
+        parsed.year.toString().padLeft(4, '0') != day.substring(0, 4) ||
+        parsed.month.toString().padLeft(2, '0') != day.substring(5, 7) ||
+        parsed.day.toString().padLeft(2, '0') != day.substring(8, 10)) return '';
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     if (DateTime(parsed.year, parsed.month, parsed.day).isAfter(today)) return '';
