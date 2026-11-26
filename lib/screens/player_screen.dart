@@ -8,13 +8,14 @@ import '../services/legal_source_service.dart';
 import '../services/internet_archive_service.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.streamUrl, required this.title, this.variants = const [], this.preferredVideoQuality = 'auto', this.onChooseEpisode, this.onResolveEpisode});
+  const PlayerScreen({super.key, required this.streamUrl, required this.title, this.variants = const [], this.preferredVideoQuality = 'auto', this.onChooseEpisode, this.onResolveEpisode, this.onResolveAudio});
   final String streamUrl;
   final String title;
   final List<ArchiveVideoVariant> variants;
   final String preferredVideoQuality;
   final Future<Map<String, dynamic>?> Function()? onChooseEpisode;
   final Future<ArchiveVideo?> Function(Map<String, dynamic>)? onResolveEpisode;
+  final Future<ArchiveVideo?> Function(String language)? onResolveAudio;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -32,6 +33,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late String _activeUrl;
   late String _activeTitle;
   late List<ArchiveVideoVariant> _activeVariants;
+  String _activeAudioLanguage = 'auto';
+  bool _changingAudio = false;
 
   ArchiveVideoVariant? _preferredVariant(List<ArchiveVideoVariant> variants, String preference) {
     if (variants.isEmpty || preference == 'auto') return null;
@@ -140,6 +143,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _initialize(autoplay: wasPlaying);
   }
 
+  Future<void> _selectAudioLanguage(String language) async {
+    final resolve = widget.onResolveAudio;
+    if (resolve == null || language == _activeAudioLanguage || _changingAudio) return;
+    setState(() => _changingAudio = true);
+    try {
+      final source = await resolve(language);
+      if (!mounted) return;
+      if (source == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Версия с выбранной озвучкой не найдена.')));
+        return;
+      }
+      final wasPlaying = _controller?.value.isPlaying ?? true;
+      final previous = _controller;
+      previous?.removeListener(_onChanged);
+      _controller = null;
+      await previous?.dispose();
+      if (!mounted) return;
+      setState(() {
+        _activeVariants = source.variants;
+        _activeUrl = _preferredVariant(source.variants, widget.preferredVideoQuality)?.url.toString() ?? source.url.toString();
+        _activeAudioLanguage = language;
+        _busy = true;
+        _error = null;
+      });
+      await _initialize(autoplay: wasPlaying);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Не удалось переключить озвучку.')));
+    } finally {
+      if (mounted) setState(() => _changingAudio = false);
+    }
+  }
   Future<void> _selectEpisode() async {
     final choose = widget.onChooseEpisode;
     final resolve = widget.onResolveEpisode;
@@ -277,6 +311,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
             child: Icon(Icons.fit_screen, color: Colors.white),
           ),
         ),
+        if (widget.onResolveAudio != null)
+          PopupMenuButton<String>(
+            tooltip: 'Озвучка / язык версии',
+            onSelected: _selectAudioLanguage,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'auto', child: Text('Автоматически')) ,
+              PopupMenuItem(value: 'ru', child: Text('Русская версия')) ,
+              PopupMenuItem(value: 'original', child: Text('Оригинальная версия')) ,
+            ],
+            child: Padding(
+              padding: const EdgeInsets.all(9),
+              child: _changingAudio
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.record_voice_over_outlined, color: Colors.white),
+            ),
+          ),
         if (_activeVariants.length > 1)
           PopupMenuButton<ArchiveVideoVariant>(
             tooltip: 'Качество видео',
