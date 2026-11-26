@@ -46,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen>{
       }
       final groups=await Future.wait(requests);
       final unique=<String,MediaItem>{};for(final group in groups){for(final item in group){unique['${item.mediaType}:${item.id}']=item;}}
-      if(mounted)setState(()=>{_items=unique.values.toList(),_page=10,_hasMore:true});
+      if(mounted)setState((){_items=unique.values.toList();_page=10;_hasMore=true;});
     }catch(_){if(mounted)setState(()=>_error='Не удалось загрузить каталог. Проверьте подключение к интернету и попробуйте обновить страницу.');}
     finally{if(mounted)setState(()=>_loading=false);}
   }
@@ -58,7 +58,7 @@ class _HomeScreenState extends State<HomeScreen>{
   }
   Future<void> _searchMedia(String value) async {
     if(value.trim().isEmpty){_loadTrending();return;}setState(()=>_loading=true);_error=null;
-    try{final r=await _tmdb.search(value);if(mounted)setState(()=>{_items=r,_page=1,_hasMore=r.isNotEmpty});}
+    try{final r=await _tmdb.search(value);if(mounted)setState((){_items=r;_page=1;_hasMore=r.isNotEmpty;});}
     catch(_){if(mounted)setState(()=>_error='Ошибка поиска. Проверьте подключение к интернету.');}
     finally{if(mounted)setState(()=>_loading=false);}
   }
@@ -74,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen>{
       body:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(16,8,16,10),child:TextField(controller:_search,onSubmitted:_searchMedia,decoration:InputDecoration(hintText:'Поиск фильмов, сериалов и мультфильмов',prefixIcon:const Icon(Icons.search),suffixIcon:IconButton(icon:const Icon(Icons.clear),onPressed:(){_search.clear();_loadTrending();})))),
         Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:Column(children:[
-          Row(children:[Expanded(child:SingleChildScrollView(scrollDirection:Axis.horizontal,child:SegmentedButton<String>(showSelectedIcon:false,segments:const[ButtonSegment(value:'movie',label:Text('Фильмы')),ButtonSegment(value:'tv',label:Text('Сериалы')),ButtonSegment(value:'animation',label:Text('Мультфильмы')),ButtonSegment(value:'animated_tv',label:Text('Мультсериалы'))],selected:{_type},onSelectionChanged:(v){setState(()=>{_type=v.first,_genreId=(v.first=='animation'||v.first=='animated_tv')?16:null});_loadGenres();_applyFilters();}))),
+          Row(children:[Expanded(child:SingleChildScrollView(scrollDirection:Axis.horizontal,child:SegmentedButton<String>(showSelectedIcon:false,segments:const[ButtonSegment(value:'movie',label:Text('Фильмы')),ButtonSegment(value:'tv',label:Text('Сериалы')),ButtonSegment(value:'animation',label:Text('Мультфильмы')),ButtonSegment(value:'animated_tv',label:Text('Мультсериалы'))],selected:{_type},onSelectionChanged:(v){setState((){_type=v.first;_genreId=(v.first=='animation'||v.first=='animated_tv')?16:null;});_loadGenres();_applyFilters();}))),
             const SizedBox(width:8),PopupMenuButton<String>(tooltip:'Сортировка',icon:const Icon(Icons.sort),onSelected:(v){setState(()=>_sort=v);_applyFilters();},itemBuilder:(_)=>const[PopupMenuItem(value:'popularity.desc',child:Text('Популярные')),PopupMenuItem(value:'vote_average.desc',child:Text('По рейтингу')),PopupMenuItem(value:'primary_release_date.desc',child:Text('Сначала новые')),PopupMenuItem(value:'revenue.desc',child:Text('По сборам'))])]),
           const SizedBox(height:8),Row(children:[
             Expanded(child:DropdownButtonFormField<int?>(value:_genreId,decoration:const InputDecoration(labelText:'Жанр',contentPadding:EdgeInsets.symmetric(horizontal:12,vertical:8)),items:[const DropdownMenuItem<int?>(value:null,child:Text('Все жанры')),..._genres.map((g)=>DropdownMenuItem<int?>(value:g['id'] as int,child:Text(g['name'].toString())))],onChanged:(v){setState(()=>_genreId=v);_applyFilters();})),
