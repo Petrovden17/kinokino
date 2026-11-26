@@ -165,7 +165,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     if (_androidController != null) {
       await _androidController!.reload();
     } else {
-      await _reloadPage();
+      await _controller?.loadUrl(urlRequest: URLRequest(url: _primaryUrl));
     }
   }
 
@@ -346,7 +346,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                       tooltip: 'Повторить',
                       onPressed: () {
                         setState(() => _pageError = null);
-                        _controller?.loadUrl(urlRequest: URLRequest(url: _primaryUrl));
+                        _reloadPage();
                       },
                       icon: const Icon(Icons.refresh, color: Colors.white),
                     ),
