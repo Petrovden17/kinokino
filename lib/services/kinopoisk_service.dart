@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Kinopoisk API client. The private API token is stored server-side.
+/// Resolves Kinopoisk IDs through the private API, with a Wikidata fallback.
 class KinopoiskService {
   KinopoiskService({SupabaseClient? client})
       : _client = client ?? Supabase.instance.client;
@@ -11,7 +11,10 @@ class KinopoiskService {
     baseUrl: 'https://www.wikidata.org/w/api.php',
     connectTimeout: const Duration(seconds: 12),
     receiveTimeout: const Duration(seconds: 18),
-    headers: const {'Accept': 'application/json', 'User-Agent': 'KinoKino/1.0 (media metadata lookup)'},
+    headers: const {
+      'Accept': 'application/json',
+      'User-Agent': 'KinoKino/1.0 (media metadata lookup)',
+    },
   ));
 
   Future<Map<String, dynamic>> _invoke(
@@ -37,8 +40,8 @@ class KinopoiskService {
           .map((item) => Map<String, dynamic>.from(item)).toList();
       if (films.isNotEmpty) return films;
     } catch (_) {
-      // The public app must still be able to resolve a catalog ID if the
-      // optional private Kinopoisk API key is unavailable.
+      // Continue with the public identifier index when the private API key
+      // is absent or the Kinopoisk proxy is temporarily unavailable.
     }
     return _searchWikidata(query);
   }
@@ -53,30 +56,13 @@ class KinopoiskService {
       'limit': 12,
       'format': 'json',
     });
-    final searchRows = (searchResponse.data is Map
+    final searchRows = searchResponse.data is Map
         ? (searchResponse.data['search'] as List? ?? const [])
-        : const <dynamic>[]);
+        : const <dynamic>[];
     final ids = searchRows.whereType<Map>()
         .map((row) => row['id']?.toString() ?? '')
-        .where((id) => RegExp(r'^Q[0-9]+
-
-  Future<Map<String, dynamic>> film(int id) => _invoke('film', filmId: id);
-
-  Future<List<Map<String, dynamic>>> seasons(int id) async {
-    final data = await _invoke('seasons', filmId: id);
-    final items = data['items'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> videos(int id) async {
-    final data = await _invoke('videos', filmId: id);
-    final items = data['items'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
-  }
-}
-).hasMatch(id))
+        .where((id) => id.startsWith('Q') &&
+            id.length > 1 && int.tryParse(id.substring(1)) != null)
         .toSet().toList();
     if (ids.isEmpty) return const [];
 
@@ -91,64 +77,59 @@ class KinopoiskService {
         ? (entityResponse.data['entities'] as Map? ?? const {})
         : const {};
     final results = <Map<String, dynamic>>[];
+
     for (final entry in entities.entries) {
       final entity = entry.value;
       if (entity is! Map) continue;
       final claims = entity['claims'] as Map? ?? const {};
       final kpClaims = claims['P2603'] as List? ?? const [];
       if (kpClaims.isEmpty) continue;
-      final rawId = (((kpClaims.first as Map?)?['mainsnak'] as Map?)?['datavalue'] as Map?)?['value'];
-      final filmId = rawId?.toString().trim() ?? '';
-      if (filmId.isEmpty || !RegExp(r'^\\d+
-
-  Future<Map<String, dynamic>> film(int id) => _invoke('film', filmId: id);
-
-  Future<List<Map<String, dynamic>>> seasons(int id) async {
-    final data = await _invoke('seasons', filmId: id);
-    final items = data['items'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> videos(int id) async {
-    final data = await _invoke('videos', filmId: id);
-    final items = data['items'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
-  }
-}
-).hasMatch(filmId)) continue;
+      final firstClaim = kpClaims.first as Map?;
+      final mainSnak = firstClaim?['mainsnak'] as Map?;
+      final dataValue = mainSnak?['datavalue'] as Map?;
+      final filmId = dataValue?['value']?.toString().trim() ?? '';
+      if (int.tryParse(filmId) == null) continue;
 
       String label(String language) {
         final labels = entity['labels'] as Map? ?? const {};
         return ((labels[language] as Map?)?['value'] ?? '').toString();
       }
+
       String claimEntityId(String property) {
         final rows = claims[property] as List? ?? const [];
         if (rows.isEmpty) return '';
-        final value = (((rows.first as Map?)['mainsnak'] as Map?)?['datavalue'] as Map?)?['value'];
+        final claim = rows.first as Map?;
+        final snak = claim?['mainsnak'] as Map?;
+        final value = (snak?['datavalue'] as Map?)?['value'];
         return value is Map ? (value['id']?.toString() ?? '') : '';
       }
+
       int yearFromClaim(String property) {
         final rows = claims[property] as List? ?? const [];
         if (rows.isEmpty) return 0;
-        final value = (((rows.first as Map?)['mainsnak'] as Map?)?['datavalue'] as Map?)?['value'];
-        final match = RegExp(r'([12][0-9]{3})').firstMatch(value?.toString() ?? '');
-        return int.tryParse(match?.group(1) ?? '') ?? 0;
+        final claim = rows.first as Map?;
+        final snak = claim?['mainsnak'] as Map?;
+        final value = (snak?['datavalue'] as Map?)?['value']?.toString() ?? '';
+        for (var index = 0; index + 4 <= value.length; index++) {
+          final candidate = value.substring(index, index + 4);
+          final year = int.tryParse(candidate);
+          if (year != null && year >= 1800 && year <= 2200) return year;
+        }
+        return 0;
       }
 
       final ru = label('ru');
       final en = label('en');
       final instance = claimEntityId('P31');
       final isSeries = const {'Q5398426', 'Q1259759', 'Q15416'}.contains(instance);
+      final releaseYear = yearFromClaim('P577');
       results.add({
-        'filmId': int.tryParse(filmId) ?? filmId,
+        'filmId': int.parse(filmId),
         'nameRu': ru,
         'nameEn': en,
         'nameOriginal': en.isNotEmpty ? en : ru,
         'name': ru.isNotEmpty ? ru : en,
-        'year': yearFromClaim('P577') != 0
-            ? yearFromClaim('P577') : yearFromClaim('P571'),
+        'year': releaseYear != 0 ? releaseYear : yearFromClaim('P571'),
         'type': isSeries ? 'TV_SERIES' : (instance == 'Q11424' ? 'FILM' : ''),
       });
     }
