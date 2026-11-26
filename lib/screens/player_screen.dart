@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
 import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
 import '../services/legal_source_service.dart';
 
 class PlayerScreen extends StatefulWidget {
@@ -16,8 +16,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   VideoPlayerController? _controller;
   String? _error;
   bool _busy = true;
-  double _speed = 1.0;
   bool _fullscreen = false;
+  double _speed = 1;
 
   @override
   void initState() {
@@ -27,30 +27,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _initialize() async {
     if (mounted) setState(() { _busy = true; _error = null; });
-    VideoPlayerController? controller;
+    VideoPlayerController? next;
     try {
       final uri = LegalSourceService().validateAuthorizedStream(widget.streamUrl);
-      controller = VideoPlayerController.networkUrl(uri);
-      _controller = controller;
-      controller.addListener(_onPlayerChanged);
-      await controller.initialize();
-      await controller.setLooping(false);
+      next = VideoPlayerController.networkUrl(uri);
+      _controller = next;
+      next.addListener(_onChanged);
+      await next.initialize();
+      await next.setLooping(false);
       if (!mounted) return;
       setState(() => _busy = false);
-      await controller.play();
+      await next.play();
     } catch (e) {
-      controller?.removeListener(_onPlayerChanged);
-      await controller?.dispose();
-      if (identical(_controller, controller)) _controller = null;
+      next?.removeListener(_onChanged);
+      await next?.dispose();
+      if (identical(_controller, next)) _controller = null;
       if (mounted) setState(() { _error = _friendlyError(e); _busy = false; });
     }
   }
 
-  void _onPlayerChanged() {
+  void _onChanged() {
     if (!mounted) return;
     final value = _controller?.value;
-    if (value != null && value.hasError && _error == null) {
-      setState(() => _error = value.errorDescription ?? 'Не удалось воспроизвести видео.');
+    if (value?.hasError == true) {
+      setState(() => _error = value?.errorDescription ?? 'Ошибка воспроизведения');
     } else {
       setState(() {});
     }
@@ -59,43 +59,55 @@ class _PlayerScreenState extends State<PlayerScreen> {
   String _friendlyError(Object error) {
     final message = error.toString();
     if (message.contains('HTTPS')) return message;
-    return 'Не удалось открыть видео. Проверь подключение и доступность легального видеопотока.\n\n$message';
+    return 'Не удалось воспроизвести этот видеофайл. Формат или кодек может не поддерживаться Windows.\n\n$message';
   }
 
-  String _time(Duration duration) {
-    String two(int value) => value.toString().padLeft(2, '0');
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    return hours > 0 ? '$hours:${two(minutes)}:${two(seconds)}' : '${two(minutes)}:${two(seconds)}';
+  String _time(Duration d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    return h > 0 ? '$h:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
   }
 
-  Future<void> _seekBy(int seconds) async {
+  Future<void> _seek(Duration offset) async {
     final c = _controller;
     if (c == null || !c.value.isInitialized) return;
-    final target = c.value.position + Duration(seconds: seconds);
     final duration = c.value.duration;
-    await c.seekTo(target < Duration.zero ? Duration.zero : (target > duration ? duration : target));
+    final target = c.value.position + offset;
+    await c.seekTo(target < Duration.zero ? Duration.zero : target > duration ? duration : target);
   }
 
   Future<void> _toggleFullscreen() async {
-    if (_fullscreen) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-      await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-    } else {
+    final entering = !_fullscreen;
+    if (entering) {
       await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       await SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     }
-    if (mounted) setState(() => _fullscreen = !_fullscreen);
+    if (mounted) setState(() => _fullscreen = entering);
   }
 
   @override
   void dispose() {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-    _controller?.removeListener(_onPlayerChanged);
+    _controller?.removeListener(_onChanged);
     _controller?.dispose();
     super.dispose();
+  }
+
+  Widget _control(IconData icon, String tooltip, VoidCallback? action, {double size = 34}) {
+    return IconButton(
+      tooltip: tooltip,
+      onPressed: action,
+      iconSize: size,
+      color: Colors.white,
+      style: IconButton.styleFrom(backgroundColor: Colors.black54),
+      icon: Icon(icon),
+    );
   }
 
   @override
@@ -105,144 +117,112 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final ready = value?.isInitialized == true;
     final duration = ready ? value!.duration : Duration.zero;
     final position = ready ? value!.position : Duration.zero;
+    final totalMs = duration.inMilliseconds;
+    final currentMs = totalMs <= 0 ? 0.0 : position.inMilliseconds.clamp(0, totalMs).toDouble();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF05080E),
-      appBar: AppBar(
+      backgroundColor: Colors.black,
+      appBar: _fullscreen ? null : AppBar(
         title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-        backgroundColor: const Color(0xFF05080E),
+        backgroundColor: Colors.black,
       ),
-      body: Center(
+      body: SafeArea(
         child: _busy
-            ? const Column(mainAxisSize: MainAxisSize.min, children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('Подключаемся к видеопотоку…', style: TextStyle(color: Colors.white70)),
-              ])
-            : _error != null
-                ? Padding(
-                    padding: const EdgeInsets.all(28),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.error_outline, color: Colors.orangeAccent, size: 52),
-                      const SizedBox(height: 16),
-                      Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
-                      const SizedBox(height: 20),
-                      FilledButton.icon(
-                        onPressed: _initialize,
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('Повторить'),
+          ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              CircularProgressIndicator(), SizedBox(height: 14),
+              Text('Загружаем видео…'),
+            ]))
+          : _error != null
+            ? Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(
+                mainAxisSize: MainAxisSize.min, children: [
+                  const Icon(Icons.error_outline, color: Colors.orange, size: 52),
+                  const SizedBox(height: 16),
+                  Text(_error!, textAlign: TextAlign.center),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(onPressed: _initialize, icon: const Icon(Icons.refresh), label: const Text('Повторить')),
+                ],
+              )))
+            : !ready || c == null
+              ? const Center(child: Text('Плеер не инициализирован'))
+              : LayoutBuilder(builder: (context, constraints) {
+                  final wide = constraints.maxWidth > 700;
+                  return Center(child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1200),
+                    child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      Expanded(child: Center(child: AspectRatio(
+                        aspectRatio: value!.aspectRatio > 0 ? value.aspectRatio : 16 / 9,
+                        child: Stack(fit: StackFit.expand, alignment: Alignment.center, children: [
+                          VideoPlayer(c),
+                          if (value.isBuffering)
+                            const Center(child: CircularProgressIndicator()),
+                          if (value.isPlaying)
+                            Align(alignment: Alignment.center, child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _control(Icons.replay_10, 'Назад на 10 секунд', () => _seek(const Duration(seconds: -10)), size: wide ? 44 : 34),
+                                const SizedBox(width: 20),
+                                _control(Icons.pause_circle_filled, 'Пауза', c.pause, size: wide ? 64 : 52),
+                                const SizedBox(width: 20),
+                                _control(Icons.forward_10, 'Вперёд на 10 секунд', () => _seek(const Duration(seconds: 10)), size: wide ? 44 : 34),
+                              ],
+                            ))
+                          else
+                            Center(child: _control(Icons.play_circle_fill, 'Воспроизвести', c.play, size: 68)),
+                        ]),
+                      ))),
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: wide ? 28 : 12, vertical: 8),
+                        child: Column(children: [
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 4,
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
+                            ),
+                            child: Slider(
+                              min: 0,
+                              max: totalMs > 0 ? totalMs.toDouble() : 1,
+                              value: totalMs > 0 ? currentMs : 0,
+                              onChanged: totalMs <= 0 ? null : (v) => c.seekTo(Duration(milliseconds: v.round())),
+                            ),
+                          ),
+                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                            Text(_time(position), style: const TextStyle(color: Colors.white70)),
+                            Text(_time(duration), style: const TextStyle(color: Colors.white70)),
+                          ]),
+                          const SizedBox(height: 4),
+                          Wrap(alignment: WrapAlignment.center, crossAxisAlignment: WrapCrossAlignment.center, spacing: 10, children: [
+                            _control(Icons.replay_10, 'Назад 10 секунд', () => _seek(const Duration(seconds: -10)), size: 30),
+                            _control(value.isPlaying ? Icons.pause : Icons.play_arrow,
+                              value.isPlaying ? 'Пауза' : 'Воспроизвести',
+                              () => value.isPlaying ? c.pause() : c.play(), size: 42),
+                            _control(Icons.forward_10, 'Вперёд 10 секунд', () => _seek(const Duration(seconds: 10)), size: 30),
+                            PopupMenuButton<double>(
+                              tooltip: 'Скорость',
+                              initialValue: _speed,
+                              onSelected: (v) async { await c.setPlaybackSpeed(v); if (mounted) setState(() => _speed = v); },
+                              itemBuilder: (_) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+                                .map((v) => PopupMenuItem(value: v, child: Text('${v}×'))).toList(),
+                              child: Padding(padding: const EdgeInsets.all(10), child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                const Icon(Icons.speed), const SizedBox(width: 4), Text('${_speed}×'),
+                              ])),
+                            ),
+                            IconButton(
+                              tooltip: 'Громкость',
+                              onPressed: () => c.setVolume(value.volume > 0 ? 0 : 1),
+                              icon: Icon(value.volume > 0 ? Icons.volume_up : Icons.volume_off),
+                            ),
+                            IconButton(
+                              tooltip: _fullscreen ? 'Обычный режим' : 'Полный экран',
+                              onPressed: _toggleFullscreen,
+                              icon: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
+                            ),
+                          ]),
+                        ]),
                       ),
                     ]),
-                  )
-                : c == null || !ready
-                    ? const Text('Плеер недоступен', style: TextStyle(color: Colors.white))
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            AspectRatio(
-                              aspectRatio: value!.aspectRatio > 0 ? value.aspectRatio : 16 / 9,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  VideoPlayer(c),
-                                  if (value.isBuffering)
-                                    const CircularProgressIndicator(),
-                                  if (value.hasError)
-                                    const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 42),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            VideoProgressIndicator(
-                              c,
-                              allowScrubbing: true,
-                              colors: const VideoProgressColors(
-                                playedColor: Color(0xFF6C8CFF),
-                                bufferedColor: Colors.white38,
-                                backgroundColor: Colors.white12,
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(_time(position), style: const TextStyle(color: Colors.white70)),
-                                Text(_time(duration), style: const TextStyle(color: Colors.white70)),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              alignment: WrapAlignment.center,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              spacing: 22,
-                              children: [
-                                IconButton(
-                                  tooltip: 'Назад на 10 секунд',
-                                  color: Colors.white,
-                                  iconSize: 30,
-                                  onPressed: () => _seekBy(-10),
-                                  icon: const Icon(Icons.replay_10),
-                                ),
-                                IconButton.filled(
-                                  tooltip: value.isPlaying ? 'Пауза' : 'Воспроизвести',
-                                  iconSize: 38,
-                                  onPressed: () => value.isPlaying ? c.pause() : c.play(),
-                                  icon: Icon(value.isPlaying ? Icons.pause : Icons.play_arrow),
-                                ),
-                                IconButton(
-                                  tooltip: 'Вперёд на 10 секунд',
-                                  color: Colors.white,
-                                  iconSize: 30,
-                                  onPressed: () => _seekBy(10),
-                                  icon: const Icon(Icons.forward_10),
-                                ),
-                                PopupMenuButton<double>(
-                                  tooltip: 'Скорость воспроизведения',
-                                  initialValue: _speed,
-                                  icon: const Icon(Icons.speed, color: Colors.white),
-                                  onSelected: (speed) async {
-                                    await c.setPlaybackSpeed(speed);
-                                    if (mounted) setState(() => _speed = speed);
-                                  },
-                                  itemBuilder: (_) => [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
-                                      .map((speed) => PopupMenuItem(
-                                            value: speed,
-                                            child: Text(speed == 1.0 ? 'Обычная (1×)' : '${speed}×'),
-                                          ))
-                                      .toList(),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Icon(Icons.volume_down, color: Colors.white70),
-                                Expanded(
-                                  child: Slider(
-                                    value: value.volume.clamp(0.0, 1.0),
-                                    onChanged: (volume) => c.setVolume(volume),
-                                  ),
-                                ),
-                                const Icon(Icons.volume_up, color: Colors.white70),
-                                IconButton(
-                                  tooltip: _fullscreen ? 'Выйти из полноэкранного режима' : 'Полный экран',
-                                  color: Colors.white,
-                                  onPressed: _toggleFullscreen,
-                                  icon: Icon(_fullscreen ? Icons.fullscreen_exit : Icons.fullscreen),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              'Воспроизводятся только доступные вам легальные видеопотоки.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.white38, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
+                  ));
+                }),
       ),
     );
   }
