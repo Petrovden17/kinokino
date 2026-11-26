@@ -8,10 +8,11 @@ import '../services/legal_source_service.dart';
 import '../services/internet_archive_service.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.streamUrl, required this.title, this.variants = const [], this.onChooseEpisode, this.onResolveEpisode});
+  const PlayerScreen({super.key, required this.streamUrl, required this.title, this.variants = const [], this.preferredVideoQuality = 'auto', this.onChooseEpisode, this.onResolveEpisode});
   final String streamUrl;
   final String title;
   final List<ArchiveVideoVariant> variants;
+  final String preferredVideoQuality;
   final Future<Map<String, dynamic>?> Function()? onChooseEpisode;
   final Future<ArchiveVideo?> Function(Map<String, dynamic>)? onResolveEpisode;
 
@@ -32,12 +33,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
   late String _activeTitle;
   late List<ArchiveVideoVariant> _activeVariants;
 
+  ArchiveVideoVariant? _preferredVariant(List<ArchiveVideoVariant> variants, String preference) {
+    if (variants.isEmpty || preference == 'auto') return null;
+    final limit = int.tryParse(preference);
+    if (limit == null) return null;
+    final underLimit = variants.where((v) => v.height > 0 && v.height <= limit).toList()
+      ..sort((a, b) => b.height.compareTo(a.height));
+    if (underLimit.isNotEmpty) return underLimit.first;
+    final available = variants.where((v) => v.height > 0).toList()
+      ..sort((a, b) => a.height.compareTo(b.height));
+    return available.isEmpty ? null : available.first;
+  }
+
   @override
   void initState() {
     super.initState();
-    _activeUrl = widget.streamUrl;
-    _activeTitle = widget.title;
     _activeVariants = widget.variants;
+    _activeUrl = _preferredVariant(_activeVariants, widget.preferredVideoQuality)?.url.toString() ?? widget.streamUrl;
+    _activeTitle = widget.title;
     _initialize();
     _scheduleControlsHide();
   }
@@ -150,8 +163,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final number = (episode['episode_number'] as num?)?.toInt() ?? 1;
     final episodeName = (episode['name'] ?? 'Серия $number').toString();
     setState(() {
-      _activeUrl = source.url.toString();
       _activeVariants = source.variants;
+      _activeUrl = _preferredVariant(source.variants, widget.preferredVideoQuality)?.url.toString() ?? source.url.toString();
       _activeTitle = '${widget.title} · S${season.toString().padLeft(2, '0')}E${number.toString().padLeft(2, '0')} — $episodeName';
       _busy = true;
       _error = null;
