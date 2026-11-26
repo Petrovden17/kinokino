@@ -10,7 +10,7 @@ class AppUpdateInfo {
 }
 
 class AppUpdateService {
-  static const int currentBuild = int.fromEnvironment('APP_BUILD', defaultValue: 5);
+  static const int currentBuild = int.fromEnvironment('APP_BUILD', defaultValue: 6);
   static const String releasesApi = 'https://api.github.com/repos/Petrovden17/kinokino/releases/latest';
   final Dio _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15), receiveTimeout: const Duration(minutes: 5)));
 
