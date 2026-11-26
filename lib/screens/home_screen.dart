@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/auth_service.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../services/profile_service.dart';
@@ -68,8 +69,8 @@ class _HomeScreenState extends State<HomeScreen>{
     return Scaffold(appBar:AppBar(title:const Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       Text('KinoKino',style:TextStyle(fontWeight:FontWeight.bold)),Text('by Osirisvectory',style:TextStyle(fontSize:10,color:Colors.white60))]),
       actions:[if(profile!=null)Padding(padding:const EdgeInsets.only(right:6),child:Center(child:Text(profile.name,style:const TextStyle(color:Colors.white70)))),
-        PopupMenuButton<String>(onSelected:(v){if(v=='profiles')_openPage(ProfilesScreen(service:widget.profileService));if(v=='library')_openPage(const LibraryScreen());if(v=='settings')_openPage(SettingsScreen(service:widget.settingsService));if(v=='about')_openPage(const AboutScreen());},
-          itemBuilder:(_)=>const[PopupMenuItem(value:'profiles',child:ListTile(leading:Icon(Icons.people),title:Text('Профили'))),PopupMenuItem(value:'library',child:ListTile(leading:Icon(Icons.video_library),title:Text('Библиотека'))),PopupMenuItem(value:'settings',child:ListTile(leading:Icon(Icons.settings),title:Text('Настройки'))),PopupMenuItem(value:'about',child:ListTile(leading:Icon(Icons.info_outline),title:Text('О приложении')))])]),
+        PopupMenuButton<String>(onSelected:(v){if(v=='profiles')_openPage(ProfilesScreen(service:widget.profileService));if(v=='library')_openPage(const LibraryScreen());if(v=='settings')_openPage(SettingsScreen(service:widget.settingsService));if(v=='about')_openPage(const AboutScreen());if(v=='logout)AuthService().signOut();},
+          itemBuilder:(_)=>const[PopupMenuItem(value:'profiles',child:ListTile(leading:Icon(Icons.people),title:Text('Профили'))),PopupMenuItem(value:'library',child:ListTile(leading:Icon(Icons.video_library),title:Text('Библиотека'))),PopupMenuItem(value:'settings',child:ListTile(leading:Icon(Icons.settings),title:Text('Настройки'))),PopupMenuItem(value:'about',child:ListTile(leading:Icon(Icons.info_outline),title:Text('О приложении'))),PopupMenuItem(value:'logout',child:ListTile(leading:Icon(Icons.logout),title:Text('Выйти из аккаунта')))])]),
       body:Column(children:[
         Padding(padding:const EdgeInsets.fromLTRB(16,8,16,10),child:TextField(controller:_search,onSubmitted:_searchMedia,decoration:InputDecoration(hintText:'Поиск фильмов, сериалов и мультфильмов',prefixIcon:const Icon(Icons.search),suffixIcon:IconButton(icon:const Icon(Icons.clear),onPressed:(){_search.clear();_loadTrending();})))),
         Padding(padding:const EdgeInsets.symmetric(horizontal:16),child:Column(children:[
