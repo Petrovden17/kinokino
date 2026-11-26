@@ -407,12 +407,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         ));
         return;
       }
-      if (selectedEpisode != null) {
-        sourceTitle = (selectedEpisode['name'] ?? '').toString();
-        expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
-        final episodeDate = (selectedEpisode['air_date'] ?? '').toString();
-        expectedYear = int.tryParse(episodeDate.length >= 4 ? episodeDate.substring(0, 4) : '') ?? _releaseYear;
-      }
+      sourceTitle = (selectedEpisode['name'] ?? '').toString();
+      expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
+      final episodeDate = (selectedEpisode['air_date'] ?? '').toString();
+      expectedYear = int.tryParse(episodeDate.length >= 4 ? episodeDate.substring(0, 4) : '') ?? _releaseYear;
     }
     if (!widget.item.hasConfirmedRelease) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -529,8 +527,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             displayTitle: _displayTitle,
             preferredLanguage: languageCode,
             seriesTitle: isEpisode ? _displayTitle : null,
-            seasonNumber: isEpisode ? (selectedEpisode!['season_number'] as num?)?.toInt() : null,
-            episodeNumber: isEpisode ? (selectedEpisode!['episode_number'] as num?)?.toInt() : null,
+            seasonNumber: isEpisode ? (selectedEpisode['season_number'] as num?)?.toInt() : null,
+            episodeNumber: isEpisode ? (selectedEpisode['episode_number'] as num?)?.toInt() : null,
           );
         },
       )));
