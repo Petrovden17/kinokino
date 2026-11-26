@@ -120,39 +120,7 @@ class _PosterCardState extends State<PosterCard> {
                             ),
                           ),
                         ),
-                        if (item.voteAverage > 0)
-                          Positioned(
-                            right: 9,
-                            bottom: 9,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xDD101827),
-                                borderRadius: BorderRadius.circular(9),
-                                border: Border.all(
-                                  color: AppTheme.gold.withValues(alpha: .55),
-                                ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.star_rounded,
-                                    color: AppTheme.gold,
-                                    size: 14,
-                                  ),
-                                  const SizedBox(width: 3),
-                                  Text(
-                                    item.voteAverage.toStringAsFixed(1),
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ],
+                      ],
                               ),
                             ),
                           ),
