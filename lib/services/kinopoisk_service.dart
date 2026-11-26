@@ -66,7 +66,7 @@ class KinopoiskService {
         'language': language,
         'uselang': language,
         'type': 'item',
-        'limit': 50,
+        'limit': 25,
         'format': 'json',
       });
       final rows = response.data is Map
@@ -81,7 +81,7 @@ class KinopoiskService {
       }
     }
     if (ids.isEmpty) return const [];
-    return _entitiesToKinopoisk(ids.toList());
+    return _entitiesToKinopoisk(ids.take(50).toList());
   }
 
   Future<List<Map<String, dynamic>>> _entitiesToKinopoisk(List<String> ids) async {
