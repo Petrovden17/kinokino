@@ -20,7 +20,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Map<String, dynamic>? _details;
   List<MediaItem> _recommendations = [];
   Map<String, dynamic> _externalIds = {};
-  String? _providerLink;
   bool _loading = true;
   String? _error;
   double _rating = 0;
@@ -53,7 +52,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     List<MediaItem> picks = [];
     String? error;
     Map<String, dynamic> externalIds = {};
-    String? providerLink;
     try {
       details = await _tmdb.details(widget.item.id, type: _type);
       try { externalIds = await _tmdb.externalIds(widget.item.id, type: _type); } catch (_) {}
@@ -76,10 +74,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       }
     } catch (_) {}
     picks = related.values.toList();
-    try {
-      final providers = await _tmdb.watchProviders(widget.item.id, type: _type, region: 'NL');
-      providerLink = providers['link']?.toString();
-    } catch (_) {}
     if (picks.isEmpty && details != null) {
       final section = details['recommendations'] ?? details['similar'];
       final rows = (section is Map ? section['results'] : null) as List? ?? const [];
@@ -90,7 +84,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       _details = details;
       _recommendations = picks;
       _externalIds = externalIds;
-      _providerLink = providerLink;
       _error = error;
       _loading = false;
     });
@@ -168,13 +161,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   }
 
   Future<void> _openRatingPage(Uri uri) => _openExternalPage(uri);
-  Future<void> _openProviderPage() async {
-    final raw = _providerLink;
-    if (raw == null || raw.isEmpty) return;
-    final uri = Uri.tryParse(raw);
-    if (uri != null && uri.scheme == 'https') await _openExternalPage(uri);
-  }
-
   Future<void> _saveRating(double value) async {
     setState(() => _rating = value);
     await LocalDatabase.setRating(widget.item.id, widget.item.title, widget.item.posterPath, value, mediaType: _type);
@@ -263,16 +249,12 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     if (_type == 'tv') {
       selectedEpisode = await _firstEpisode();
       if (!mounted) return;
-      if (selectedEpisode == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Не удалось загрузить первую серию. Попробуй обновить страницу.'),
-        ));
-        return;
+      if (selectedEpisode != null) {
+        sourceTitle = (selectedEpisode['name'] ?? '').toString();
+        expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
+        final episodeDate = (selectedEpisode['air_date'] ?? '').toString();
+        expectedYear = int.tryParse(episodeDate.length >= 4 ? episodeDate.substring(0, 4) : '') ?? _releaseYear;
       }
-      sourceTitle = (selectedEpisode['name'] ?? '').toString();
-      expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
-      final episodeDate = (selectedEpisode['air_date'] ?? '').toString();
-      expectedYear = int.tryParse(episodeDate.length >= 4 ? episodeDate.substring(0, 4) : '') ?? _releaseYear;
     }
     if (expectedYear <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Неизвестен год выхода. Не буду запускать неподтверждённую версию.')));
@@ -335,8 +317,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       if (source == null) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(_type == 'tv'
-            ? 'В открытом каталоге пока не найден эпизод этого сериала.'
-            : 'В открытом каталоге пока не найден совместимый фильм.'),
+            ? 'Источник для этого сериала пока не найден.'
+            : 'Источник для этого фильма пока не найден.'),
         ));
         return;
       }
@@ -364,8 +346,23 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         ),
       );
       if (approved != true || !mounted) return;
-      await Navigator.push(context, MaterialPageRoute(builder: (_) =>
-        PlayerScreen(streamUrl: playableSource.url.toString(), title: selectedEpisode == null ? _displayTitle : '$_displayTitle · S${(selectedEpisode['season_number'] as num?)?.toInt() ?? 1}E${(selectedEpisode['episode_number'] as num?)?.toInt() ?? 1} — ${selectedEpisode['name'] ?? ''}', variants: playableSource.variants, preferredVideoQuality: widget.preferredVideoQuality, onChooseEpisode: _type == 'tv' ? _chooseEpisode : null, onResolveEpisode: _type == 'tv' ? _resolveEpisodeSource : null)));
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+        streamUrl: playableSource.url.toString(),
+        title: selectedEpisode == null ? _displayTitle : '$_displayTitle · S${(selectedEpisode['season_number'] as num?)?.toInt() ?? 1}E${(selectedEpisode['episode_number'] as num?)?.toInt() ?? 1} — ${selectedEpisode['name'] ?? ''}',
+        variants: playableSource.variants,
+        preferredVideoQuality: widget.preferredVideoQuality,
+        onChooseEpisode: _type == 'tv' ? _chooseEpisode : null,
+        onResolveEpisode: _type == 'tv' ? _resolveEpisodeSource : null,
+        onResolveAudio: (language) async {
+          final isEpisode = selectedEpisode != null;
+          final title = isEpisode ? (selectedEpisode['name'] ?? '').toString() : _playbackSearchTitle;
+          final runtime = isEpisode ? (selectedEpisode['runtime'] as num?)?.toInt() ?? 0 : expectedRuntime;
+          final date = isEpisode ? (selectedEpisode['air_date'] ?? '').toString() : '';
+          final year = isEpisode ? int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? _releaseYear : _releaseYear;
+          final languageCode = language == 'original' ? (_details?['original_language']?.toString() ?? 'auto') : language;
+          return InternetArchiveService().findLicensedVideo(title, expectedRuntimeMinutes: runtime, expectedYear: year, displayTitle: _displayTitle, preferredLanguage: languageCode);
+        },
+      )));
     } catch (e) {
       if (!mounted) return;
       if (cancelToken.isCancelled) return;
@@ -470,15 +467,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
               if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Добавлено в избранное')));
             }, icon: const Icon(Icons.favorite), label: const Text('В избранное')),
           ]),
-          if (_providerLink != null && _providerLink!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: OutlinedButton.icon(
-                onPressed: _openProviderPage,
-                icon: const Icon(Icons.open_in_new),
-                label: const Text('Где посмотреть легально'),
-              ),
-            ),
           if (_error != null) const Padding(
             padding: EdgeInsets.only(top: 12),
             child: Text('Некоторые сведения временно недоступны. Попробуйте обновить страницу позже.'),
