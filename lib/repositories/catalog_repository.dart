@@ -7,10 +7,10 @@ class CatalogRepository {
   final TmdbService _tmdb;
 
   Future<List<MediaItem>> getTrendingMovies() =>
-      _tmdb.trending(type: MediaType.movie);
+      _tmdb.popular(type: 'movie');
 
   Future<List<MediaItem>> getTrendingShows() =>
-      _tmdb.trending(type: MediaType.tv);
+      _tmdb.popular(type: 'tv');
 
   Future<List<MediaItem>> search(String query) => _tmdb.search(query);
 }
