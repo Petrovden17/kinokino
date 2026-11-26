@@ -391,6 +391,47 @@ class _HomeScreenState extends State<HomeScreen> {
     ]),
   );
 
+  Widget _heroHeader() => Container(
+    margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+    padding: const EdgeInsets.fromLTRB(20, 18, 18, 18),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF263B5B), Color(0xFF191D37), Color(0xFF332346)],
+      ),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: Colors.white.withValues(alpha: .10)),
+      boxShadow: [
+        BoxShadow(color: Colors.black.withValues(alpha: .22), blurRadius: 22, offset: const Offset(0, 9)),
+      ],
+    ),
+    child: Row(children: [
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('ТВОЯ КИНОТЕКА', style: TextStyle(
+          color: AppTheme.aqua, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w900,
+        )),
+        const SizedBox(height: 7),
+        const Text('Найди свою\nследующую историю', style: TextStyle(
+          fontSize: 23, height: 1.08, fontWeight: FontWeight.w900,
+        )),
+        const SizedBox(height: 7),
+        Text('Фильмы, сериалы и анимация в одном месте',
+          style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: .72))),
+      ])),
+      const SizedBox(width: 8),
+      Container(
+        width: 58, height: 58,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: .07),
+          border: Border.all(color: AppTheme.aqua.withValues(alpha: .32)),
+        ),
+        child: const Icon(Icons.movie_filter_rounded, size: 30, color: AppTheme.aqua),
+      ),
+    ]),
+  );
+
   @override
   Widget build(BuildContext context) {
     final profile = widget.profileService.activeProfile;
@@ -459,6 +500,7 @@ class _HomeScreenState extends State<HomeScreen> {
             controller: _scroll,
             slivers: [
               SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).top + kToolbarHeight + 8)),
+              SliverToBoxAdapter(child: _heroHeader()),
               SliverToBoxAdapter(child: _filters()),
               SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.fromLTRB(18, 5, 18, 10),
