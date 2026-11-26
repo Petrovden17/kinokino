@@ -54,6 +54,57 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     _load();
     LocalDatabase.recordOpen(widget.item.id, widget.item.title, widget.item.posterPath, mediaType: _type).catchError((_) {});
   }
+
+  int _yearFromDetails(Map<String, dynamic>? details, String fallbackDate) {
+    final raw = (details?['release_date'] ?? details?['first_air_date'] ?? fallbackDate).toString();
+    return raw.length >= 4 ? int.tryParse(raw.substring(0, 4)) ?? 0 : 0;
+  }
+
+  Map<String, dynamic>? _selectKinopoiskMatch(
+    List<Map<String, dynamic>> candidates, {
+    required int year,
+    required bool isSeries,
+  }) {
+    String norm(dynamic value) => (value ?? '').toString().toLowerCase()
+        .replaceAll(RegExp(r'[^a-zа-яё0-9]+', unicode: true), ' ')
+        .trim();
+    final expectedTitles = <String>{
+      norm(_details?['title']), norm(_details?['name']),
+      norm(_details?['original_title']), norm(_details?['original_name']),
+      norm(widget.item.title),
+    }..remove('');
+    final unique = <int, Map<String, dynamic>>{};
+    for (final candidate in candidates) {
+      final rawId = candidate['filmId'] ?? candidate['kinopoiskId'] ??
+          candidate['kinopoisk_id'] ?? candidate['id'];
+      final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
+      if (id > 0) unique[id] = candidate;
+    }
+    final ranked = unique.values.map((candidate) {
+      final candidateTitles = <String>{
+        norm(candidate['nameRu']), norm(candidate['nameEn']),
+        norm(candidate['nameOriginal']), norm(candidate['name']),
+      }..remove('');
+      final exactTitle = candidateTitles.any(expectedTitles.contains);
+      final candidateYear = int.tryParse((candidate['year'] ??
+          candidate['startYear'] ?? '').toString()) ?? 0;
+      final rawType = (candidate['type'] ?? '').toString().toUpperCase();
+      final candidateIsSeries = rawType.contains('TV') ||
+          rawType.contains('SERIES') || rawType.contains('MINI');
+      final typeKnown = rawType.isNotEmpty;
+      final yearMatches = year == 0 || candidateYear == 0 || candidateYear == year;
+      final typeMatches = !typeKnown || candidateIsSeries == isSeries;
+      final score = (exactTitle ? 100 : 0) +
+          (year > 0 && candidateYear == year ? 30 : 0) +
+          (typeKnown && typeMatches ? 20 : 0);
+      return (candidate: candidate, score: score, exactTitle: exactTitle,
+          yearMatches: yearMatches, typeMatches: typeMatches);
+    }).where((entry) => entry.exactTitle && entry.yearMatches && entry.typeMatches)
+      .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+    return ranked.isEmpty ? null : ranked.first.candidate;
+  }
+
   Future<void> _load() async {
     Map<String, dynamic>? details;
     String? error;
@@ -69,19 +120,33 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     List<Map<String, dynamic>> kpVideos = [];
     try {
       final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
-      var matches = await _kinopoisk.search(localizedTitle.isEmpty ? widget.item.title : localizedTitle);
-      if (matches.isEmpty && localizedTitle != widget.item.title) {
-        matches = await _kinopoisk.search(widget.item.title);
+      final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
+      final year = _yearFromDetails(details, widget.item.releaseDate);
+      final queries = <String>{
+        if (localizedTitle.length >= 2) localizedTitle,
+        if (originalTitle.length >= 2) originalTitle,
+        if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
+      };
+      final candidates = <Map<String, dynamic>>[];
+      for (final query in queries) {
+        try {
+          candidates.addAll(await _kinopoisk.search(query));
+        } catch (_) {
+          // A failed title variant must not prevent trying the other names.
+        }
       }
-      if (matches.isNotEmpty) {
-        final first = matches.first;
-        final rawId = first['filmId'] ?? first['kinopoiskId'] ?? first['id'];
+      final selected = _selectKinopoiskMatch(candidates, year: year, isSeries: _type == 'tv');
+      if (selected != null) {
+        final rawId = selected['filmId'] ?? selected['kinopoiskId'] ??
+            selected['kinopoisk_id'] ?? selected['id'];
         final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
         if (id > 0) {
           kinopoiskId = id;
-          kpFilm = await _kinopoisk.film(id);
-          if (_type == 'tv') kpSeasons = await _kinopoisk.seasons(id);
-          kpVideos = await _kinopoisk.videos(id);
+          try { kpFilm = await _kinopoisk.film(id); } catch (_) {}
+          if (_type == 'tv') {
+            try { kpSeasons = await _kinopoisk.seasons(id); } catch (_) {}
+          }
+          try { kpVideos = await _kinopoisk.videos(id); } catch (_) {}
         }
       }
     } catch (_) {
