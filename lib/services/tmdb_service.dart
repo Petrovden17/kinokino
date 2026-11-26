@@ -3,7 +3,7 @@ import '../models/media_item.dart';
 
 class TmdbService {
   TmdbService() : _dio = Dio(BaseOptions(
-    // TMDB API key is kept in the Cloudflare Worker secret, never in the app.
+    // TMDB API credentials stay server-side in the Cloudflare Worker secret.
     baseUrl: 'https://kinokino-tmdb.get46-get47.workers.dev/3',
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 20),
