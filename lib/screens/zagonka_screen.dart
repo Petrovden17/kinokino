@@ -123,7 +123,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           networkState: v.networkState,
           paused: v.paused,
           width: v.videoWidth,
-          height: v.videoHeight
+          height: v.videoHeight,
+          visible: v.getBoundingClientRect().width > 0 &&
+            v.getBoundingClientRect().height > 0
         }));
         const frames = Array.from(document.querySelectorAll('iframe')).map((f) => ({
           src: f.src || '',
@@ -131,7 +133,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           height: f.clientHeight
         }));
         const playerFrameCount = frames.filter((f) =>
-          /player|video|embed|stream|kinogo|kodik|alloha|videocdn/i.test(f.src)
+          /player|video|embed|stream|kinogo|kodik|alloha|videocdn/i.test(f.src) && f.width > 0 && f.height > 0
         ).length;
         return JSON.stringify({
           url: location.href,
