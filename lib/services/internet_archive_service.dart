@@ -254,7 +254,7 @@ class InternetArchiveService {
           identifier: id,
           title: displayTitle?.trim().isNotEmpty == true ? displayTitle!.trim() : archiveTitle,
           archiveTitle: archiveTitle,
-          releaseYear: archiveYear,
+          releaseYear: archiveYear ?? expectedYear,
           creator: (metadata['creator'] ?? 'Не указан').toString(),
           license: license,
           fileName: Uri.decodeComponent(chosen.url.pathSegments.last),
