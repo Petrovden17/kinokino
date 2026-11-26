@@ -67,7 +67,7 @@ jobs:
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath KinoKino-Beta-Windows-x64.zip -Force
 
       - name: Publish beta release
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.beta_release }}
+        if: ${{ github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.beta_release) }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: beta-${{ github.run_number }}
