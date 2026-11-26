@@ -4,8 +4,17 @@ concurrency:
   group: kinokino-windows-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
+    inputs:
+      beta_release:
+        description: "Опубликовать результат как бета-релиз"
+        required: false
+        default: false
+        type: boolean
   push:
     branches:
       - main
@@ -51,3 +60,19 @@ jobs:
           path: build/windows/x64/runner/Release/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Package beta release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.beta_release }}
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath KinoKino-Beta-Windows-x64.zip -Force
+
+      - name: Publish beta release
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.beta_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: beta-${{ github.run_number }}
+          name: KinoKino Beta ${{ github.run_number }}
+          prerelease: true
+          generate_release_notes: true
+          files: KinoKino-Beta-Windows-x64.zip
+
