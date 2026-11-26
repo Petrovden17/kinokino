@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:webview_flutter/webview_flutter.dart' as official_webview;
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({super.key, required this.title, this.kinopoiskId, this.isSeries = false});
@@ -16,9 +19,74 @@ class ZagonkaScreen extends StatefulWidget {
 
 class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _controller;
+  official_webview.WebViewController? _androidController;
+  Widget? _androidWebViewWidget;
   double _progress = 0;
   String? _pageError;
   bool _isFullscreen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      _initializeOfficialAndroidWebView();
+    }
+  }
+
+  Future<void> _initializeOfficialAndroidWebView() async {
+    final controller = official_webview.WebViewController();
+    await controller.setJavaScriptMode(official_webview.JavaScriptMode.unrestricted);
+    await controller.setBackgroundColor(Colors.black);
+    await controller.setNavigationDelegate(
+      official_webview.NavigationDelegate(
+        onProgress: (progress) {
+          if (mounted) setState(() => _progress = progress / 100);
+        },
+        onPageStarted: (url) {
+          debugPrint('[KinoKino Android WebView] load start: $url');
+          if (mounted) setState(() { _pageError = null; _progress = 0; });
+        },
+        onPageFinished: (url) async {
+          debugPrint('[KinoKino Android WebView] load finished: $url');
+          if (!mounted) return;
+          setState(() => _progress = 1);
+          try {
+            final probe = await controller.runJavaScriptReturningResult(
+              r'''JSON.stringify({ready:document.readyState,title:document.title,url:location.href,bodyText:(document.body?.innerText||'').slice(0,300),iframes:Array.from(document.querySelectorAll('iframe')).map(x=>x.src).slice(0,8),videos:Array.from(document.querySelectorAll('video')).map(x=>({src:x.currentSrc,ready:x.readyState,error:x.error?.code})).slice(0,4)})''',
+            );
+            debugPrint('[KinoKino Android WebView] page probe: $probe');
+          } catch (e) {
+            debugPrint('[KinoKino Android WebView] page probe failed: $e');
+          }
+        },
+        onWebResourceError: (error) {
+          debugPrint('[KinoKino Android WebView] resource error main=${error.isForMainFrame}: ${error.description} (${error.errorCode}) ${error.url}');
+          if (error.isForMainFrame != true || !mounted) return;
+          setState(() => _pageError = 'Не удалось загрузить страницу KinoKino. Проверь подключение и нажми «Обновить».');
+        },
+        onHttpError: (error) {
+          final status = error.response?.statusCode;
+          if (status != null && status >= 400) {
+            debugPrint('[KinoKino Android WebView] HTTP $status');
+          }
+        },
+      ),
+    );
+    final androidController = controller.platform as AndroidWebViewController;
+    await androidController.setMediaPlaybackRequiresUserGesture(false);
+    await androidController.setMixedContentMode(MixedContentMode.alwaysAllow);
+    AndroidWebViewController.enableDebugging(kDebugMode);
+    final widgetParams = AndroidWebViewWidgetCreationParams(
+      controller: controller.platform,
+      displayWithHybridComposition: true,
+    );
+    if (!mounted) return;
+    setState(() {
+      _androidController = controller;
+      _androidWebViewWidget = official_webview.WebViewWidget.fromPlatformCreationParams(params: widgetParams);
+    });
+    await controller.loadRequest(Uri.parse(_primaryUrl.toString()));
+  }
 
   WebUri get _primaryUrl {
     final id = widget.kinopoiskId;
@@ -56,7 +124,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       await _setFullscreen(false);
       return;
     }
-    await _controller?.evaluateJavascript(source: r"""
+    const fullscreenScript = r"""
       (() => {
         const video = document.querySelector('video');
         const frame = document.querySelector('iframe[allowfullscreen], iframe');
@@ -66,7 +134,12 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           if (result && result.catch) result.catch(() => {});
         }
       })();
-    """);
+    """;
+    if (_androidController != null) {
+      await _androidController!.runJavaScript(fullscreenScript);
+    } else {
+      await _controller?.evaluateJavascript(source: fullscreenScript);
+    }
     await _setFullscreen(true);
   }
 
@@ -75,12 +148,87 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       await _setFullscreen(false);
       return;
     }
+    final androidController = _androidController;
+    if (androidController != null && await androidController.canGoBack()) {
+      await androidController.goBack();
+      return;
+    }
     final controller = _controller;
     if (controller != null && await controller.canGoBack()) {
       await controller.goBack();
     } else if (mounted) {
       Navigator.of(context).maybePop();
     }
+  }
+
+  Future<void> _reloadPage() async {
+    if (_androidController != null) {
+      await _androidController!.reload();
+    } else {
+      await _reloadPage();
+    }
+  }
+
+  Widget _buildPlayerView() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return _androidWebViewWidget ?? const Center(child: CircularProgressIndicator());
+    }
+    return InAppWebView(
+      initialUrlRequest: URLRequest(url: _primaryUrl),
+      initialSettings: InAppWebViewSettings(
+        javaScriptEnabled: true,
+        mediaPlaybackRequiresUserGesture: false,
+        allowsInlineMediaPlayback: true,
+        domStorageEnabled: true,
+        thirdPartyCookiesEnabled: true,
+        hardwareAcceleration: true,
+        enableEncryptedMedia: true,
+        enableMedia: true,
+        isElementFullscreenEnabled: true,
+        useShouldOverrideUrlLoading: true,
+        supportMultipleWindows: false,
+        javaScriptCanOpenWindowsAutomatically: true,
+        mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+        useHybridComposition: false,
+        transparentBackground: false,
+        supportZoom: false,
+        useWideViewPort: false,
+        loadWithOverviewMode: false,
+      ),
+      onWebViewCreated: (controller) => _controller = controller,
+      onLoadStart: (controller, url) {
+        debugPrint('[KinoKino WebView] load start: $url');
+        if (!mounted) return;
+        setState(() { _pageError = null; _progress = 0; });
+      },
+      onProgressChanged: (controller, progress) {
+        if (mounted) setState(() => _progress = progress / 100);
+      },
+      onLoadStop: (controller, url) async {
+        if (!mounted) return;
+        setState(() => _progress = 1);
+        try {
+          final probe = await controller.evaluateJavascript(source: r'''(() => JSON.stringify({ready:document.readyState,title:document.title,url:location.href,bodyText:(document.body?.innerText||'').slice(0,300),iframes:Array.from(document.querySelectorAll('iframe')).map(x=>x.src).slice(0,8),videos:Array.from(document.querySelectorAll('video')).map(x=>({src:x.currentSrc,ready:x.readyState,error:x.error?.code})).slice(0,4)}))()''');
+          debugPrint('[KinoKino WebView] page probe: $probe');
+        } catch (e) { debugPrint('[KinoKino WebView] page probe failed: $e'); }
+      },
+      onConsoleMessage: (controller, message) => debugPrint('[KinoKino WebView console] ${message.message}'),
+      onEnterFullscreen: (controller) => _setFullscreen(true),
+      onExitFullscreen: (controller) => _setFullscreen(false),
+      onReceivedError: (controller, request, error) {
+        debugPrint('[KinoKino WebView] resource error main=${request.isForMainFrame}: ${error.description} (${error.type}) ${request.url}');
+        if (request.isForMainFrame != true || !mounted) return;
+        setState(() => _pageError = 'Не удалось загрузить страницу KinoKino. Проверь подключение и нажми «Обновить».');
+      },
+      onReceivedHttpError: (controller, request, errorResponse) {
+        if ((errorResponse.statusCode ?? 0) >= 400) {
+          debugPrint('[KinoKino WebView] HTTP resource ${errorResponse.statusCode} main=${request.isForMainFrame}: ${request.url}');
+        }
+        if (request.isForMainFrame == true && (errorResponse.statusCode ?? 0) >= 400 && mounted) {
+          setState(() => _pageError = 'KinoKino вернул ошибку HTTP ${errorResponse.statusCode}. Нажми «Обновить», чтобы попробовать снова.');
+        }
+      },
+    );
   }
 
   @override
@@ -97,77 +245,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          InAppWebView(
-            initialUrlRequest: URLRequest(url: _primaryUrl),
-            initialSettings: InAppWebViewSettings(
-              javaScriptEnabled: true,
-              mediaPlaybackRequiresUserGesture: false,
-              allowsInlineMediaPlayback: true,
-              domStorageEnabled: true,
-              thirdPartyCookiesEnabled: true,
-              hardwareAcceleration: true,
-              enableEncryptedMedia: true,
-              enableMedia: true,
-              isElementFullscreenEnabled: true,
-              useShouldOverrideUrlLoading: true,
-              // Keep window.open navigations in the current WebView. Some video
-              // providers create an about:blank popup and assign its URL later;
-              // intercepting only the initial request leaves the player black.
-              supportMultipleWindows: false,
-              javaScriptCanOpenWindowsAutomatically: true,
-              mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-              // Texture-layer composition avoids a known class of white WebView surfaces on some Android GPU builds.
-              useHybridComposition: false,
-              transparentBackground: false,
-              supportZoom: false,
-              useWideViewPort: false,
-              loadWithOverviewMode: false,
-            ),
-            onWebViewCreated: (controller) => _controller = controller,
-            onLoadStart: (controller, url) {
-              debugPrint('[KinoKino WebView] load start: $url');
-              if (!mounted) return;
-              setState(() {
-                _pageError = null;
-                _progress = 0;
-              });
-            },
-            onProgressChanged: (controller, progress) {
-              if (mounted) setState(() => _progress = progress / 100);
-            },
-            onLoadStop: (controller, url) async {
-              if (!mounted) return;
-              setState(() => _progress = 1);
-              try {
-                final probe = await controller.evaluateJavascript(source: r'''(() => JSON.stringify({ready:document.readyState,title:document.title,url:location.href,bodyText:(document.body?.innerText||'').slice(0,300),iframes:Array.from(document.querySelectorAll('iframe')).map(x=>x.src).slice(0,8),videos:Array.from(document.querySelectorAll('video')).map(x=>({src:x.currentSrc,ready:x.readyState,error:x.error?.code})).slice(0,4)}))()''');
-                debugPrint('[KinoKino WebView] page probe: $probe');
-              } catch (e) {
-                debugPrint('[KinoKino WebView] page probe failed: $e');
-              }
-            },
-            onConsoleMessage: (controller, message) {
-              debugPrint('[KinoKino WebView console] ${message.message}');
-            },
-            onEnterFullscreen: (controller) => _setFullscreen(true),
-            onExitFullscreen: (controller) => _setFullscreen(false),
-            onReceivedError: (controller, request, error) {
-              debugPrint('[KinoKino WebView] resource error main=${request.isForMainFrame}: ${error.description} (${error.type}) ${request.url}');
-              if (request.isForMainFrame != true || !mounted) return;
-              setState(() {
-                _pageError = 'Не удалось загрузить страницу KinoKino. Проверь подключение и нажми «Обновить».';
-              });
-            },
-            onReceivedHttpError: (controller, request, errorResponse) {
-              if ((errorResponse.statusCode ?? 0) >= 400) {
-                debugPrint('[KinoKino WebView] HTTP resource ${errorResponse.statusCode} main=${request.isForMainFrame}: ${request.url}');
-              }
-              if (request.isForMainFrame != true || !mounted) return;
-              if ((errorResponse.statusCode ?? 0) >= 400) {
-                debugPrint('[KinoKino WebView] HTTP ${errorResponse.statusCode}: ${request.url}');
-                setState(() => _pageError = 'KinoKino вернул ошибку HTTP ${errorResponse.statusCode}. Нажми «Обновить», чтобы попробовать снова.');
-              }
-            },
-          ),
+          _buildPlayerView(),
           if (_progress > 0 && _progress < 1)
             Align(
               alignment: Alignment.topCenter,
