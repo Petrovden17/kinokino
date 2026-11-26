@@ -107,7 +107,7 @@ class InternetArchiveService {
     bool isSeries = false,
   }) async {
     // A series title is not an episode. Never select an arbitrary clip as an episode.
-    if (isSeries || expectedRuntimeMinutes <= 0 || expectedYear <= 0) return null;
+    if (expectedRuntimeMinutes <= 0 || expectedYear <= 0) return null;
     final wanted = _normalize(title, expectedYear);
     if (wanted.isEmpty) return null;
     final cleanTitle = title.replaceAll('"', '').trim();
