@@ -368,7 +368,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       if (cancelToken.isCancelled) return;
       if (!dialogClosed) Navigator.of(context, rootNavigator: true).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось подготовить просмотр. Попробуйте открыть легальные варианты просмотра.')),
+        const SnackBar(content: Text('Не удалось подготовить источник видео. Попробуйте ещё раз.')),
       );
     } finally {
       if (mounted) setState(() => _searchingPlayback = false);
