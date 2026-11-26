@@ -26,6 +26,33 @@ class CreatorService {
     await _client.from('creator_announcements').update({'is_published': published, 'updated_at': DateTime.now().toUtc().toIso8601String()}).eq('id', id);
   }
 
+  Future<List<Map<String, dynamic>>> loadAccounts({int page = 1}) async {
+    final response = await _client.functions.invoke(
+      'creator-account-admin',
+      body: {'action': 'list', 'page': page},
+    );
+    final data = Map<String, dynamic>.from(response.data as Map);
+    if (response.status < 200 || response.status >= 300) {
+      throw Exception(data['error'] ?? 'Не удалось загрузить аккаунты');
+    }
+    return (data['users'] as List)
+        .map((row) => Map<String, dynamic>.from(row as Map))
+        .toList();
+  }
+
+  Future<void> setAccountBanned(String userId, {required bool banned}) async {
+    final response = await _client.functions.invoke(
+      'creator-account-admin',
+      body: {'action': banned ? 'ban' : 'unban', 'user_id': userId},
+    );
+    if (response.status < 200 || response.status >= 300) {
+      final data = response.data is Map
+          ? Map<String, dynamic>.from(response.data as Map)
+          : <String, dynamic>{};
+      throw Exception(data['error'] ?? 'Не удалось изменить состояние аккаунта');
+    }
+  }
+
   Future<void> deleteAnnouncement(String id) async {
     await _client.from('creator_announcements').delete().eq('id', id);
   }
