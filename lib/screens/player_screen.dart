@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'package:window_manager/window_manager.dart';
@@ -211,7 +212,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _exitFullscreen() async {
     if (!_fullscreen) return;
-    await windowManager.setFullScreen(false);
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      await windowManager.setFullScreen(false);
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     if (mounted) {
       setState(() {
         _fullscreen = false;
@@ -223,10 +228,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _toggleFullscreen() async {
     final entering = !_fullscreen;
-    if (entering) {
-      await windowManager.setFullScreen(true);
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      await windowManager.setFullScreen(entering);
     } else {
-      await windowManager.setFullScreen(false);
+      await SystemChrome.setEnabledSystemUIMode(
+        entering ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      );
     }
     if (mounted) {
       setState(() {
@@ -240,7 +247,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     _controlsTimer?.cancel();
-    if (_fullscreen) windowManager.setFullScreen(false);
+    if (_fullscreen && defaultTargetPlatform == TargetPlatform.windows) {
+      windowManager.setFullScreen(false);
+    }
     _controller?.removeListener(_onChanged);
     _controller?.dispose();
     super.dispose();
