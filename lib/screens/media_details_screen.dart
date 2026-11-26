@@ -161,10 +161,19 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   }
 
   Future<Map<String, dynamic>?> _chooseEpisode() async {
-    final seasons = (_details?['seasons'] as List? ?? const [])
+    final tmdbSeasons = (_details?['seasons'] as List? ?? const [])
         .whereType<Map>()
         .where((s) => (s['episode_count'] as num? ?? 0) > 0)
         .toList();
+    final seasons = tmdbSeasons.isNotEmpty
+        ? tmdbSeasons
+        : _kpSeasons.where((s) => (s['episodes'] as List? ?? const []).isNotEmpty)
+            .map((s) => <String, dynamic>{
+              'season_number': s['number'],
+              'episode_count': (s['episodes'] as List? ?? const []).length,
+              'name': 'Сезон ${s['number']}',
+              '_kinopoisk_season': s,
+            }).toList();
     if (seasons.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('TMDB пока не содержит список сезонов этого сериала.')));
       return null;
@@ -185,25 +194,48 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     );
     if (season == null || !mounted) return null;
     final seasonNumber = (season['season_number'] as num?)?.toInt() ?? 1;
-    Map<String, dynamic> seasonData;
-    try {
-      seasonData = await _tmdb.seasonDetails(widget.item.id, seasonNumber);
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось загрузить список эпизодов. Попробуй ещё раз.')));
-      return null;
+    final kpSeason = season['_kinopoisk_season'];
+    List<Map<String, dynamic>> episodes;
+    if (kpSeason is Map) {
+      final today = DateTime.now();
+      episodes = (kpSeason['episodes'] as List? ?? const [])
+          .whereType<Map>()
+          .map((episode) => <String, dynamic>{
+            'episode_number': episode['episodeNumber'],
+            'name': episode['nameRu'] ?? episode['nameEn'] ?? 'Эпизод',
+            'air_date': episode['releaseDate'] ?? '',
+            'season_number': episode['seasonNumber'] ?? seasonNumber,
+            'runtime': 0,
+            'overview': episode['synopsis'] ?? '',
+          })
+          .where((episode) {
+            final raw = (episode['air_date'] ?? '').toString();
+            if (raw.length < 10) return false;
+            final date = DateTime.tryParse(raw.substring(0, 10));
+            return date != null && !DateTime(date.year, date.month, date.day)
+                .isAfter(DateTime(today.year, today.month, today.day));
+          }).toList();
+    } else {
+      Map<String, dynamic> seasonData;
+      try {
+        seasonData = await _tmdb.seasonDetails(widget.item.id, seasonNumber);
+      } catch (_) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось загрузить список эпизодов. Попробуй ещё раз.')));
+        return null;
+      }
+      final today = DateTime.now();
+      episodes = (seasonData['episodes'] as List? ?? const [])
+          .whereType<Map>()
+          .where((episode) {
+            final raw = (episode['air_date'] ?? '').toString();
+            if (raw.length < 10) return false;
+            final date = DateTime.tryParse(raw.substring(0, 10));
+            if (date == null) return false;
+            return !DateTime(date.year, date.month, date.day)
+                .isAfter(DateTime(today.year, today.month, today.day));
+          }).map((e) => Map<String, dynamic>.from(e)).toList();
     }
-    final today = DateTime.now();
-    final episodes = (seasonData['episodes'] as List? ?? const [])
-        .whereType<Map>()
-        .where((episode) {
-          final raw = (episode['air_date'] ?? '').toString();
-          if (raw.length < 10) return false;
-          final date = DateTime.tryParse(raw.substring(0, 10));
-          if (date == null) return false;
-          return !DateTime(date.year, date.month, date.day)
-              .isAfter(DateTime(today.year, today.month, today.day));
-        }).toList();
     if (episodes.isEmpty || !mounted) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('В этом сезоне нет доступных данных об эпизодах.')));
       return null;
@@ -291,13 +323,41 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   bool _searchingPlayback = false;
 
   Future<Map<String, dynamic>?> _firstEpisode() async {
-    final seasons = (_details?['seasons'] as List? ?? const [])
+    final tmdbSeasons = (_details?['seasons'] as List? ?? const [])
         .whereType<Map>()
         .where((s) => (s['episode_count'] as num? ?? 0) > 0)
         .toList()
       ..sort((a, b) => ((a['season_number'] as num?)?.toInt() ?? 0)
           .compareTo((b['season_number'] as num?)?.toInt() ?? 0));
-    if (seasons.isEmpty) return null;
+    if (tmdbSeasons.isEmpty) {
+      final kpSeasons = [..._kpSeasons]
+        ..sort((a, b) => ((a['number'] as num?)?.toInt() ?? 0)
+            .compareTo((b['number'] as num?)?.toInt() ?? 0));
+      final today = DateTime.now();
+      for (final season in kpSeasons) {
+        final episodes = (season['episodes'] as List? ?? const [])
+            .whereType<Map>()
+            .map((episode) => <String, dynamic>{
+              'episode_number': episode['episodeNumber'],
+              'name': episode['nameRu'] ?? episode['nameEn'] ?? 'Эпизод',
+              'air_date': episode['releaseDate'] ?? '',
+              'season_number': episode['seasonNumber'] ?? season['number'],
+              'runtime': 0,
+              'overview': episode['synopsis'] ?? '',
+            }).where((episode) {
+              final raw = (episode['air_date'] ?? '').toString();
+              if (raw.length < 10) return false;
+              final date = DateTime.tryParse(raw.substring(0, 10));
+              return date != null && !DateTime(date.year, date.month, date.day)
+                  .isAfter(DateTime(today.year, today.month, today.day));
+            }).toList()
+          ..sort((a, b) => ((a['episode_number'] as num?)?.toInt() ?? 0)
+              .compareTo((b['episode_number'] as num?)?.toInt() ?? 0));
+        if (episodes.isNotEmpty) return episodes.first;
+      }
+      return null;
+    }
+    final seasons = tmdbSeasons;
     final seasonNumber = (seasons.first['season_number'] as num?)?.toInt() ?? 1;
     try {
       final data = await _tmdb.seasonDetails(widget.item.id, seasonNumber);
@@ -537,7 +597,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           ]),
           if (genres.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(genres)),
           const SizedBox(height: 16),
-          Text((d['overview'] ?? item.overview).toString().isEmpty ? 'Описание отсутствует.' : (d['overview'] ?? item.overview).toString()),
+          Text(((d['overview'] ?? item.overview).toString().isNotEmpty
+              ? (d['overview'] ?? item.overview).toString()
+              : (_kpFilm?['description'] ?? _kpFilm?['shortDescription'] ?? 'Описание отсутствует.').toString())),
           if (cast.isNotEmpty) ...[
             const SizedBox(height: 18), const Text('В ролях', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 6), Text(cast),
