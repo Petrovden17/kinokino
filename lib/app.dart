@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/home_screen.dart';
@@ -16,6 +17,7 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
   final AppUpdateService _updates = AppUpdateService();
   bool _ready = false;
   bool _updatePromptShown = false;
+  Timer? _updateTimer;
 
   @override
   void initState() {
@@ -23,16 +25,27 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
     Future.wait([_profiles.initialize(), _settings.initialize()]).then((_) {
       if (!mounted) return;
       setState(() => _ready = true);
-      if (_settings.settings.autoUpdatesEnabled) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdates());
-      }
+      _scheduleUpdateChecks();
     });
+  }
+
+  void _scheduleUpdateChecks() {
+    _checkIfUpdateCheckDue();
+    _updateTimer?.cancel();
+    _updateTimer = Timer.periodic(const Duration(minutes: 1), (_) => _checkIfUpdateCheckDue());
+  }
+
+  Future<void> _checkIfUpdateCheckDue() async {
+    if (!_settings.settings.autoUpdatesEnabled || _updatePromptShown) return;
+    final due = await _settings.isUpdateCheckDue(_settings.settings.updateIntervalHours);
+    if (due && mounted) await _checkForUpdates();
   }
 
   Future<void> _checkForUpdates() async {
     if (_updatePromptShown) return;
     try {
       final update = await _updates.checkForUpdate();
+      await _settings.markUpdateCheck();
       if (!mounted || update == null) return;
       _updatePromptShown = true;
       await showDialog<void>(
@@ -69,6 +82,12 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
     } catch (_) {
       // Не мешаем запуску приложения, если GitHub временно недоступен.
     }
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    super.dispose();
   }
 
   @override
