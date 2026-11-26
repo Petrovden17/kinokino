@@ -97,14 +97,13 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       final section = details[key];
       final rows = (section is Map ? section['results'] : null) as List? ?? const [];
       for (final row in rows.whereType<Map>()) {
-      final data = Map<String, dynamic>.from(row);
-      data.putIfAbsent('media_type', () => _type);
-      final item = MediaItem.fromJson(data);
-      if (item.id != widget.item.id && item.hasRussianTitle &&
-          item.hasConfirmedRelease &&
-          (item.mediaType == 'movie' || item.mediaType == 'tv')) {
-        found['${item.mediaType}:${item.id}'] = item;
-      }
+        final data = Map<String, dynamic>.from(row);
+        data.putIfAbsent('media_type', () => _type);
+        final item = MediaItem.fromJson(data);
+        if (item.id != widget.item.id && item.hasConfirmedRelease &&
+            (item.mediaType == 'movie' || item.mediaType == 'tv')) {
+          found['${item.mediaType}:${item.id}'] = item;
+        }
       }
     }
     return found.values.toList();
