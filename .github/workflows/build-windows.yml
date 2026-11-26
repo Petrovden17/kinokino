@@ -38,6 +38,14 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Install NuGet and Inno Setup
+        shell: pwsh
+        run: |
+          choco install nuget.commandline -y --no-progress
+          choco install innosetup -y --no-progress
+          "${env:ProgramData}\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "${env:ProgramFiles(x86)}\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
@@ -53,20 +61,51 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release --dart-define=APP_BUILD=${{ github.run_number }}
 
-      - name: Upload Windows application
+      - name: Create single-file Windows installer
+        shell: pwsh
+        run: |
+          @'
+          [Setup]
+          AppId={{B1A8B60E-6F18-4E91-A6CE-6B63D6C8A21F}
+          AppName=KinoKino
+          AppVersion=1.0.${{ github.run_number }}
+          AppPublisher=KinoKino
+          DefaultDirName={autopf}\KinoKino
+          DefaultGroupName=KinoKino
+          OutputDir=Output
+          OutputBaseFilename=KinoKino-Setup
+          Compression=lzma2
+          SolidCompression=yes
+          WizardStyle=modern
+          ArchitecturesInstallIn64BitMode=x64
+          Uninstallable=yes
+
+          [Tasks]
+          Name: "desktopicon"; Description: "Создать ярлык на рабочем столе"; GroupDescription: "Дополнительные задачи:"; Flags: unchecked
+
+          [Files]
+          Source: "build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{group}\KinoKino"; Filename: "{app}\kinokino.exe"
+          Name: "{autodesktop}\KinoKino"; Filename: "{app}\kinokino.exe"; Tasks: desktopicon
+
+          [Run]
+          Filename: "{app}\kinokino.exe"; Description: "Запустить KinoKino"; Flags: postinstall nowait skipifsilent
+          '@ | Set-Content -Path KinoKino.iss -Encoding UTF8
+          New-Item -ItemType Directory -Force -Path Output | Out-Null
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" KinoKino.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup compiler failed with exit code $LASTEXITCODE" }
+
+      - name: Upload single-file installer
         uses: actions/upload-artifact@v4
         with:
-          name: KinoKino-Windows-x64
-          path: build/windows/x64/runner/Release/
+          name: KinoKino-Windows-Setup
+          path: Output/KinoKino-Setup.exe
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
-      - name: Package beta release
-        if: ${{ github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.beta_release) }}
-        shell: pwsh
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath KinoKino-Beta-Windows-x64.zip -Force
-
-      - name: Publish beta release
+      - name: Publish beta installer
         if: ${{ github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.beta_release) }}
         uses: softprops/action-gh-release@v2
         with:
@@ -74,5 +113,4 @@ jobs:
           name: KinoKino Beta ${{ github.run_number }}
           prerelease: true
           generate_release_notes: true
-          files: KinoKino-Beta-Windows-x64.zip
-
+          files: Output/KinoKino-Setup.exe
