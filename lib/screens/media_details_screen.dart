@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
+import '../services/internet_archive_service.dart';
 import '../services/local_database.dart';
 import '../widgets/poster_card.dart';
 import 'player_screen.dart';
@@ -54,19 +55,47 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     await LocalDatabase.setRating(widget.item.id, widget.item.title, widget.item.posterPath, value, mediaType: _type);
   }
   Future<void> _startPlayback() async {
-    final controller = TextEditingController();
-    final url = await showDialog<String>(context: context, builder: (context) => AlertDialog(
-      title: const Text('Источник видео'),
-      content: TextField(controller: controller, keyboardType: TextInputType.url,
-        decoration: const InputDecoration(labelText: 'HTTPS-ссылка на разрешённый поток', hintText: 'https://example.com/video.m3u8')),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
-        FilledButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Продолжить')),
-      ],
-    ));
-    controller.dispose();
-    if (url == null || url.isEmpty || !mounted) return;
-    await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(streamUrl: url, title: _displayTitle)));
+    if (_type == 'tv') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Автоматический поиск легальных видеоархивов пока поддерживает фильмы.')),
+      );
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Row(children: [
+          CircularProgressIndicator(),
+          SizedBox(width: 16),
+          Expanded(child: Text('Ищем легальную видеокопию…')),
+        ]),
+      ),
+    );
+    try {
+      final source = await InternetArchiveService().findLicensedVideo(_displayTitle);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      if (source == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не найдено видео с подтверждённой подходящей лицензией и совместимым форматом.')),
+        );
+        return;
+      }
+      await Navigator.push(context, MaterialPageRoute(builder: (_) =>
+        PlayerScreen(streamUrl: source.url.toString(), title: source.title)));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Источник: Internet Archive · ${source.creator} · ${source.license}'),
+        duration: const Duration(seconds: 6),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось выполнить поиск видео: $e')),
+      );
+    }
   }
   Widget _buildProviders() {
     final groups = <String, List<Map<String, dynamic>>>{
