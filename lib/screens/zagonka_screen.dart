@@ -20,6 +20,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   double _progress = 0;
   String? _pageError;
   bool _isFullscreen = false;
+  bool _playerRedirected = false;
 
   @override
   void initState() {
@@ -62,7 +63,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     debugPrint('[KinoKino resource] $url');
     if (defaultTargetPlatform == TargetPlatform.android &&
         !_playerRedirected &&
-        RegExp(r'^https?://inplayer\\.ru/video/black\\.jpg(?:[?#]|$)', caseSensitive: false).hasMatch(url)) {
+        RegExp(r'^https?://inplayer\.ru/video/black\.jpg(?:[?#]|$)', caseSensitive: false).hasMatch(url)) {
       _playerRedirected = true;
       debugPrint('[KinoKino] InPlayer resource observed; opening endpoint in same WebView session');
       controller.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
