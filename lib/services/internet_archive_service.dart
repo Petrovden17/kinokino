@@ -75,7 +75,8 @@ class InternetArchiveService {
   }
 
   bool _durationMatches(double? actualSeconds, int expectedMinutes) {
-    if (actualSeconds == null || actualSeconds <= 0 || expectedMinutes <= 0) return false;
+    // Missing runtime metadata must not block playback; compare only when both values exist.
+    if (actualSeconds == null || actualSeconds <= 0 || expectedMinutes <= 0) return true;
     final expected = expectedMinutes * 60.0;
     // Tight duration matching prevents short clips and unrelated edits from passing.
     final tolerance = (expected * .06).clamp(90.0, 240.0);
@@ -106,7 +107,7 @@ class InternetArchiveService {
     String preferredLanguage = 'auto',
     CancelToken? cancelToken,
   }) async {
-    if (expectedRuntimeMinutes <= 0 || expectedYear <= 0) return null;
+    if (expectedYear <= 0) return null;
     final wanted = _normalize(title, expectedYear);
     if (wanted.isEmpty) return null;
     final cleanTitle = title.replaceAll('"', '').trim();
@@ -194,7 +195,7 @@ class InternetArchiveService {
             label: height >= 2160 ? '4K' : height >= 1440 ? '1440p' : height >= 1080 ? '1080p' :
                 height >= 720 ? '720p' : height >= 480 ? '480p' : 'Исходное качество',
             height: height,
-            durationSeconds: duration!,
+            durationSeconds: duration ?? 0,
             url: Uri.parse('https://archive.org/download/$id/$encodedName'),
           ));
         }
