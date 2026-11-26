@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../services/internet_archive_service.dart';
+import '../services/watchmode_service.dart';
 import '../services/local_database.dart';
 import '../widgets/poster_card.dart';
 import 'player_screen.dart';
@@ -19,6 +20,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   final _tmdb = TmdbService();
   Map<String, dynamic>? _details;
   List<MediaItem> _recommendations = [];
+  List<MediaItem> _similar = [];
   Map<String, dynamic> _externalIds = {};
   bool _loading = true;
   String? _error;
@@ -49,7 +51,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   }
   Future<void> _load() async {
     Map<String, dynamic>? details;
-    List<MediaItem> picks = [];
     String? error;
     Map<String, dynamic> externalIds = {};
     try {
@@ -58,45 +59,82 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     } catch (e) {
       error = e.toString();
     }
-    // Load both lists independently and merge them: one empty endpoint must
-    // not suppress useful similar/recommended titles from the other endpoint.
-    final related = <String, MediaItem>{};
+    // Keep similar titles and recommendations separate so neither endpoint
+    // can hide the other and each section can be loaded independently.
+    List<MediaItem> recommendations = [];
+    List<MediaItem> similar = [];
     try {
-      final rows = await _tmdb.recommendations(widget.item.id, type: _type);
-      for (final row in rows) {
-        if (row.id != widget.item.id) related['${row.mediaType}:${row.id}'] = row;
-      }
+      recommendations = await _tmdb.recommendations(widget.item.id, type: _type);
     } catch (_) {}
     try {
-      final rows = await _tmdb.similar(widget.item.id, type: _type);
-      for (final row in rows) {
-        if (row.id != widget.item.id) related['${row.mediaType}:${row.id}'] = row;
-      }
+      similar = await _tmdb.similar(widget.item.id, type: _type);
     } catch (_) {}
-    picks = related.values.toList();
-    if (picks.isEmpty && details != null) {
-      final fallback = <String, MediaItem>{};
-      for (final key in ['recommendations', 'similar']) {
-        final section = details[key];
-        final rows = (section is Map ? section['results'] : null) as List? ?? const [];
-        for (final row in rows.whereType<Map>()) {
-          final data = Map<String, dynamic>.from(row);
-          data.putIfAbsent('media_type', () => _type);
-          final item = MediaItem.fromJson(data);
-          if (item.id != widget.item.id && item.hasRussianTitle && item.hasConfirmedRelease) {
-            fallback['${item.mediaType}:${item.id}'] = item;
-          }
-        }
+    if (details != null) {
+      if (recommendations.isEmpty) {
+        recommendations = _relatedFallback(details, 'recommendations');
       }
-      picks = fallback.values.toList();
+      if (similar.isEmpty) {
+        similar = _relatedFallback(details, 'similar');
+      }
     }
+    final recommendationsById = <String, MediaItem>{
+      for (final item in recommendations)
+        if (item.id != widget.item.id) '${item.mediaType}:${item.id}': item,
+    };
+    final similarById = <String, MediaItem>{
+      for (final item in similar)
+        if (item.id != widget.item.id) '${item.mediaType}:${item.id}': item,
+    };
     if (mounted) setState(() {
       _details = details;
-      _recommendations = picks;
+      _recommendations = recommendationsById.values.toList();
+      _similar = similarById.values.toList();
       _externalIds = externalIds;
       _error = error;
       _loading = false;
     });
+  }
+
+  List<MediaItem> _relatedFallback(Map<String, dynamic> details, String key) {
+    final section = details[key];
+    final rows = (section is Map ? section['results'] : null) as List? ?? const [];
+    final found = <String, MediaItem>{};
+    for (final row in rows.whereType<Map>()) {
+      final data = Map<String, dynamic>.from(row);
+      data.putIfAbsent('media_type', () => _type);
+      final item = MediaItem.fromJson(data);
+      if (item.id != widget.item.id && item.hasRussianTitle &&
+          item.hasConfirmedRelease &&
+          (item.mediaType == 'movie' || item.mediaType == 'tv')) {
+        found['${item.mediaType}:${item.id}'] = item;
+      }
+    }
+    return found.values.toList();
+  }
+
+  Widget _relatedSection(String title, List<MediaItem> items) {
+    if (items.isEmpty) return const SizedBox.shrink();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 12),
+        child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+      ),
+      SizedBox(height: 250, child: ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, i) => PosterCard(
+          item: items[i],
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) =>
+            MediaDetailsScreen(
+              item: items[i],
+              preferredAudioLanguage: widget.preferredAudioLanguage,
+              preferredVideoQuality: widget.preferredVideoQuality,
+            ))),
+        ),
+      )),
+    ]);
   }
 
   Future<Map<String, dynamic>?> _chooseEpisode() async {
@@ -204,6 +242,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       expectedYear: year,
       displayTitle: '$_displayTitle · Сезон $season · Серия $number',
       preferredLanguage: _preferredArchiveLanguage,
+      seriesTitle: _displayTitle,
+      seasonNumber: season,
+      episodeNumber: number,
     );
     if (!mounted || source == null) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -244,7 +285,18 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final seasonNumber = (seasons.first['season_number'] as num?)?.toInt() ?? 1;
     try {
       final data = await _tmdb.seasonDetails(widget.item.id, seasonNumber);
-      final episodes = (data['episodes'] as List? ?? const []).whereType<Map>().toList();
+      final today = DateTime.now();
+      final episodes = (data['episodes'] as List? ?? const [])
+          .whereType<Map>()
+          .where((episode) {
+            final raw = (episode['air_date'] ?? '').toString();
+            if (raw.length < 10) return false;
+            final date = DateTime.tryParse(raw.substring(0, 10));
+            return date != null && !DateTime(date.year, date.month, date.day)
+                .isAfter(DateTime(today.year, today.month, today.day));
+          }).toList()
+        ..sort((a, b) => ((a['episode_number'] as num?)?.toInt() ?? 0)
+            .compareTo((b['episode_number'] as num?)?.toInt() ?? 0));
       if (episodes.isEmpty) return null;
       final ep = Map<String, dynamic>.from(episodes.first);
       final runtimeList = _details?['episode_run_time'] as List? ?? const [];
@@ -260,6 +312,84 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
   }
 
+  Future<void> _showLegalViewingOptions() async {
+    final options = <Map<String, dynamic>>[];
+    String? guideUrl;
+    try {
+      final free = await WatchmodeService().freeSources(
+        tmdbId: widget.item.id,
+        mediaType: _type,
+        region: 'NL',
+      );
+      options.addAll(free);
+    } catch (_) {}
+    try {
+      final providers = await _tmdb.watchProviders(widget.item.id, type: _type, region: 'NL');
+      guideUrl = providers['link']?.toString();
+      for (final group in ['flatrate', 'rent', 'buy']) {
+        for (final provider in providers[group] as List? ?? const []) {
+          if (provider is Map) {
+            options.add({
+              'name': provider['provider_name'] ?? 'Видеосервис',
+              'type': group,
+              'web_url': guideUrl,
+            });
+          }
+        }
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    if (options.isEmpty && (guideUrl == null || guideUrl.isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Легальный источник не найден. Для этого названия нет доступного потока или подтверждённого сервиса.'),
+      ));
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Где посмотреть легально'),
+        content: SizedBox(
+          width: 460,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              if (options.isNotEmpty)
+                ...options.map((option) {
+                  final name = (option['name'] ?? option['source'] ?? 'Видеосервис').toString();
+                  final type = (option['type'] ?? '').toString();
+                  final url = (option['web_url'] ?? option['url'] ?? guideUrl ?? '').toString();
+                  return ListTile(
+                    leading: const Icon(Icons.ondemand_video_outlined),
+                    title: Text(name),
+                    subtitle: Text(type == 'free' ? 'Бесплатно' : type == 'rent' ? 'Аренда' : type == 'buy' ? 'Покупка' : 'Подписка'),
+                    onTap: url.startsWith('https://') ? () {
+                      Navigator.pop(ctx);
+                      _openExternalPage(Uri.parse(url));
+                    } : null,
+                  );
+                }),
+              if (guideUrl != null && guideUrl.isNotEmpty)
+                ListTile(
+                  leading: const Icon(Icons.open_in_new),
+                  title: const Text('Открыть список всех сервисов'),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openExternalPage(Uri.parse(guideUrl!));
+                  },
+                ),
+              const Padding(
+                padding: EdgeInsets.all(12),
+                child: Text('Эти сервисы открываются на своих официальных страницах; встроенный плеер не получает от них видеопоток.'),
+              ),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Закрыть'))],
+      ),
+    );
+  }
+
   Future<void> _startPlayback() async {
     if (_searchingPlayback) return;
     String sourceTitle = _playbackSearchTitle;
@@ -269,6 +399,14 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     if (_type == 'tv') {
       selectedEpisode = await _firstEpisode();
       if (!mounted) return;
+      selectedEpisode ??= await _chooseEpisode();
+      if (!mounted) return;
+      if (selectedEpisode == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Не удалось определить вышедшую серию. Выбери сезон и серию вручную.'),
+        ));
+        return;
+      }
       if (selectedEpisode != null) {
         sourceTitle = (selectedEpisode['name'] ?? '').toString();
         expectedRuntime = (selectedEpisode['runtime'] as num?)?.toInt() ?? 0;
@@ -319,6 +457,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         expectedYear: expectedYear,
         displayTitle: _displayTitle,
         preferredLanguage: _preferredArchiveLanguage,
+        seriesTitle: _type == 'tv' ? _displayTitle : null,
+        seasonNumber: selectedEpisode == null ? null : (selectedEpisode['season_number'] as num?)?.toInt(),
+        episodeNumber: selectedEpisode == null ? null : (selectedEpisode['episode_number'] as num?)?.toInt(),
         cancelToken: cancelToken,
       );
       // Try the localized display title too: public archives often catalogue
@@ -330,6 +471,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           expectedYear: expectedYear,
           displayTitle: _displayTitle,
           preferredLanguage: widget.preferredAudioLanguage,
+          seriesTitle: _type == 'tv' ? _displayTitle : null,
+          seasonNumber: selectedEpisode == null ? null : (selectedEpisode['season_number'] as num?)?.toInt(),
+          episodeNumber: selectedEpisode == null ? null : (selectedEpisode['episode_number'] as num?)?.toInt(),
           cancelToken: cancelToken,
         );
       }
@@ -337,11 +481,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       Navigator.of(context, rootNavigator: true).pop();
       dialogClosed = true;
       if (source == null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(_type == 'tv'
-            ? 'Источник для этого сериала пока не найден.'
-            : 'Источник для этого фильма пока не найден.'),
-        ));
+        await _showLegalViewingOptions();
         return;
       }
       final playableSource = source;
@@ -382,7 +522,16 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           final date = isEpisode ? (selectedEpisode['air_date'] ?? '').toString() : '';
           final year = isEpisode ? int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? _releaseYear : _releaseYear;
           final languageCode = language == 'original' ? (_details?['original_language']?.toString() ?? 'auto') : language;
-          return InternetArchiveService().findLicensedVideo(title, expectedRuntimeMinutes: runtime, expectedYear: year, displayTitle: _displayTitle, preferredLanguage: languageCode);
+          return InternetArchiveService().findLicensedVideo(
+            title,
+            expectedRuntimeMinutes: runtime,
+            expectedYear: year,
+            displayTitle: _displayTitle,
+            preferredLanguage: languageCode,
+            seriesTitle: isEpisode ? _displayTitle : null,
+            seasonNumber: isEpisode ? (selectedEpisode!['season_number'] as num?)?.toInt() : null,
+            episodeNumber: isEpisode ? (selectedEpisode!['episode_number'] as num?)?.toInt() : null,
+          );
         },
       )));
     } catch (e) {
@@ -494,15 +643,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             child: Text('Некоторые сведения временно недоступны. Попробуйте обновить страницу позже.'),
           ),
         ])),
-        if (_recommendations.isNotEmpty) ...[
-          const Padding(padding: EdgeInsets.fromLTRB(18, 8, 18, 12), child: Text('Похожие и рекомендованные', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
-          SizedBox(height: 250, child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 18), scrollDirection: Axis.horizontal,
-            itemCount: _recommendations.length, separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (_, i) => PosterCard(item: _recommendations[i], onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => MediaDetailsScreen(item: _recommendations[i], preferredAudioLanguage: widget.preferredAudioLanguage, preferredVideoQuality: widget.preferredVideoQuality)))),
-          )),
-        ],
+        _relatedSection('Рекомендации', _recommendations),
+        _relatedSection('Похожие', _similar),
       ]),
     );
   }

@@ -105,14 +105,21 @@ class InternetArchiveService {
     required int expectedYear,
     String? displayTitle,
     String preferredLanguage = 'auto',
+    String? seriesTitle,
+    int? seasonNumber,
+    int? episodeNumber,
     CancelToken? cancelToken,
   }) async {
     if (expectedYear <= 0) return null;
     final wanted = _normalize(title, expectedYear);
     if (wanted.isEmpty) return null;
     final cleanTitle = title.replaceAll('"', '').trim();
+    final cleanSeriesTitle = (seriesTitle ?? '').replaceAll('"', '').trim();
     final words = cleanTitle.split(RegExp(r'\s+')).where((word) => word.length > 1).toList();
     final tokenQuery = words.isEmpty ? cleanTitle : words.map((word) => 'title:"$word"').join(' AND ');
+    final episodeCode = seasonNumber != null && episodeNumber != null
+        ? 'S${seasonNumber.toString().padLeft(2, '0')}E${episodeNumber.toString().padLeft(2, '0')}'
+        : '';
     const languageMap = {
       'ru': 'rus', 'en': 'eng', 'ja': 'jpn', 'fr': 'fre',
       'de': 'ger', 'es': 'spa', 'ko': 'kor', 'zh': 'chi',
@@ -125,6 +132,10 @@ class InternetArchiveService {
         'title:"$cleanTitle" AND year:$expectedYear AND language:$languageCode AND mediatype:movies',
       'title:"$cleanTitle" AND year:$expectedYear AND mediatype:movies',
       '($tokenQuery) AND year:$expectedYear AND mediatype:movies',
+      if (cleanSeriesTitle.isNotEmpty)
+        'title:"$cleanSeriesTitle" AND title:"$cleanTitle" AND year:$expectedYear AND mediatype:movies',
+      if (cleanSeriesTitle.isNotEmpty && episodeCode.isNotEmpty)
+        'title:"$cleanSeriesTitle" AND title:"$episodeCode" AND year:$expectedYear AND mediatype:movies',
     ];
     final seen = <String>{};
     final docs = <Map>[];
@@ -162,8 +173,22 @@ class InternetArchiveService {
         final data = response.data as Map<String, dynamic>;
         final metadata = data['metadata'] as Map<String, dynamic>? ?? {};
         final archiveTitle = (metadata['title'] ?? doc['title'] ?? '').toString();
-        // Search results are fuzzy. Require an exact normalized title match.
-        if (_normalize(archiveTitle, expectedYear) != wanted) continue;
+        // Movie matches remain exact. TV episodes may be catalogued as
+        // "Series — S01E01 — Episode", so accept a title containing the
+        // episode name or the series name plus its episode code.
+        final normalizedArchiveTitle = _normalize(archiveTitle, expectedYear);
+        final normalizedSeriesTitle = cleanSeriesTitle.isEmpty
+            ? ''
+            : _normalize(cleanSeriesTitle, expectedYear);
+        final episodeTitleMatches = normalizedArchiveTitle == wanted ||
+            (seriesTitle != null && normalizedArchiveTitle.contains(wanted));
+        final seriesEpisodeMatches = normalizedSeriesTitle.isNotEmpty &&
+            normalizedArchiveTitle.contains(normalizedSeriesTitle) &&
+            episodeCode.isNotEmpty &&
+            normalizedArchiveTitle.contains(episodeCode.toLowerCase());
+        if (seriesTitle == null
+            ? !episodeTitleMatches || normalizedArchiveTitle != wanted
+            : !episodeTitleMatches && !seriesEpisodeMatches) continue;
         // Never infer a release year from an archive identifier: IDs often contain
         // upload dates or unrelated event years. Prefer explicit metadata, then title.
         final titleYear = _yearFrom(archiveTitle);

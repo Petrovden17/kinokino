@@ -1,9 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import '../services/creator_service.dart';
-import '../services/beta_release_service.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../services/profile_service.dart';
@@ -37,8 +35,6 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _genres = [];
   bool _loading = false;
   bool _isCreator = false;
-  bool _betaLoading = false;
-  Map<String, dynamic>? _betaRelease;
   String? _error;
   String _type = 'all';
   String _sort = 'popularity.desc';
@@ -55,7 +51,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadGenres();
     _loadTrending();
     _loadCreatorAccess();
-    _loadBetaRelease();
   }
 
   Future<void> _loadCreatorAccess() async {
@@ -63,42 +58,6 @@ class _HomeScreenState extends State<HomeScreen> {
       final allowed = await CreatorService().isCreator();
       if (mounted) setState(() => _isCreator = allowed);
     } catch (_) {}
-  }
-
-  Future<void> _loadBetaRelease() async {
-    if (mounted) setState(() => _betaLoading = true);
-    try {
-      final release = await BetaReleaseService().latest();
-      if (mounted) setState(() => _betaRelease = release);
-    } catch (_) {
-      // Beta discovery is optional and must not interrupt catalogue loading.
-    } finally {
-      if (mounted) setState(() => _betaLoading = false);
-    }
-  }
-
-  Future<void> _openBetaWorkflow() async {
-    final uri = Uri.parse('https://github.com/Petrovden17/kinokino/actions/workflows/build-windows.yml');
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть GitHub Actions.')),
-      );
-    }
-  }
-
-  Future<void> _openBetaRelease() async {
-    final asset = _betaRelease?['beta_asset'];
-    final url = asset is Map
-        ? (asset['browser_download_url'] ?? '').toString()
-        : '';
-    if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null) return;
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication) && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось открыть бета-версию.')),
-      );
-    }
   }
 
   Future<void> _resetFilters() async {
@@ -231,12 +190,26 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _loading = true);
     _error = null;
     try {
-      final r = _type == 'all' && _genreId == null && _minRating == 0 && _sort == 'popularity.desc'
+      var r = _type == 'all' && _genreId == null && _minRating == 0 && _sort == 'popularity.desc'
           ? await _tmdb.trending(page: 1)
           : _type == 'all' ? await _loadAllTypesPage(1)
           : await _tmdb.discover(type: _apiType, genreId: _effectiveGenre,
               sortBy: _sort == 'primary_release_date.desc' && _apiType == 'tv' ? 'first_air_date.desc' : _sort,
               minRating: _minRating == 0 ? null : _minRating);
+      // If the date-sorted discover query is empty, retry the released catalogue
+      // and sort its returned dates locally instead of showing an empty screen.
+      if (r.isEmpty && _sort == 'primary_release_date.desc') {
+        if (_type == 'all') {
+          final pages = await Future.wait([
+            _tmdb.popular(type: 'movie', page: 1),
+            _tmdb.popular(type: 'tv', page: 1),
+          ]);
+          r = [...pages[0], ...pages[1]];
+        } else {
+          r = await _tmdb.popular(type: _apiType, page: 1);
+        }
+      }
+      if (_sort == 'primary_release_date.desc') _sortMediaItems(r);
       if (mounted) setState(() { _items = r; _page = 1; _hasMore = r.isNotEmpty; });
     } catch (_) {
       if (mounted) setState(() => _error = 'Не удалось применить фильтры.');
@@ -418,66 +391,46 @@ class _HomeScreenState extends State<HomeScreen> {
     ]),
   );
 
-  Widget _betaPanel() {
-    final release = _betaRelease;
-    final tag = (release?['tag_name'] ?? '').toString();
-    final name = (release?['name'] ?? tag).toString();
-    final notes = (release?['body'] ?? '').toString().trim();
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 2, 16, 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xE52B2447), Color(0xE5121D31)],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFF9B7BFF).withValues(alpha: .42)),
+  Widget _heroHeader() => Container(
+    margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+    padding: const EdgeInsets.fromLTRB(20, 18, 18, 18),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF263B5B), Color(0xFF191D37), Color(0xFF332346)],
       ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Icon(Icons.science_outlined, color: Color(0xFFB9A5FF), size: 26),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Бета-версии KinoKino', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
-          const SizedBox(height: 4),
-          Text(_betaLoading
-            ? 'Проверяем новые тестовые сборки…'
-            : release == null
-              ? 'Тестовых сборок пока нет.'
-              : 'Последняя сборка: $name',
-            style: const TextStyle(color: Colors.white70, fontSize: 12)),
-          if (notes.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(notes, maxLines: 2, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white54, fontSize: 11)),
-          ],
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 6, children: [
-            if (release != null)
-              OutlinedButton.icon(
-                onPressed: _isCreator ? _openBetaRelease : null,
-                icon: const Icon(Icons.download_outlined, size: 16),
-                label: Text(_isCreator ? 'Скачать бета-версию' : 'Доступно создателю'),
-              ),
-            if (_isCreator)
-              FilledButton.tonalIcon(
-                onPressed: _openBetaWorkflow,
-                icon: const Icon(Icons.rocket_launch_outlined, size: 16),
-                label: const Text('Собрать в Actions'),
-              ),
-            if (!_isCreator)
-              const Text('Тестирование и загрузка доступны только создателю.',
-                style: TextStyle(color: Colors.white54, fontSize: 11)),
-          ]),
-        ])),
-        IconButton(
-          tooltip: 'Обновить список бета-версий',
-          onPressed: _betaLoading ? null : _loadBetaRelease,
-          icon: const Icon(Icons.refresh_rounded),
+      borderRadius: BorderRadius.circular(24),
+      border: Border.all(color: Colors.white.withValues(alpha: .10)),
+      boxShadow: [
+        BoxShadow(color: Colors.black.withValues(alpha: .22), blurRadius: 22, offset: const Offset(0, 9)),
+      ],
+    ),
+    child: Row(children: [
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('ТВОЯ КИНОТЕКА', style: TextStyle(
+          color: AppTheme.aqua, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w900,
+        )),
+        const SizedBox(height: 7),
+        const Text('Найди свою\nследующую историю', style: TextStyle(
+          fontSize: 23, height: 1.08, fontWeight: FontWeight.w900,
+        )),
+        const SizedBox(height: 7),
+        Text('Фильмы, сериалы и анимация в одном месте',
+          style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: .72))),
+      ])),
+      const SizedBox(width: 8),
+      Container(
+        width: 58, height: 58,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white.withValues(alpha: .07),
+          border: Border.all(color: AppTheme.aqua.withValues(alpha: .32)),
         ),
-      ]),
-    );
-  }
+        child: const Icon(Icons.movie_filter_rounded, size: 30, color: AppTheme.aqua),
+      ),
+    ]),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -547,8 +500,8 @@ class _HomeScreenState extends State<HomeScreen> {
             controller: _scroll,
             slivers: [
               SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).top + kToolbarHeight + 8)),
+              SliverToBoxAdapter(child: _heroHeader()),
               SliverToBoxAdapter(child: _filters()),
-              SliverToBoxAdapter(child: _betaPanel()),
               SliverToBoxAdapter(child: Padding(
                 padding: const EdgeInsets.fromLTRB(18, 5, 18, 10),
                 child: Row(children: [
