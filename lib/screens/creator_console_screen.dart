@@ -238,7 +238,7 @@ class _CreatorConsoleScreenState extends State<CreatorConsoleScreen> {
           OutlinedButton.icon(
             onPressed: _toggleExtraInfo,
             icon: Icon(_showExtraInfo ? Icons.visibility_off_outlined : Icons.analytics_outlined),
-            label: Text(_showExtraInfo ? 'Скрыть подробную информацию' : 'Показать подробную информацию'),
+            label: Text(_showExtraInfo ? 'Скрыть подробную информацию' : 'Дополнительная информация'),
           ),
           const SizedBox(height: 10),
           const Text('Статистика KinoKino', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
