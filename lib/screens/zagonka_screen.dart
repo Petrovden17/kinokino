@@ -36,7 +36,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_pageTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+        title: Text('${widget.title} · Zagonka', maxLines: 1, overflow: TextOverflow.ellipsis),
         leading: IconButton(
           tooltip: 'Назад',
           onPressed: _goBack,
