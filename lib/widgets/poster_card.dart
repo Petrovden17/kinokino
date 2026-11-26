@@ -37,7 +37,7 @@ class PosterCard extends StatelessWidget {
             )),
             Positioned(top: 9, left: 9, child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              decoration: BoxDecoration(color: AppTheme.accent, borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(8)),
               child: Text(kind, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: .7)),
             )),
             if (item.voteAverage > 0) Positioned(right: 9, bottom: 9, child: Container(
