@@ -38,11 +38,14 @@ class InternetArchiveService {
 
   bool _isAllowedLicense(String value) {
     final license = value.toLowerCase();
-    return license.contains('creativecommons.org/licenses/by/3.0') ||
+    return license.contains('public domain') ||
+        license.contains('public-domain') ||
+        license.contains('publicdomain') ||
+        license.contains('creativecommons.org/publicdomain/zero/1.0') ||
+        license.contains('creativecommons.org/licenses/by/3.0') ||
         license.contains('creativecommons.org/licenses/by/4.0') ||
         license.contains('creativecommons.org/licenses/by-sa/3.0') ||
         license.contains('creativecommons.org/licenses/by-sa/4.0') ||
-        license.contains('creativecommons.org/publicdomain/zero/1.0') ||
         license.contains('creativecommons.org/publicdomain/mark/1.0') ||
         license.contains('creativecommons.org/licenses/publicdomain');
   }
@@ -124,19 +127,39 @@ class InternetArchiveService {
     }
     // If the curated series playlist has no exact match, search the Archive metadata too.
 
-    final query = 'title:"${title.replaceAll('"', '').trim()}"';
-    final search = await _dio.get<dynamic>('https://archive.org/advancedsearch.php',
-      queryParameters: {
-        'q': query,
-        'fl[]': ['identifier', 'title'],
-        'rows': 12,
-        'page': 1,
-        'output': 'json',
-      },
-      options: Options(responseType: ResponseType.json),
-    );
-    final docs = (search.data['response']?['docs'] as List? ?? const [])
-        .whereType<Map>().toList();
+    final cleanTitle = title.replaceAll('"', '').trim();
+    final words = cleanTitle.split(RegExp(r'\\s+')).where((word) => word.length > 1).toList();
+    final tokenQuery = words.isEmpty ? cleanTitle : words.map((word) => 'title:"$word"').join(' AND ');
+    final queries = <String>[
+      'title:"$cleanTitle" AND mediatype:movies',
+      '($tokenQuery) AND mediatype:movies',
+      'title:"$cleanTitle"',
+    ];
+    final seenIdentifiers = <String>{};
+    final docs = <Map>[];
+    for (final query in queries) {
+      try {
+        final search = await _dio.get<dynamic>(
+          'https://archive.org/advancedsearch.php',
+          queryParameters: {
+            'q': query,
+            'fl[]': ['identifier', 'title'],
+            'rows': 50,
+            'page': 1,
+            'output': 'json',
+            'sort[]': ['downloads desc'],
+          },
+          options: Options(responseType: ResponseType.json),
+        );
+        final results = (search.data['response']?['docs'] as List? ?? const []);
+        for (final row in results.whereType<Map>()) {
+          final id = row['identifier']?.toString() ?? '';
+          if (id.isNotEmpty && seenIdentifiers.add(id)) docs.add(row);
+        }
+      } catch (_) {
+        // Keep searching using the next query variant.
+      }
+    }
 
     for (final doc in docs) {
       final id = doc['identifier']?.toString();
@@ -146,7 +169,9 @@ class InternetArchiveService {
           options: Options(responseType: ResponseType.json));
         final data = response.data as Map<String, dynamic>;
         final metadata = data['metadata'] as Map<String, dynamic>? ?? {};
-        final license = (metadata['licenseurl'] ?? metadata['rights'] ?? '').toString();
+        final license = (metadata['licenseurl']?.toString().trim().isNotEmpty == true
+            ? metadata['licenseurl']
+            : metadata['rights'] ?? '').toString();
         if (!_isAllowedLicense(license)) continue;
 
         final files = (data['files'] as List? ?? const []).whereType<Map>().toList()
