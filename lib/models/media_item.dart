@@ -24,13 +24,25 @@ class MediaItem {
   final List<int> genreIds;
   final String mediaType;
 
+  static String _validatedReleaseDate(dynamic value) {
+    final date = (value ?? '').toString().trim();
+    if (date.length < 4) return '';
+    final year = int.tryParse(date.substring(0, 4));
+    if (year == null || year < 1888 || year > DateTime.now().year + 2) return '';
+    if (date.length >= 10) {
+      final parsed = DateTime.tryParse(date.substring(0, 10));
+      if (parsed == null || parsed.year != year) return '';
+    }
+    return date;
+  }
+
   factory MediaItem.fromJson(Map<String, dynamic> json) => MediaItem(
     id: json['id'] as int? ?? 0,
     title: (json['title'] ?? json['name'] ?? 'Без названия').toString(),
     overview: (json['overview'] ?? '').toString(),
     posterPath: json['poster_path'] as String?,
     backdropPath: json['backdrop_path'] as String?,
-    releaseDate: (json['release_date'] ?? json['first_air_date'] ?? '').toString(),
+    releaseDate: _validatedReleaseDate(json['release_date'] ?? json['first_air_date']),
     voteAverage: (json['vote_average'] as num?)?.toDouble() ?? 0,
     voteCount: (json['vote_count'] as num?)?.toInt() ?? 0,
     popularity: (json['popularity'] as num?)?.toDouble() ?? 0,
