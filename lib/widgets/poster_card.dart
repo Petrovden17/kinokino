@@ -3,21 +3,47 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../core/theme/app_theme.dart';
 
-class PosterCard extends StatelessWidget {
+class PosterCard extends StatefulWidget {
   const PosterCard({super.key, required this.item, this.onTap});
   final MediaItem item;
   final VoidCallback? onTap;
 
   @override
+  State<PosterCard> createState() => _PosterCardState();
+}
+
+class _PosterCardState extends State<PosterCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
     final year = item.releaseDate.length >= 4 ? item.releaseDate.substring(0, 4) : '';
     final kind = item.mediaType == 'tv' ? 'СЕРИАЛ' : 'ФИЛЬМ';
-    return Material(
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedScale(
+        scale: _hovered ? 1.025 : 1.0,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [BoxShadow(
+              color: Colors.black.withValues(alpha: _hovered ? .34 : .12),
+              blurRadius: _hovered ? 18 : 7,
+              offset: Offset(0, _hovered ? 8 : 3),
+            )],
+          ),
+          child: Material(
       color: AppTheme.surface,
       borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onTap,
+        onTap: widget.onTap,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(child: Stack(fit: StackFit.expand, children: [
             item.posterPath == null
@@ -64,6 +90,8 @@ class PosterCard extends StatelessWidget {
             ],
           )),
         ]),
+          ),
+        ),
       ),
     );
   }
