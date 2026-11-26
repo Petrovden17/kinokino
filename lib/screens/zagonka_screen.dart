@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:webview_flutter/webview_flutter.dart' as official_webview;
-import 'package:webview_flutter_android/webview_flutter_android.dart' as android_webview;
 
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({super.key, required this.title, this.kinopoiskId, this.isSeries = false});
@@ -19,83 +17,13 @@ class ZagonkaScreen extends StatefulWidget {
 
 class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _controller;
-  official_webview.WebViewController? _androidController;
-  Widget? _androidWebViewWidget;
   double _progress = 0;
   String? _pageError;
   bool _isFullscreen = false;
-  bool _playerRedirected = false;
 
   @override
   void initState() {
     super.initState();
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      _initializeOfficialAndroidWebView();
-    }
-  }
-
-  Future<void> _initializeOfficialAndroidWebView() async {
-    final controller = official_webview.WebViewController();
-    await controller.setJavaScriptMode(official_webview.JavaScriptMode.unrestricted);
-    await controller.setBackgroundColor(Colors.black);
-    await controller.addJavaScriptChannel(
-      'KinoPlayerBridge',
-      onMessageReceived: (message) {
-        if (message.message == 'inplayer-ready') {
-          _openDetectedInPlayer();
-        }
-      },
-    );
-    await controller.setNavigationDelegate(
-      official_webview.NavigationDelegate(
-        onProgress: (progress) {
-          if (mounted) setState(() => _progress = progress / 100);
-        },
-        onPageStarted: (url) {
-          debugPrint('[KinoKino Android WebView] load start: $url');
-          if (mounted) setState(() { _pageError = null; _progress = 0; });
-        },
-        onPageFinished: (url) async {
-          debugPrint('[KinoKino Android WebView] load finished: $url');
-          if (!mounted) return;
-          setState(() => _progress = 1);
-          try {
-            final probe = await controller.runJavaScriptReturningResult(
-              r'''JSON.stringify({ready:document.readyState,title:document.title,url:location.href,bodyText:(document.body?.innerText||'').slice(0,300),iframes:Array.from(document.querySelectorAll('iframe')).map(x=>x.src).slice(0,8),videos:Array.from(document.querySelectorAll('video')).map(x=>({src:x.currentSrc,ready:x.readyState,error:x.error?.code})).slice(0,4)})''',
-            );
-            debugPrint('[KinoKino Android WebView] page probe: $probe');
-            await controller.runJavaScript(_playerDetectionScript);
-          } catch (e) {
-            debugPrint('[KinoKino Android WebView] page probe/detector failed: $e');
-          }
-        },
-        onWebResourceError: (error) {
-          debugPrint('[KinoKino Android WebView] resource error main=${error.isForMainFrame}: ${error.description} (${error.errorCode}) ${error.url}');
-          if (error.isForMainFrame != true || !mounted) return;
-          setState(() => _pageError = 'Не удалось загрузить страницу KinoKino. Проверь подключение и нажми «Обновить».');
-        },
-        onHttpError: (error) {
-          final status = error.response?.statusCode;
-          if (status != null && status >= 400) {
-            debugPrint('[KinoKino Android WebView] HTTP $status');
-          }
-        },
-      ),
-    );
-    final androidController = controller.platform as android_webview.AndroidWebViewController;
-    await androidController.setMediaPlaybackRequiresUserGesture(false);
-    await androidController.setMixedContentMode(android_webview.MixedContentMode.alwaysAllow);
-    android_webview.AndroidWebViewController.enableDebugging(kDebugMode);
-    final widgetParams = android_webview.AndroidWebViewWidgetCreationParams(
-      controller: controller.platform,
-      displayWithHybridComposition: true,
-    );
-    if (!mounted) return;
-    setState(() {
-      _androidController = controller;
-      _androidWebViewWidget = official_webview.WebViewWidget.fromPlatformCreationParams(params: widgetParams);
-    });
-    await controller.loadRequest(Uri.parse(_primaryUrl.toString()));
   }
 
   WebUri get _primaryUrl {
@@ -129,44 +57,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
-  static const String _playerDetectionScript = r"""
-    (() => {
-      if (window.__kinoPlayerDetectorInstalled) return;
-      window.__kinoPlayerDetectorInstalled = true;
-      let userStartedPlayback = false;
-      let sent = false;
-      const isPlayAction = (node) => {
-        if (!node) return false;
-        const text = ((node.innerText || node.getAttribute?.('aria-label') || node.title || '') + '').toLowerCase();
-        return /смотреть|воспроиз|play|watch|серия|фильм/.test(text);
-      };
-      document.addEventListener('click', (event) => {
-        let node = event.target;
-        for (let i = 0; node && i < 5; i++, node = node.parentElement) {
-          if (isPlayAction(node)) { userStartedPlayback = true; break; }
-        }
-      }, true);
-      document.addEventListener('play', () => { userStartedPlayback = true; }, true);
-      const check = () => {
-        if (!userStartedPlayback || sent) return;
-        const entries = performance.getEntriesByType('resource');
-        const found = entries.some(entry =>
-          /https?:\/\/inplayer\.ru\/video\/black\.jpg(?:[?#]|$)/i.test(entry.name)
-        );
-        if (found) {
-          sent = true;
-          if (window.KinoPlayerBridge) window.KinoPlayerBridge.postMessage('inplayer-ready');
-        }
-      };
-      setInterval(check, 500);
-    })();
-  """;
-
-  Future<void> _openDetectedInPlayer() async {
-    if (_playerRedirected || _androidController == null) return;
-    _playerRedirected = true;
-    debugPrint('[KinoKino] detected active InPlayer endpoint; opening in same WebView');
-    await _androidController!.loadRequest(Uri.parse('https://inplayer.ru/video/black.jpg'));
+  void _onResourceLoaded(InAppWebViewController controller, LoadedResource resource) {
+    final url = resource.url.toString();
+    debugPrint('[KinoKino resource] $url');
+    if (defaultTargetPlatform == TargetPlatform.android &&
+        !_playerRedirected &&
+        RegExp(r'^https?://inplayer\\.ru/video/black\\.jpg(?:[?#]|$)', caseSensitive: false).hasMatch(url)) {
+      _playerRedirected = true;
+      debugPrint('[KinoKino] InPlayer resource observed; opening endpoint in same WebView session');
+      controller.loadUrl(urlRequest: URLRequest(url: WebUri(url)));
+    }
   }
 
   Future<void> _toggleFullscreen() async {
@@ -185,22 +85,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         }
       })();
     """;
-    if (_androidController != null) {
-      await _androidController!.runJavaScript(fullscreenScript);
-    } else {
-      await _controller?.evaluateJavascript(source: fullscreenScript);
-    }
+    await _controller?.evaluateJavascript(source: fullscreenScript);
     await _setFullscreen(true);
   }
 
   Future<void> _goBack() async {
     if (_isFullscreen) {
       await _setFullscreen(false);
-      return;
-    }
-    final androidController = _androidController;
-    if (androidController != null && await androidController.canGoBack()) {
-      await androidController.goBack();
       return;
     }
     final controller = _controller;
@@ -212,17 +103,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   }
 
   Future<void> _reloadPage() async {
-    if (_androidController != null) {
-      await _androidController!.reload();
-    } else {
-      await _controller?.loadUrl(urlRequest: URLRequest(url: _primaryUrl));
-    }
+    await _controller?.loadUrl(urlRequest: URLRequest(url: _primaryUrl));
   }
 
   Widget _buildPlayerView() {
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      return _androidWebViewWidget ?? const Center(child: CircularProgressIndicator());
-    }
     return InAppWebView(
       initialUrlRequest: URLRequest(url: _primaryUrl),
       initialSettings: InAppWebViewSettings(
@@ -239,13 +123,15 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         supportMultipleWindows: false,
         javaScriptCanOpenWindowsAutomatically: true,
         mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-        useHybridComposition: false,
+        useHybridComposition: defaultTargetPlatform == TargetPlatform.android,
+        useOnLoadResource: defaultTargetPlatform == TargetPlatform.android,
         transparentBackground: false,
         supportZoom: false,
         useWideViewPort: false,
         loadWithOverviewMode: false,
       ),
       onWebViewCreated: (controller) => _controller = controller,
+      onLoadResource: (controller, resource) => _onResourceLoaded(controller, resource),
       onLoadStart: (controller, url) {
         debugPrint('[KinoKino WebView] load start: $url');
         if (!mounted) return;
