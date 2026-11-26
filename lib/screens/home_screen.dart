@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../services/creator_service.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../services/profile_service.dart';
@@ -10,6 +11,7 @@ import 'settings_screen.dart';
 import 'library_screen.dart';
 import 'about_screen.dart';
 import 'media_details_screen.dart';
+import 'creator_console_screen.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key,required this.profileService,required this.settingsService});
   final ProfileService profileService;final SettingsService settingsService;
@@ -18,10 +20,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>{
   final _tmdb=TmdbService();final _search=TextEditingController();final _scroll=ScrollController();int _page=1;bool _hasMore=true;bool _loadingMore=false;
   List<MediaItem> _items=[];List<Map<String,dynamic>> _genres=[];
-  bool _loading=false;String? _error;String _type='movie';String _sort='popularity.desc';int? _genreId;double _minRating=0;
+  bool _loading=false;bool _isCreator=false;String? _error;String _type='movie';String _sort='popularity.desc';int? _genreId;double _minRating=0;
   String get _apiType => _type=='tv'||_type=='animated_tv'?'tv':'movie';
   int? get _effectiveGenre => _type=='animation'||_type=='animated_tv'?16:_genreId;
-  @override void initState(){super.initState();_scroll.addListener(_onScroll);_loadGenres();_loadTrending();}
+  @override void initState(){super.initState();_scroll.addListener(_onScroll);_loadGenres();_loadTrending();_loadCreatorAccess();}
+  Future<void> _loadCreatorAccess() async {try{final allowed=await CreatorService().isCreator();if(mounted)setState(()=>_isCreator=allowed);}catch(_){}}
   void _onScroll(){if(_scroll.position.pixels>=_scroll.position.maxScrollExtent-700){_loadMore();}}
   Future<void> _loadMore() async {
     if(_loading||_loadingMore||!_hasMore)return;
@@ -73,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen>{
   @override Widget build(BuildContext context){
     final profile=widget.profileService.activeProfile;
     return Scaffold(appBar:AppBar(title:const Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      Text('KinoKino',style:TextStyle(fontWeight:FontWeight.bold)),Text('by Osirisvectory',style:TextStyle(fontSize:10,color:Colors.white60))]),
+      Text('KinoKino',style:TextStyle(fontWeight:FontWeight.bold)),Text(_isCreator?'by Osirisvectory · Создатель':'by Osirisvectory',style:TextStyle(fontSize:10,color:Colors.white60))]),
       actions: [
         if (profile != null)
           Padding(
@@ -87,6 +90,9 @@ class _HomeScreenState extends State<HomeScreen>{
             switch (value) {
               case 'profiles':
                 await _openPage(ProfilesScreen(service: widget.profileService));
+                break;
+              case 'creator':
+                await _openPage(const CreatorConsoleScreen());
                 break;
               case 'library':
                 await _openPage(const LibraryScreen());
@@ -102,8 +108,13 @@ class _HomeScreenState extends State<HomeScreen>{
                 break;
             }
           },
-          itemBuilder: (context) => const [
-            PopupMenuItem(
+          itemBuilder: (context) => [
+            if (_isCreator)
+              const PopupMenuItem(
+                value: 'creator',
+                child: ListTile(leading: Icon(Icons.admin_panel_settings_outlined), title: Text('Панель создателя')),
+              ),
+            const PopupMenuItem(
               value: 'profiles',
               child: ListTile(leading: Icon(Icons.people), title: Text('Профили')),
             ),
