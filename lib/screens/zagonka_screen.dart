@@ -14,7 +14,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _controller;
   double _progress = 0;
   String? _pageError;
-  String _pageTitle = 'Zagonka';
 
   Future<void> _goBack() async {
     final controller = _controller;
@@ -85,11 +84,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               if (mounted) setState(() => _progress = progress / 100);
             },
             onLoadStop: (controller, url) async {
-              final title = await controller.getTitle();
               if (!mounted) return;
               setState(() {
                 _progress = 1;
-                _pageTitle = title?.trim().isNotEmpty == true ? title! : 'Zagonka';
               });
             },
             onReceivedError: (controller, request, error) {
