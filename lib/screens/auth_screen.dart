@@ -204,6 +204,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 TextFormField(
                   controller: _email,
                   keyboardType: TextInputType.emailAddress,
+                  autofocus: tv,
                   textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
                   validator: (v) => v == null || !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(v.trim())
@@ -237,7 +238,6 @@ class _AuthScreenState extends State<AuthScreen> {
                 SizedBox(
                   height: tv ? 58 : null,
                   child: FilledButton(
-                    autofocus: tv,
                     onPressed: _busy ? null : _submit,
                     child: _busy
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2))
