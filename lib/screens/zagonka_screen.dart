@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 
-import '../services/ad_filter_engine.dart';
 
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({
@@ -32,19 +31,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   int? _playerWindowId;
   bool _isFullscreen = false;
   int _sourceAttemptIndex = 0;
-  int _playerCheckToken = 0;
   String? _error;
-  final Expando<String> _sourceUrlByController = Expando<String>('kinoSourceUrl');
-
-  @override
-  void initState() {
-    super.initState();
-    AdFilterEngine.instance.initialize().then((_) {
-      debugPrint('[KinoKino] network filter engine ready: ${AdFilterEngine.instance.ruleCount} rules');
-    }).catchError((Object error) {
-      debugPrint('[KinoKino] filter-list initialization failed: $error');
-    });
-  }
 
   static const List<String> _playerSourceHosts = <String>[
     'www.kinokino.win',
@@ -70,7 +57,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   Future<void> _selectPlayerSource(int index) async {
     if (!mounted || index < 0 || index >= _playerSourceHosts.length ||
         index == _sourceAttemptIndex) return;
-    _playerCheckToken++;
     setState(() {
       _sourceAttemptIndex = index;
       _playerWindowId = null;
@@ -83,71 +69,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     await _bootstrapController?.loadUrl(
       urlRequest: URLRequest(url: _urlForSource(index)),
     );
-  }
-
-  Future<void> _tryNextPlayerSource(String reason) async {
-    if (!mounted) return;
-    _playerCheckToken++;
-    final nextIndex = _sourceAttemptIndex + 1;
-    if (nextIndex >= _playerSourceHosts.length) {
-      debugPrint('[KinoKino] no player source left after ' + reason);
-      setState(() {
-        _pageLoaded = false;
-        _playerLoading = false;
-        _error = 'На доступных источниках плеер не найден. Попробуй позже.';
-      });
-      return;
-    }
-    debugPrint('[KinoKino] player missing (' + reason + '), switching to ' + _playerSourceHosts[nextIndex]);
-    setState(() {
-      _sourceAttemptIndex = nextIndex;
-      _pageLoaded = false;
-      _playerLoading = false;
-      _error = null;
-    });
-    await _bootstrapController?.loadUrl(
-      urlRequest: URLRequest(url: _urlForSource(nextIndex)),
-    );
-  }
-
-  void _schedulePlayerCheck(InAppWebViewController controller, Duration delay) {
-    final token = ++_playerCheckToken;
-    Future<void>.delayed(delay, () async {
-      if (!mounted || token != _playerCheckToken) return;
-      const probe = r"""
-        (() => {
-          const visible = (el) => {
-            const r = el.getBoundingClientRect();
-            const s = getComputedStyle(el);
-            return r.width > 100 && r.height > 60 && s.display !== 'none' &&
-              s.visibility !== 'hidden' && Number(s.opacity) > 0;
-          };
-          const hasPlayer = Array.from(document.querySelectorAll('video,iframe')).some((el) => {
-            if (!visible(el)) return false;
-            if (el.tagName === 'VIDEO') return true;
-            const u = (el.src || '').toLowerCase();
-            return !!u && !/doubleclick|adservice|analytics|metrika|captcha|banner|reklam|advert|popunder/i.test(u);
-          });
-          const text = (document.body?.innerText || '').toLowerCase();
-          const notFound = /ничего не найдено|фильм не найден|сериал не найден|материал не найден|контент не найден|страница не найдена|404|not found|no results/i.test(text);
-          const hasLaunch = Array.from(document.querySelectorAll('a,button,[role="button"],input[type="button"],input[type="submit"]')).some((el) => {
-            const t = ((el.innerText || el.value || el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')).toLowerCase();
-            return visible(el) && /смотреть|watch|play|воспроизвести|запустить/.test(t);
-          });
-          return hasPlayer ? 2 : ((notFound || !hasLaunch) ? 0 : 1);
-        })();
-      """;
-      try {
-        final result = await controller.evaluateJavascript(source: probe);
-        final state = int.tryParse(result.toString()) ?? -1;
-        if (state == 2) return;
-        if (state == 0 || _playerLoading) {
-          await _tryNextPlayerSource(state == 0 ? 'no embedded player / not found page' : 'player launch timed out');
-        }
-      } catch (e) {
-        debugPrint('[KinoKino] player availability check failed: $e');
-      }
-    });
   }
 
   bool _isAdvertisingUrl(String? rawUrl) {
@@ -327,229 +248,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   // popup/new window: after the user taps the site's real play control, find
   // the newly-created video/iframe and expand that element in the same WebView.
   // This preserves the document, cookies, referrer and playback session.
-  Future<void> _activateSitePlayer(InAppWebViewController controller) async {
-    const script = r"""
-      (() => {
-        if (window.__kinoInlinePlayerWatcher) return;
-        window.__kinoInlinePlayerWatcher = true;
-        const isVisible = (node) => {
-          const r = node.getBoundingClientRect();
-          const s = getComputedStyle(node);
-          return r.width > 100 && r.height > 60 &&
-            s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity) > 0;
-        };
-        const playerFrame = () => {
-          const frames = Array.from(document.querySelectorAll('iframe')).filter((frame) => {
-            if (!isVisible(frame) || !frame.src) return false;
-            try {
-              const u = new URL(frame.src, location.href);
-              const hints = [u.hostname, u.pathname, u.search, frame.title || '',
-                frame.id || '', typeof frame.className === 'string' ? frame.className : ''].join(' ').toLowerCase();
-              if (u.origin === location.origin || /(^|\.)kinokino\.win$/i.test(u.hostname)) return false;
-              // Reject ad/tracker frames using URL and DOM metadata, not URL alone.
-              if (/doubleclick|adservice|analytics|metrika|captcha|banner|reklam|advert|\bads?\b|popunder|tracker|promo|sponsor/i.test(hints)) return false;
-              if (/^(about:blank|javascript:)/i.test(frame.src)) return false;
-              const rect = frame.getBoundingClientRect();
-              const playerHint = /player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo|movie|watch/i.test(hints);
-              const largeFrame = rect.width >= Math.min(320, innerWidth * 0.55) &&
-                rect.height >= Math.min(180, innerHeight * 0.35);
-              return playerHint || largeFrame;
-            } catch (_) { return false; }
-          });
-          // Explicit player URLs win; large visible frames are a fallback.
-          frames.sort((a, b) => {
-            const score = (f) => {
-              const meta = [f.src, f.title || '', f.id || '', typeof f.className === 'string' ? f.className : ''].join(' ');
-              return (/player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo/i.test(meta) ? 100 : 0) +
-                Math.min(50, Math.round(f.getBoundingClientRect().width / Math.max(1, innerWidth) * 50));
-            };
-            return score(b) - score(a);
-          });
-          return frames[0] || null;
-        };
-        const exposeOnly = (target) => {
-          let branch = target;
-          while (branch && branch !== document.body && branch.parentElement) {
-            const parent = branch.parentElement;
-            for (const sibling of Array.from(parent.children)) {
-              if (sibling !== branch) sibling.style.setProperty('display', 'none', 'important');
-            }
-            branch = parent;
-          }
-          document.documentElement.style.cssText += ';background:#000!important;overflow:hidden!important;width:100%!important;height:100%!important';
-          document.body.style.cssText += ';background:#000!important;overflow:hidden!important;margin:0!important;padding:0!important;width:100%!important;height:100%!important';
-          target.style.setProperty('position', 'fixed', 'important');
-          target.style.setProperty('inset', '0', 'important');
-          target.style.setProperty('width', '100vw', 'important');
-          target.style.setProperty('height', '100dvh', 'important');
-          target.style.setProperty('max-width', '100vw', 'important');
-          target.style.setProperty('max-height', '100dvh', 'important');
-          target.style.setProperty('z-index', '2147483647', 'important');
-          target.style.setProperty('border', '0', 'important');
-          target.style.setProperty('margin', '0', 'important');
-          target.style.setProperty('display', 'block', 'important');
-          target.style.setProperty('visibility', 'visible', 'important');
-          target.style.setProperty('opacity', '1', 'important');
-          console.log('[KinoKino] embedded player isolated in the original page');
-          return true;
-        };
-        let exposed = false;
-        let waitingForPlayer = false;
-        let launchNotified = false;
-        const notify = (state) => {
-          try { window.flutter_inappwebview.callHandler('playerState', {state}); } catch (_) {}
-        };
-        const revealWhenReady = (target, isFrame) => {
-          if (waitingForPlayer) return;
-          waitingForPlayer = true;
-          exposed = exposeOnly(target);
-          let finished = false;
-          const ready = () => {
-            if (finished) return;
-            finished = true;
-            setTimeout(() => notify('ready'), 500);
-          };
-          if (isFrame) {
-            target.addEventListener('load', ready, {once:true});
-            setTimeout(() => { if (!finished) ready(); }, 5000);
-          } else if (target.readyState >= 2 && target.videoWidth > 0) {
-            ready();
-          } else {
-            target.addEventListener('loadeddata', ready, {once:true});
-            target.addEventListener('canplay', ready, {once:true});
-            setTimeout(() => { if (!finished) ready(); }, 5000);
-          }
-        };
-        const detect = () => {
-          if (exposed) return;
-          const frame = playerFrame();
-          if (frame) { revealWhenReady(frame, true); return; }
-          const video = Array.from(document.querySelectorAll('video')).find(isVisible);
-          if (video) revealWhenReady(video, false);
-        };
-        const launch = () => {
-          const nodes = Array.from(document.querySelectorAll(
-            'a,button,[role="button"],input[type="button"],input[type="submit"]'
-          ));
-          const candidate = nodes.find((node) => {
-            const text = ((node.innerText || node.value || node.getAttribute('aria-label') || '') + ' ' +
-              (node.getAttribute('title') || '')).trim().toLowerCase();
-            return isVisible(node) &&
-              /смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text);
-          });
-          if (!candidate) return false;
-          // Isolate only the launch control until it is tapped. Once the actual
-          // embedded player appears, detect() replaces this view with the player.
-          let branch = candidate;
-          while (branch && branch !== document.body && branch.parentElement) {
-            const parent = branch.parentElement;
-            for (const sibling of Array.from(parent.children)) {
-              if (sibling !== branch) sibling.style.setProperty('visibility', 'hidden', 'important');
-            }
-            branch.style.setProperty('visibility', 'visible', 'important');
-            branch = parent;
-          }
-          Object.entries({
-            position:'fixed', left:'50%', top:'50%', transform:'translate(-50%, -50%)',
-            'z-index':'2147483647', visibility:'visible', opacity:'1',
-            'pointer-events':'auto', 'min-width':'220px', 'min-height':'52px',
-            'font-size':'16px', padding:'14px 24px', 'border-radius':'12px',
-            background:'#202020', color:'#fff', border:'1px solid #666'
-          }).forEach(([key,value]) => candidate.style.setProperty(key,value,'important'));
-          if (!launchNotified) {
-            launchNotified = true;
-            notify('launch');
-          }
-          return true;
-        };
-        document.addEventListener('click', (event) => {
-          const clicked = event.target && event.target.closest
-            ? event.target.closest('a,button,[role="button"],input[type="button"],input[type="submit"]')
-            : null;
-          if (!clicked) return;
-          const text = ((clicked.innerText || clicked.value || clicked.getAttribute('aria-label') || '') + ' ' +
-            (clicked.getAttribute('title') || '')).trim().toLowerCase();
-          if (/смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text)) notify('loading');
-        }, true);
-        const observer = new MutationObserver(() => {
-          detect();
-          if (!exposed) launch();
-        });
-        observer.observe(document.documentElement, {
-          childList:true, subtree:true, attributes:true,
-          attributeFilter:['src','style','class']
-        });
-        launch();
-        detect();
-        setInterval(detect, 700);
-      })();
-    """;
-    try {
-      await controller.evaluateJavascript(source: script);
-    } catch (e) {
-      debugPrint('[KinoKino] embedded player isolation failed: $e');
-    }
-  }
-
-  Future<void> _installAdHiding(InAppWebViewController controller) async {
-    const script = r"""
-      (() => {
-        if (window.__kinoAdFilterInstalled) return;
-        window.__kinoAdFilterInstalled = true;
-        const selectors = [
-          'iframe[src*="doubleclick"]','iframe[src*="googlesyndication"]',
-          'iframe[src*="googleadservices"]','iframe[src*="adservice"]',
-          'iframe[src*="adnxs"]','iframe[src*="taboola"]',
-          'iframe[src*="outbrain"]','iframe[src*="mgid"]',
-          'iframe[src*="popads"]','iframe[src*="popcash"]',
-          'iframe[src*="exoclick"]','iframe[src*="propellerads"]',
-          '[id*="google_ads"]','[id*="ad-container"]','[id*="ad_"]',
-          '[class*="advert"]','[class*="banner-ad"]','[class*="ad-container"]',
-          '[class*="adsbygoogle"]','[class*="popunder"]','[class*="popup-ad"]',
-          '[class*="sponsor"]','[data-ad]','[data-advert]',
-          'ins.adsbygoogle','amp-ad','div[id^="ad_"]'
-        ];
-        const removeAds = () => {
-          for (const selector of selectors) {
-            document.querySelectorAll(selector).forEach((el) => {
-              // Never remove a video or an ancestor containing the actual player.
-              if (el.matches('video') || el.querySelector('video') ||
-                  el.querySelector('iframe[src*="player"],iframe[src*="video"],iframe[src*="embed"]')) return;
-              el.remove();
-            });
-          }
-        };
-        // Do not override window.open here: some providers open the actual
-        // video player in a new window. The document-start guard above blocks
-        // known advertising destinations while preserving legitimate players.
-        const style = document.createElement('style');
-        style.textContent = [
-          'iframe[src*="doubleclick"],iframe[src*="googlesyndication"],',
-          'iframe[src*="adservice"],iframe[src*="taboola"],iframe[src*="outbrain"],',
-          '[class*="banner-ad"],[class*="popup-ad"],[class*="popunder"],',
-          '[class*="adsbygoogle"],[data-ad],amp-ad{display:none!important;visibility:hidden!important;pointer-events:none!important}'
-        ].join('');
-        (document.head || document.documentElement).appendChild(style);
-        let queued = false;
-        const scheduleCleanup = () => {
-          if (queued) return;
-          queued = true;
-          requestAnimationFrame(() => { queued = false; removeAds(); });
-        };
-        removeAds();
-        new MutationObserver(scheduleCleanup).observe(document.documentElement, {
-          childList: true, subtree: true
-        });
-        console.log('[KinoKino] ad filtering enabled');
-      })();
-    """;
-    try {
-      await controller.evaluateJavascript(source: script);
-    } catch (e) {
-      debugPrint('[KinoKino] ad filter injection failed: $e');
-    }
-  }
-
   Future<void> _installStreamBridge(InAppWebViewController controller) async {
     const script = r"""
       (() => {
@@ -711,31 +409,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                       return {'accepted': true};
                     },
                   );
-                  controller.addJavaScriptHandler(
-                    handlerName: 'playerState',
-                    callback: (args) {
-                      final state = args.isNotEmpty && args.first is Map
-                          ? (args.first as Map)['state']?.toString()
-                          : null;
-                      if (mounted && state == 'loading') {
-                        setState(() {
-                          _playerLoading = true;
-                        });
-                        final current = _bootstrapController;
-                        if (current != null) _schedulePlayerCheck(current, const Duration(seconds: 20));
-                      } else if (mounted && state == 'launch') {
-                        setState(() {
-                          _playerLoading = false;
-                        });
-                      } else if (mounted && state == 'ready') {
-                        _playerCheckToken++;
-                        setState(() {
-                          _playerLoading = false;
-                        });
-                      }
-                      return {'accepted': true};
-                    },
-                  );
                 },
                 shouldInterceptRequest: (controller, request) =>
                     _interceptAdResource(controller, request),
@@ -748,7 +421,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   return NavigationActionPolicy.ALLOW;
                 },
                 onLoadStart: (controller, url) {
-                  if (url != null) _sourceUrlByController[controller] = url.toString();
                 },
                 onLoadStop: (controller, url) async {
                   if (url != null) _sourceUrlByController[controller] = url.toString();
@@ -937,8 +609,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                             _playerLoading = false;
                             _sourceAttemptIndex = 0;
                           });
-                          _playerCheckToken++;
-                          await _bootstrapController?.loadUrl(
+                                  await _bootstrapController?.loadUrl(
                             urlRequest: URLRequest(url: _urlForSource(0)),
                           );
                         },
