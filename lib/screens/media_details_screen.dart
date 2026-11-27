@@ -10,8 +10,9 @@ import '../widgets/poster_card.dart';
 import 'player_screen.dart';
 import 'zagonka_screen.dart';
 class MediaDetailsScreen extends StatefulWidget {
-  const MediaDetailsScreen({super.key, required this.item, this.preferredAudioLanguage = 'auto', this.preferredVideoQuality = 'auto'});
+  const MediaDetailsScreen({super.key, required this.item, this.preferredAudioLanguage = 'auto', this.preferredVideoQuality = 'auto', this.tvMode = false});
   final MediaItem item;
+  final bool tvMode;
   final String preferredAudioLanguage;
   final String preferredVideoQuality;
   @override State<MediaDetailsScreen> createState() => _MediaDetailsScreenState();
@@ -309,6 +310,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
               item: items[i],
               preferredAudioLanguage: widget.preferredAudioLanguage,
               preferredVideoQuality: widget.preferredVideoQuality,
+              tvMode: widget.tvMode,
             ))),
         ),
       )),
@@ -663,6 +665,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       );
       if (approved != true || !mounted) return;
       await Navigator.push(context, MaterialPageRoute(builder: (_) => PlayerScreen(
+        tvMode: widget.tvMode,
         streamUrl: playableSource.url.toString(),
         title: selectedEpisode == null ? _displayTitle : '$_displayTitle · S${(selectedEpisode['season_number'] as num?)?.toInt() ?? 1}E${(selectedEpisode['episode_number'] as num?)?.toInt() ?? 1} — ${selectedEpisode['name'] ?? ''}',
         variants: playableSource.variants,
@@ -738,6 +741,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         title: _displayTitle,
         kinopoiskId: id,
         isSeries: _type == 'tv',
+        tvMode: widget.tvMode,
       ),
     ));
   }
