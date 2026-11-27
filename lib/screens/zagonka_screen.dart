@@ -32,6 +32,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   int? _playerWindowId;
   bool _isFullscreen = false;
   int _sourceAttemptIndex = 0;
+  final Set<int> _verifiedPlayerSourceIndices = <int>{};
   int _playerCheckToken = 0;
   String? _error;
   final Expando<String> _sourceUrlByController = Expando<String>('kinoSourceUrl');
@@ -87,6 +88,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   Future<void> _tryNextPlayerSource(String reason) async {
     if (!mounted) return;
+    _verifiedPlayerSourceIndices.remove(_sourceAttemptIndex);
     _playerCheckToken++;
     final nextIndex = _sourceAttemptIndex + 1;
     if (nextIndex >= _playerSourceHosts.length) {
@@ -126,7 +128,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             if (!visible(el)) return false;
             if (el.tagName === 'VIDEO') return true;
             const u = (el.src || '').toLowerCase();
-            return !!u && !/doubleclick|adservice|analytics|metrika|captcha|banner|reklam|advert|popunder/i.test(u);
+            const playerUrl = /player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo|movie|watch/i.test(u);
+            return !!u && playerUrl &&
+              !/doubleclick|adservice|analytics|metrika|captcha|banner|reklam|advert|popunder/i.test(u);
           });
           const text = (document.body?.innerText || '').toLowerCase();
           const notFound = /ничего не найдено|фильм не найден|сериал не найден|материал не найден|контент не найден|страница не найдена|404|not found|no results/i.test(text);
@@ -140,7 +144,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       try {
         final result = await controller.evaluateJavascript(source: probe);
         final state = int.tryParse(result.toString()) ?? -1;
-        if (state == 2) return;
+        if (state == 2) {
+          _verifiedPlayerSourceIndices.add(_sourceAttemptIndex);
+          if (mounted) setState(() => _playerLoading = false);
+          return;
+        }
         if (state == 0 || _playerLoading) {
           await _tryNextPlayerSource(state == 0 ? 'no embedded player / not found page' : 'player launch timed out');
         }
@@ -735,6 +743,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                         });
                       } else if (mounted && state == 'ready') {
                         _playerCheckToken++;
+                        _verifiedPlayerSourceIndices.add(_sourceAttemptIndex);
                         setState(() {
                           _playerLoading = false;
                         });
@@ -856,7 +865,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 },
               ),
             ),
-          if (_pageLoaded && !_playerLoading && _error == null)
+          if (_pageLoaded && !_playerLoading && _error == null &&
+              _verifiedPlayerSourceIndices.length > 1)
             Positioned(
               top: 12,
               right: 12,
@@ -881,23 +891,28 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                       ],
                     ),
                   ),
-                  itemBuilder: (context) => [
-                    for (var i = 0; i < _playerSourceHosts.length; i++)
-                      PopupMenuItem<int>(
-                        value: i,
-                        child: Row(
-                          children: [
-                            Icon(
-                              i == _sourceAttemptIndex ? Icons.radio_button_checked : Icons.radio_button_off,
-                              color: const Color(0xFFFFD21F),
-                              size: 18,
-                            ),
-                            const SizedBox(width: 10),
-                            Text('Плеер ${i + 1}', style: const TextStyle(color: Colors.white)),
-                          ],
+                  itemBuilder: (context) {
+                    final available = _verifiedPlayerSourceIndices.toList()..sort();
+                    return [
+                      for (var position = 0; position < available.length; position++)
+                        PopupMenuItem<int>(
+                          value: available[position],
+                          child: Row(
+                            children: [
+                              Icon(
+                                available[position] == _sourceAttemptIndex
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_off,
+                                color: const Color(0xFFFFD21F),
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Text('Плеер ${position + 1}', style: const TextStyle(color: Colors.white)),
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
+                    ];
+                  },
                 ),
               ),
             ),
