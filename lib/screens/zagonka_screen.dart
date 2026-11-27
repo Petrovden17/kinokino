@@ -31,6 +31,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   bool _playerWindowOpened = false;
   int? _playerWindowId;
   bool _isFullscreen = false;
+  int _sourceAttemptIndex = 0;
+  int _playerCheckToken = 0;
   String? _error;
   final Expando<String> _sourceUrlByController = Expando<String>('kinoSourceUrl');
 
@@ -44,11 +46,85 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     });
   }
 
-  WebUri get _pageUrl {
+  static const List<String> _playerSourceHosts = <String>[
+    'www.kinokino.win',
+    'www.ggpoisk.ru',
+    'www.sspoisk.ru',
+  ];
+
+  WebUri _urlForSource(int index) {
     final id = widget.kinopoiskId;
-    if (id == null || id <= 0) return WebUri('https://www.kinokino.win/');
+    final host = _playerSourceHosts[index];
+    if (id == null || id <= 0) return WebUri('https://$host/');
     final type = widget.isSeries ? 'series' : 'film';
-    return WebUri('https://www.kinokino.win/$type/$id/');
+    return WebUri('https://$host/$type/$id/');
+  }
+
+  WebUri get _pageUrl => _urlForSource(_sourceAttemptIndex);
+
+  Future<void> _tryNextPlayerSource(String reason) async {
+    if (!mounted) return;
+    _playerCheckToken++;
+    final nextIndex = _sourceAttemptIndex + 1;
+    if (nextIndex >= _playerSourceHosts.length) {
+      debugPrint('[KinoKino] no player source left after ' + reason);
+      setState(() {
+        _pageLoaded = false;
+        _playerLoading = false;
+        _error = 'На доступных источниках плеер не найден. Попробуй позже.';
+      });
+      return;
+    }
+    debugPrint('[KinoKino] player missing (' + reason + '), switching to ' + _playerSourceHosts[nextIndex]);
+    setState(() {
+      _sourceAttemptIndex = nextIndex;
+      _pageLoaded = false;
+      _playerLoading = false;
+      _error = null;
+    });
+    await _bootstrapController?.loadUrl(
+      urlRequest: URLRequest(url: _urlForSource(nextIndex)),
+    );
+  }
+
+  void _schedulePlayerCheck(InAppWebViewController controller, Duration delay) {
+    final token = ++_playerCheckToken;
+    Future<void>.delayed(delay, () async {
+      if (!mounted || token != _playerCheckToken) return;
+      const probe = r"""
+        (() => {
+          const visible = (el) => {
+            const r = el.getBoundingClientRect();
+            const s = getComputedStyle(el);
+            return r.width > 100 && r.height > 60 && s.display !== 'none' &&
+              s.visibility !== 'hidden' && Number(s.opacity) > 0;
+          };
+          const hasPlayer = Array.from(document.querySelectorAll('video,iframe')).some((el) => {
+            if (!visible(el)) return false;
+            if (el.tagName === 'VIDEO') return true;
+            const u = (el.src || '').toLowerCase();
+            return !!u && !/doubleclick|adservice|analytics|metrika|captcha|banner|reklam|advert|popunder/i.test(u);
+          });
+          const text = (document.body?.innerText || '').toLowerCase();
+          const notFound = /ничего не найдено|фильм не найден|сериал не найден|материал не найден|контент не найден|страница не найдена|404|not found|no results/i.test(text);
+          const hasLaunch = Array.from(document.querySelectorAll('a,button,[role="button"],input[type="button"],input[type="submit"]')).some((el) => {
+            const t = ((el.innerText || el.value || el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')).toLowerCase();
+            return visible(el) && /смотреть|watch|play|воспроизвести|запустить/.test(t);
+          });
+          return hasPlayer ? 2 : ((notFound || !hasLaunch) ? 0 : 1);
+        })();
+      """;
+      try {
+        final result = await controller.evaluateJavascript(source: probe);
+        final state = int.tryParse(result.toString()) ?? -1;
+        if (state == 2) return;
+        if (state == 0 || _playerLoading) {
+          await _tryNextPlayerSource(state == 0 ? 'no embedded player / not found page' : 'player launch timed out');
+        }
+      } catch (e) {
+        debugPrint('[KinoKino] player availability check failed: $e');
+      }
+    });
   }
 
   bool _isAdvertisingUrl(String? rawUrl) {
@@ -623,7 +699,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                         setState(() {
                           _playerLoading = true;
                         });
+                        final current = _bootstrapController;
+                        if (current != null) _schedulePlayerCheck(current, const Duration(seconds: 20));
                       } else if (mounted && state == 'ready') {
+                        _playerCheckToken++;
                         setState(() {
                           _playerLoading = false;
                         });
@@ -662,6 +741,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     _pageLoaded = true;
                     await _activateSitePlayer(controller);
                     if (mounted) setState(() {});
+                    _schedulePlayerCheck(controller, const Duration(seconds: 12));
                   }
                 },
                 // Attach the original popup WebView in this screen. It
@@ -784,9 +864,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                             _error = null;
                             _pageLoaded = false;
                             _playerLoading = false;
+                            _sourceAttemptIndex = 0;
                           });
+                          _playerCheckToken++;
                           await _bootstrapController?.loadUrl(
-                            urlRequest: URLRequest(url: _pageUrl),
+                            urlRequest: URLRequest(url: _urlForSource(0)),
                           );
                         },
                         icon: const Icon(Icons.refresh, color: Colors.white),
