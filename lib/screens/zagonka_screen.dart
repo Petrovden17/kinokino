@@ -379,6 +379,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         };
         let exposed = false;
         let waitingForPlayer = false;
+        let launchNotified = false;
         const notify = (state) => {
           try { window.flutter_inappwebview.callHandler('playerState', {state}); } catch (_) {}
         };
@@ -439,6 +440,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             'font-size':'16px', padding:'14px 24px', 'border-radius':'12px',
             background:'#202020', color:'#fff', border:'1px solid #666'
           }).forEach(([key,value]) => candidate.style.setProperty(key,value,'important'));
+          if (!launchNotified) {
+            launchNotified = true;
+            notify('launch');
+          }
           return true;
         };
         document.addEventListener('click', (event) => {
@@ -701,6 +706,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                         });
                         final current = _bootstrapController;
                         if (current != null) _schedulePlayerCheck(current, const Duration(seconds: 20));
+                      } else if (mounted && state == 'launch') {
+                        setState(() {
+                          _playerLoading = false;
+                        });
                       } else if (mounted && state == 'ready') {
                         _playerCheckToken++;
                         setState(() {
@@ -739,6 +748,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   await _installStreamBridge(controller);
                   if (!_pageLoaded) {
                     _pageLoaded = true;
+                    if (mounted) setState(() => _playerLoading = true);
                     await _activateSitePlayer(controller);
                     if (mounted) setState(() {});
                     _schedulePlayerCheck(controller, const Duration(seconds: 12));
