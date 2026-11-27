@@ -35,6 +35,33 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     return WebUri('https://www.kinokino.win/$type/$id/');
   }
 
+  bool _isAdvertisingUrl(String? rawUrl) {
+    if (rawUrl == null || rawUrl.isEmpty) return false;
+    final uri = Uri.tryParse(rawUrl);
+    if (uri == null || (uri.scheme != 'http' && uri.scheme != 'https')) return false;
+    final host = uri.host.toLowerCase();
+    const adHosts = <String>[
+      'doubleclick.net', 'googlesyndication.com', 'googleadservices.com',
+      'adnxs.com', 'taboola.com', 'outbrain.com', 'mgid.com', 'popads.net',
+      'popcash.net', 'exoclick.com', 'propellerads.com', 'trafficjunky.net',
+      'adsterra.com', 'pushground.com', 'onclicka.com', 'clickadu.com',
+      'hilltopads.com', 'admaven.com', 'juicyads.com', ' adf.ly',
+      'trafficstars.com', 'adroll.com', 'criteo.com', 'smartadserver.com',
+    ];
+    if (adHosts.any((domain) => domain.trim().isNotEmpty &&
+        (host == domain.trim() || host.endsWith('.${domain.trim()}')))) {
+      return true;
+    }
+    final pathParts = uri.path.toLowerCase().split('/');
+    const adPathParts = <String>{
+      'ad', 'ads', 'adserver', 'adservice', 'banner', 'banners',
+      'popunder', 'vast', 'vpaid',
+    };
+    if (pathParts.any(adPathParts.contains)) return true;
+    const adQueryKeys = <String>{'adtag', 'ad_tag', 'vast', 'vpaid', 'advertising'};
+    return uri.queryParameters.keys.any((key) => adQueryKeys.contains(key.toLowerCase()));
+  }
+
   List<ContentBlocker> get _adContentBlockers => [
         // Block common ad networks, trackers and pop-under delivery hosts.
         ContentBlocker(
@@ -265,12 +292,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         window.__kinoAdFilterInstalled = true;
         const selectors = [
           'iframe[src*="doubleclick"]','iframe[src*="googlesyndication"]',
-          'iframe[src*="adservice"]','iframe[src*="taboola"]',
+          'iframe[src*="googleadservices"]','iframe[src*="adservice"]',
+          'iframe[src*="adnxs"]','iframe[src*="taboola"]',
           'iframe[src*="outbrain"]','iframe[src*="mgid"]',
+          'iframe[src*="popads"]','iframe[src*="popcash"]',
+          'iframe[src*="exoclick"]','iframe[src*="propellerads"]',
           '[id*="google_ads"]','[id*="ad-container"]','[id*="ad_"]',
           '[class*="advert"]','[class*="banner-ad"]','[class*="ad-container"]',
           '[class*="adsbygoogle"]','[class*="popunder"]','[class*="popup-ad"]',
-          '[data-ad]','ins.adsbygoogle'
+          '[class*="sponsor"]','[data-ad]','[data-advert]',
+          'ins.adsbygoogle','amp-ad','div[id^="ad_"]'
         ];
         const removeAds = () => {
           for (const selector of selectors) {
@@ -284,8 +315,22 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         };
         // Block unsolicited popup attempts. The real inline player remains in-page.
         window.open = () => null;
+        const style = document.createElement('style');
+        style.textContent = [
+          'iframe[src*="doubleclick"],iframe[src*="googlesyndication"],',
+          'iframe[src*="adservice"],iframe[src*="taboola"],iframe[src*="outbrain"],',
+          '[class*="banner-ad"],[class*="popup-ad"],[class*="popunder"],',
+          '[class*="adsbygoogle"],[data-ad],amp-ad{display:none!important;visibility:hidden!important;pointer-events:none!important}'
+        ].join('');
+        (document.head || document.documentElement).appendChild(style);
+        let queued = false;
+        const scheduleCleanup = () => {
+          if (queued) return;
+          queued = true;
+          requestAnimationFrame(() => { queued = false; removeAds(); });
+        };
         removeAds();
-        new MutationObserver(removeAds).observe(document.documentElement, {
+        new MutationObserver(scheduleCleanup).observe(document.documentElement, {
           childList: true, subtree: true
         });
         console.log('[KinoKino] ad filtering enabled');
@@ -477,6 +522,14 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     },
                   );
                 },
+                shouldOverrideUrlLoading: (controller, action) async {
+                  final target = action.request.url?.toString();
+                  if (_isAdvertisingUrl(target)) {
+                    debugPrint('[KinoKino] blocked ad navigation: $target');
+                    return NavigationActionPolicy.CANCEL;
+                  }
+                  return NavigationActionPolicy.ALLOW;
+                },
                 onLoadStop: (controller, url) async {
                   debugPrint('[KinoKino bootstrap] loaded: $url');
                   await _installAdHiding(controller);
@@ -517,8 +570,17 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 windowId: _playerWindowId,
                 initialSettings: _webSettings,
                 onLoadStart: (_, url) => debugPrint('[KinoKino player] loading: $url'),
+                shouldOverrideUrlLoading: (controller, action) async {
+                  final target = action.request.url?.toString();
+                  if (_isAdvertisingUrl(target)) {
+                    debugPrint('[KinoKino player] blocked ad navigation: $target');
+                    return NavigationActionPolicy.CANCEL;
+                  }
+                  return NavigationActionPolicy.ALLOW;
+                },
                 onLoadStop: (controller, url) async {
                   debugPrint('[KinoKino player] loaded: $url');
+                  await _installAdHiding(controller);
                   await _installStreamBridge(controller);
                   _probePlayerWindow(controller);
                 },
