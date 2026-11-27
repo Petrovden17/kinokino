@@ -23,7 +23,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _bootstrapController;
   bool _pageLoaded = false;
   bool _playerLoading = false;
-  bool _playerReady = false;
   bool _playerWindowOpened = false;
   int? _playerWindowId;
   bool _isFullscreen = false;
@@ -456,12 +455,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                       if (mounted && state == 'loading') {
                         setState(() {
                           _playerLoading = true;
-                          _playerReady = false;
                         });
                       } else if (mounted && state == 'ready') {
                         setState(() {
                           _playerLoading = false;
-                          _playerReady = true;
                         });
                       }
                       return {'accepted': true};
@@ -574,6 +571,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                           setState(() {
                             _error = null;
                             _pageLoaded = false;
+                            _playerLoading = false;
                           });
                           await _bootstrapController?.loadUrl(
                             urlRequest: URLRequest(url: _pageUrl),
