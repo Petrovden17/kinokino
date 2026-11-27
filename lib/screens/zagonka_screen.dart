@@ -191,10 +191,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     if (defaultTargetPlatform != TargetPlatform.android) return null;
 
     final rawUrl = request.url.toString();
-    final sourceUrl = _sourceUrlByController[controller] ?? _pageUrl.toString();
-    if (request.isForMainFrame == true) {
-      _sourceUrlByController[controller] = rawUrl;
-    }
     // Do not apply generic EasyList rules to media/player requests. Some
     // providers serve manifests, segments and player APIs from ad-tech-looking
     // hosts or paths; blocking those requests leaves only the poster frame.
@@ -745,7 +741,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     _interceptAdResource(controller, request),
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
-                  final source = _sourceUrlByController[controller] ?? _pageUrl.toString();
                   if (_isAdvertisingUrl(target)) {
                     debugPrint('[KinoKino] blocked ad navigation: $target');
                     return NavigationActionPolicy.CANCEL;
@@ -822,14 +817,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
                   final source = _sourceUrlByController[controller] ?? _pageUrl.toString();
-                  final listBlocked = target != null &&
-                      AdFilterEngine.instance.shouldBlock(
-                        rawUrl: target,
-                        sourceUrl: source,
-                        isMainFrame: action.isForMainFrame,
-                        headers: null,
-                      );
-                  if (_isAdvertisingUrl(target) || listBlocked) {
+                  if (_isAdvertisingUrl(target)) {
                     debugPrint('[KinoKino player] blocked ad navigation: $target');
                     return NavigationActionPolicy.CANCEL;
                   }
