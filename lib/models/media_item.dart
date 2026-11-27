@@ -47,9 +47,6 @@ class MediaItem {
         parsed.year.toString().padLeft(4, '0') != day.substring(0, 4) ||
         parsed.month.toString().padLeft(2, '0') != day.substring(5, 7) ||
         parsed.day.toString().padLeft(2, '0') != day.substring(8, 10)) return '';
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    if (DateTime(parsed.year, parsed.month, parsed.day).isAfter(today)) return '';
     return day;
   }
 
