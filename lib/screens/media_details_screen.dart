@@ -146,20 +146,26 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       final isWikidataMatch = wikidataCandidates.any((row) =>
           (row['filmId'] ?? row['kinopoiskId'] ?? row['kinopoisk_id'] ?? row['id']).toString() == '$kinopoiskId');
       final matchMethod = isImdbMatch ? 'imdb' : (isWikidataMatch ? 'wikidata' : 'title_year');
-      try {
-        await _kinopoisk.cacheMatch(
-          tmdbId: widget.item.id,
-          mediaType: _type,
-          kinopoiskId: kinopoiskId,
-          title: _displayTitle,
-          releaseYear: releaseYear > 0 ? releaseYear : null,
-          imdbId: imdbId.isEmpty ? null : imdbId,
-          wikidataId: wikidataId.isEmpty ? null : wikidataId,
-          matchMethod: matchMethod,
-          confidence: (isImdbMatch || isWikidataMatch) ? 100 : 85,
-        );
-      } catch (e) {
-        debugPrint('[KinoKino] could not persist ID mapping: $e');
+      final confidence = (isImdbMatch || isWikidataMatch)
+          ? 100.0
+          : ((selected['_matchScore'] as num?)?.toDouble() ?? 0);
+      // Do not persist weak fuzzy title matches as trusted IDs.
+      if (confidence >= 85) {
+        try {
+          await _kinopoisk.cacheMatch(
+            tmdbId: widget.item.id,
+            mediaType: _type,
+            kinopoiskId: kinopoiskId,
+            title: _displayTitle,
+            releaseYear: releaseYear > 0 ? releaseYear : null,
+            imdbId: imdbId.isEmpty ? null : imdbId,
+            wikidataId: wikidataId.isEmpty ? null : wikidataId,
+            matchMethod: matchMethod,
+            confidence: confidence,
+          );
+        } catch (e) {
+          debugPrint('[KinoKino] could not persist ID mapping: $e');
+        }
       }
     }
     return selected;
@@ -222,7 +228,11 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       return (candidate: candidate, score: titleScore + yearScore + typeScore);
     }).where((entry) => entry.score >= 65).toList()
       ..sort((a, b) => b.score.compareTo(a.score));
-    return ranked.isEmpty ? null : ranked.first.candidate;
+    if (ranked.isEmpty) return null;
+    return {
+      ...ranked.first.candidate,
+      '_matchScore': ranked.first.score.clamp(0, 100),
+    };
   }
 
   Future<void> _load() async {
