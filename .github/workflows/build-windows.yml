@@ -59,6 +59,16 @@ jobs:
           # that include the Visual Studio 2026 / MSVC 14.5x compatibility fixes.
           $pubspec = 'pubspec.yaml'
           $source = [IO.File]::ReadAllText((Resolve-Path $pubspec))
+          # Keep the root Dart API and its federated Windows/native-interface
+          # packages on the same Forge release. Mixing 2.1.77 with Windows
+          # 1.0.16 / interface 1.1.23 causes native C++ API mismatches.
+          $source = $source.Replace(
+            'flutter_inappwebview_forge: 2.1.77',
+            'flutter_inappwebview_forge: 2.1.79'
+          )
+          if (-not $source.Contains('flutter_inappwebview_forge: 2.1.79')) {
+            throw 'Forge root package 2.1.79 override was not applied.'
+          }
           $source = $source.Replace(
             'flutter_inappwebview_forge_windows: 1.0.15',
             'flutter_inappwebview_forge_windows: 1.0.16'
