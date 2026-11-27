@@ -38,7 +38,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         // Block common ad networks, trackers and pop-under delivery hosts.
         ContentBlocker(
           trigger: ContentBlockerTrigger(
-            urlFilter: r".*://([^/]*\\.)?(doubleclick\\.net|googlesyndication\\.com|googleadservices\\.com|adservice\\.google\\.[^/]+|adnxs\\.com| 광고\\.com|taboola\\.com|outbrain\\.com|mgid\\.com|popads\\.net|popcash\\.net|exoclick\\.com|propellerads\\.com|trafficjunky\\.net|adsterra\\.com|pushground\\.com|onclicka\\.com|clickadu\\.com|hilltopads\\.com|admaven\\.com)(/|$).*",
+            urlFilter: r".*://([^/]*\.)?(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google\.[^/]+|adnxs\.com|taboola\.com|outbrain\.com|mgid\.com|popads\.net|popcash\.net|exoclick\.com|propellerads\.com|trafficjunky\.net|adsterra\.com|pushground\.com|onclicka\.com|clickadu\.com|hilltopads\.com|admaven\.com)(/|$).*",
           ),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
@@ -114,7 +114,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             if (!isVisible(frame) || !frame.src) return false;
             try {
               const u = new URL(frame.src, location.href);
-              if (u.origin === location.origin || /(^|\\.)kinokino\\.win$/i.test(u.hostname)) return false;
+              if (u.origin === location.origin || /(^|\.)kinokino\.win$/i.test(u.hostname)) return false;
               if (/doubleclick|adservice|analytics|metrika|captcha|banner|reklam/i.test(u.hostname + u.pathname)) return false;
               return true;
             } catch (_) { return false; }
@@ -287,7 +287,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             // Never promote the catalogue/site page itself. Only a visible,
             // external embedded frame can become the standalone player view.
             if (frameUrl.origin === location.origin ||
-                /(^|\\.)kinokino\\.win$/i.test(frameUrl.hostname) ||
+                /(^|\.)kinokino\.win$/i.test(frameUrl.hostname) ||
                 /doubleclick|adservice|analytics|metrika|captcha/i.test(frameUrl.hostname)) return;
             report(frameUrl.href, (frame.title || '') + ' ' + (frame.id || '') + ' ' + (frame.className || '') + ' iframe');
           });
