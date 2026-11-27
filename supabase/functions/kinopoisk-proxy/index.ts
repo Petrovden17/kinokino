@@ -52,7 +52,7 @@ Deno.serve(async (req: Request) => {
         wikidata_id: /^Q[0-9]+$/.test(String(body?.wikidata_id ?? "")) ? String(body.wikidata_id) : null,
         match_method: matchMethod,
         confidence,
-        status: "matched",
+        status: confidence >= 85 ? "matched" : "needs_review",
         verified_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
