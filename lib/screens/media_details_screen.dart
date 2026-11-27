@@ -63,6 +63,22 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Future<Map<String, dynamic>?> _findKinopoiskMatch(
     Map<String, dynamic>? details,
   ) async {
+    // Use the verified TMDB → Kinopoisk mapping first. This avoids repeating
+    // fragile title searches every time the user opens a film and makes the
+    // already-imported catalogue actually participate in playback.
+    try {
+      final cached = await _kinopoisk.cachedMatch(
+        widget.item.id,
+        mediaType: _type,
+        fallbackTitle: (details?['title'] ?? details?['name'] ?? widget.item.title).toString(),
+      ).timeout(const Duration(seconds: 5));
+      final cachedId = cached?['filmId'];
+      final parsedCachedId = cachedId is num ? cachedId.toInt() : int.tryParse('$cachedId') ?? 0;
+      if (parsedCachedId > 0) return cached;
+    } catch (e) {
+      debugPrint('[KinoKino] cached Kinopoisk mapping unavailable: $e');
+    }
+
     final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
     final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
     final releaseYear = _yearFromDetails(details, widget.item.releaseDate);
