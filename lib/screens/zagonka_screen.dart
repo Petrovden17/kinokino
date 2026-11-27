@@ -709,13 +709,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     var next = _tvPointerPosition;
     final key = event.logicalKey;
     if (key == LogicalKeyboardKey.arrowLeft) {
-      next = Offset((next.dx - step).clamp(0.0, 1.0), next.dy);
+      next = Offset((next.dx - step).clamp(0.0, 1.0).toDouble(), next.dy);
     } else if (key == LogicalKeyboardKey.arrowRight) {
-      next = Offset((next.dx + step).clamp(0.0, 1.0), next.dy);
+      next = Offset((next.dx + step).clamp(0.0, 1.0).toDouble(), next.dy);
     } else if (key == LogicalKeyboardKey.arrowUp) {
-      next = Offset(next.dx, (next.dy - step).clamp(0.0, 1.0));
+      next = Offset(next.dx, (next.dy - step).clamp(0.0, 1.0).toDouble());
     } else if (key == LogicalKeyboardKey.arrowDown) {
-      next = Offset(next.dx, (next.dy + step).clamp(0.0, 1.0));
+      next = Offset(next.dx, (next.dy + step).clamp(0.0, 1.0).toDouble());
     } else if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.numpadEnter ||
