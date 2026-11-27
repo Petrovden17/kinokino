@@ -158,11 +158,21 @@ class AdFilterEngine {
         ? const <String>[]
         : line.substring(optionIndex + 1).split(',');
 
-    if (options.any((option) => const {
-          'badfilter', 'redirect', 'redirect-rule', 'removeparam',
-          'csp', 'replace', 'header',
-        }.contains(option.split('=').first))) {
-      return null;
+    const knownTypes = {
+      'document', 'subdocument', 'script', 'stylesheet', 'image',
+      'font', 'media', 'xmlhttprequest', 'other',
+    };
+    const supportedOptions = {
+      ...knownTypes,
+      'third-party', '~third-party', 'domain', 'important', 'all',
+    };
+    for (final option in options) {
+      final name = option.split('=').first;
+      if (!supportedOptions.contains(name) ||
+          (name.startsWith('~') && name != '~third-party')) {
+        // Skip rules with modifiers this lightweight matcher cannot safely honor.
+        return null;
+      }
     }
 
     final match = RegExp(r'^\|\|([^\^/|*]+)(.*)$').firstMatch(pattern);
@@ -177,10 +187,6 @@ class AdFilterEngine {
         !pathPattern.startsWith('?')) return null;
 
     final resourceTypes = <String>{};
-    const knownTypes = {
-      'document', 'subdocument', 'script', 'stylesheet', 'image',
-      'font', 'media', 'xmlhttprequest', 'other',
-    };
     for (final option in options) {
       final name = option.split('=').first;
       if (knownTypes.contains(name)) resourceTypes.add(name);
