@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_profile.dart';
 
 class ProfileService {
@@ -19,12 +20,21 @@ class ProfileService {
   }
 
   Future<void> initialize() async {
-    final raw = await _storage.read(key: _storageKey);
+    String? raw;
+    try { raw = await _storage.read(key: _storageKey); }
+    catch (_) {
+      final prefs = await SharedPreferences.getInstance();
+      raw = prefs.getString(_storageKey);
+    }
     if (raw != null) {
       final decoded = jsonDecode(raw) as List;
       _profiles.addAll(decoded.map((e) => UserProfile.fromJson(Map<String, dynamic>.from(e))));
     }
-    _activeId = await _storage.read(key: 'kinokino_active_profile');
+    try { _activeId = await _storage.read(key: 'kinokino_active_profile'); }
+    catch (_) {
+      final prefs = await SharedPreferences.getInstance();
+      _activeId = prefs.getString('kinokino_active_profile');
+    }
   }
 
   Future<String> createProfile({
@@ -82,7 +92,7 @@ class ProfileService {
   Future<void> selectProfile(String id) async {
     if (_byId(id) == null) throw Exception('Профиль не найден.');
     _activeId = id;
-    await _storage.write(key: 'kinokino_active_profile', value: id);
+    await _writeValue('kinokino_active_profile', id);
   }
 
   Future<void> deleteProfile(String id) async {
@@ -90,9 +100,12 @@ class ProfileService {
     if (_activeId == id) {
       _activeId = _profiles.isEmpty ? null : _profiles.first.id;
       if (_activeId == null) {
-        await _storage.delete(key: 'kinokino_active_profile');
+        try { await _storage.delete(key: 'kinokino_active_profile'); } catch (_) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('kinokino_active_profile');
+        }
       } else {
-        await _storage.write(key: 'kinokino_active_profile', value: _activeId);
+        await _writeValue('kinokino_active_profile', _activeId!);
       }
     }
     await _save();
@@ -108,10 +121,18 @@ class ProfileService {
     if (i >= 0) _profiles[i] = value;
   }
 
-  Future<void> _save() => _storage.write(
-    key: _storageKey,
-    value: jsonEncode(_profiles.map((p) => p.toJson()).toList()),
+  Future<void> _save() => _writeValue(
+    _storageKey,
+    jsonEncode(_profiles.map((p) => p.toJson()).toList()),
   );
+
+  Future<void> _writeValue(String key, String value) async {
+    try { await _storage.write(key: key, value: value); }
+    catch (_) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, value);
+    }
+  }
 
   String _newRecoveryCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
