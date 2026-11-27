@@ -360,28 +360,33 @@ class _HomeScreenState extends State<HomeScreen> {
     child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
   );
 
-  Widget _strip(List<MediaItem> list) => SizedBox(
-    height: 236,
+  Widget _strip(List<MediaItem> list) {
+    final tvLayout = MediaQuery.sizeOf(context).width >= 900;
+    return SizedBox(
+    height: tvLayout ? 292 : 236,
     child: ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       scrollDirection: Axis.horizontal,
       itemCount: list.length,
       separatorBuilder: (_, __) => const SizedBox(width: 11),
-      itemBuilder: (_, i) => SizedBox(width: 136, child: PosterCard(item: list[i], onTap: () => _open(list[i]))),
+      itemBuilder: (_, i) => SizedBox(width: tvLayout ? 174 : 136, child: PosterCard(item: list[i], onTap: () => _open(list[i]))),
     ),
   );
+  }
 
   Widget _grid() {
     if (_loading) return const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()));
     if (_error != null) return SliverFillRemaining(hasScrollBody: false, child: Center(child: Text(_error!)));
     if (_items.isEmpty) return const SliverFillRemaining(hasScrollBody: false, child: Center(child: Text('Ничего не найдено.')));
     final width = MediaQuery.sizeOf(context).width;
-    final cols = width > 1000 ? 6 : width > 700 ? 4 : width > 500 ? 3 : 2;
+    final tvLayout = width >= 900;
+    final cols = width >= 1600 ? 8 : width >= 1100 ? 7 : tvLayout ? 5 : width > 700 ? 4 : width > 500 ? 3 : 2;
     return SliverPadding(
       padding: const EdgeInsets.fromLTRB(14, 4, 14, 22),
       sliver: SliverGrid(
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: cols, childAspectRatio: .57, crossAxisSpacing: 12, mainAxisSpacing: 14),
+          crossAxisCount: cols, childAspectRatio: tvLayout ? .62 : .57,
+          crossAxisSpacing: tvLayout ? 18 : 12, mainAxisSpacing: tvLayout ? 20 : 14),
         delegate: SliverChildBuilderDelegate(
           (_, i) => i >= _items.length ? const Center(child: CircularProgressIndicator())
             : PosterCard(item: _items[i], onTap: () => _open(_items[i])),
@@ -406,11 +411,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+    final tvLayout = MediaQuery.sizeOf(context).width >= 900;
     return CustomScrollView(slivers: [
       SliverToBoxAdapter(child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 12, 14, 14),
+        padding: EdgeInsets.fromLTRB(tvLayout ? 32 : 18, tvLayout ? 22 : 12, tvLayout ? 28 : 14, tvLayout ? 22 : 14),
         child: Row(children: [
-          const Text('KinoKino', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+          Text('KinoKino', style: TextStyle(fontSize: tvLayout ? 32 : 25, fontWeight: FontWeight.w900)),
           const Spacer(),
           IconButton(
             tooltip: 'Удиви меня',
@@ -422,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ]),
       )),
       SliverToBoxAdapter(child: Container(
-        height: 222, margin: const EdgeInsets.symmetric(horizontal: 14),
+        height: tvLayout ? 300 : 222, margin: EdgeInsets.symmetric(horizontal: tvLayout ? 28 : 14),
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(color: const Color(0xFF252525), borderRadius: BorderRadius.circular(18)),
         child: Stack(fit: StackFit.expand, children: [
@@ -436,13 +442,14 @@ class _HomeScreenState extends State<HomeScreen> {
             const Text('ВЫБОР KINOKINO', style: TextStyle(color: Color(0xFFFFD21F), fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w900)),
             const SizedBox(height: 7),
             Text(feature?.title ?? 'Открой мир кино', maxLines: 2, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+              style: TextStyle(fontSize: tvLayout ? 32 : 24, fontWeight: FontWeight.w900)),
             const SizedBox(height: 10),
             FilledButton.icon(
               onPressed: feature == null ? () => setState(() => _selectedTab = 1) : () => _open(feature),
               icon: const Icon(Icons.play_arrow, color: Colors.black),
               label: const Text('Смотреть', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800)),
-              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFFD21F), minimumSize: const Size(130, 40)),
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFFD21F),
+                minimumSize: Size(tvLayout ? 180 : 130, tvLayout ? 52 : 40)),
             ),
           ])),
         ]),
@@ -552,6 +559,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final pages = [_homePage(), _catalogPage(), _searchPage(), _favoritesPage(), _profilePage()];
     const names = ['Главная', 'Каталог', 'Поиск', 'Избранное', 'Профиль'];
     const icons = [Icons.home_rounded, Icons.grid_view_rounded, Icons.search_rounded, Icons.favorite_border_rounded, Icons.person_outline_rounded];
+    final tvLayout = MediaQuery.sizeOf(context).width >= 900;
     return Scaffold(
       backgroundColor: const Color(0xFF090A0C),
       body: NotificationListener<ScrollNotification>(
@@ -566,11 +574,13 @@ class _HomeScreenState extends State<HomeScreen> {
           }
           return false;
         },
-        child: SafeArea(child: IndexedStack(index: _selectedTab, children: pages)),
+        child: FocusTraversalGroup(
+          child: SafeArea(child: IndexedStack(index: _selectedTab, children: pages)),
+        ),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedTab, onDestinationSelected: (i) => setState(() => _selectedTab = i),
-        backgroundColor: const Color(0xFF111214), indicatorColor: const Color(0x22FFD21F), height: 68,
+        backgroundColor: const Color(0xFF111214), indicatorColor: const Color(0x22FFD21F), height: tvLayout ? 82 : 68,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: [for (var i = 0; i < names.length; i++) NavigationDestination(
           icon: Icon(icons[i], size: 22), selectedIcon: Icon(icons[i], color: const Color(0xFFFFD21F), size: 23), label: names[i])],
