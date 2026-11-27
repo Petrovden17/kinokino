@@ -790,7 +790,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   // Some providers launch the actual video in a separate
                   // WebView window. Attach that native window instead of
                   // silently rejecting it and leaving only the poster page.
-                  if (!mounted || action.windowId == null) return false;
+                  if (!mounted) return false;
                   setState(() {
                     _playerWindowId = action.windowId;
                     _playerWindowOpened = true;
