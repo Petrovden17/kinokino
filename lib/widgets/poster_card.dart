@@ -59,6 +59,18 @@ class _PosterCardState extends State<PosterCard> {
               canRequestFocus: true,
               onFocusChange: (focused) {
                 if (mounted) setState(() => _focused = focused);
+                if (focused) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      Scrollable.ensureVisible(
+                        context,
+                        alignment: 0.35,
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                      );
+                    }
+                  });
+                }
               },
               focusColor: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
               onTap: widget.onTap,
