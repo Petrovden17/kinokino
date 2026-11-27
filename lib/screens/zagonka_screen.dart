@@ -62,6 +62,24 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   WebUri get _pageUrl => _urlForSource(_sourceAttemptIndex);
 
+  Future<void> _selectPlayerSource(int index) async {
+    if (!mounted || index < 0 || index >= _playerSourceHosts.length ||
+        index == _sourceAttemptIndex) return;
+    _playerCheckToken++;
+    setState(() {
+      _sourceAttemptIndex = index;
+      _playerWindowId = null;
+      _playerWindowOpened = false;
+      _pageLoaded = false;
+      _playerLoading = true;
+      _error = null;
+    });
+    await _leaveFullscreen();
+    await _bootstrapController?.loadUrl(
+      urlRequest: URLRequest(url: _urlForSource(index)),
+    );
+  }
+
   Future<void> _tryNextPlayerSource(String reason) async {
     if (!mounted) return;
     _playerCheckToken++;
@@ -831,6 +849,51 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   debugPrint('[KinoKino player] blocked nested popup: ${nested.request.url}');
                   return false;
                 },
+              ),
+            ),
+          if (_pageLoaded && !_playerLoading && _error == null)
+            Positioned(
+              top: 12,
+              right: 12,
+              child: SafeArea(
+                child: PopupMenuButton<int>(
+                  tooltip: 'Сменить плеер',
+                  onSelected: _selectPlayerSource,
+                  color: const Color(0xFF202124),
+                  icon: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: const Color(0xDD202124),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0x66FFD21F)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.swap_horiz_rounded, color: Color(0xFFFFD21F), size: 19),
+                        SizedBox(width: 5),
+                        Text('Сменить плеер', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
+                      ],
+                    ),
+                  ),
+                  itemBuilder: (context) => [
+                    for (var i = 0; i < _playerSourceHosts.length; i++)
+                      PopupMenuItem<int>(
+                        value: i,
+                        child: Row(
+                          children: [
+                            Icon(
+                              i == _sourceAttemptIndex ? Icons.radio_button_checked : Icons.radio_button_off,
+                              color: const Color(0xFFFFD21F),
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            Text('Плеер ${i + 1}', style: const TextStyle(color: Colors.white)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
