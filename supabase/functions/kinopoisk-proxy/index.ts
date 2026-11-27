@@ -16,15 +16,73 @@ Deno.serve(async (req: Request) => {
   if (!req.headers.get("Authorization")?.startsWith("Bearer ")) {
     return json({ error: "Unauthorized" }, 401);
   }
-  const apiToken = Deno.env.get("KINOPOISK_API_TOKEN");
-  if (!apiToken) return json({
-    error: "Kinopoisk API token is not configured on the server.",
-    code: "KINOPOISK_TOKEN_MISSING",
-  }, 503);
 
   try {
     const body = await req.json();
     const action = String(body?.action ?? "");
+
+    // Cache writes use the server-side service key; it is never exposed to the app.
+    if (action === "cache") {
+      const tmdbId = Number(body?.tmdb_id);
+      const mediaType = String(body?.media_type ?? "");
+      const kinopoiskId = Number(body?.kinopoisk_id);
+      const title = String(body?.title ?? "").trim().slice(0, 300);
+      const matchMethod = String(body?.match_method ?? "");
+      const confidence = Number(body?.confidence ?? 0);
+      if (!Number.isSafeInteger(tmdbId) || tmdbId <= 0 ||
+          !Number.isSafeInteger(kinopoiskId) || kinopoiskId <= 0 ||
+          !["movie", "tv"].includes(mediaType) || title.length < 1 ||
+          !["imdb", "wikidata", "title_year", "title"].includes(matchMethod) ||
+          !Number.isFinite(confidence) || confidence < 0 || confidence > 100) {
+        return json({ error: "Invalid mapping payload" }, 400);
+      }
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      if (!supabaseUrl || !serviceKey) {
+        return json({ error: "Server database credentials are not configured" }, 503);
+      }
+      const record = {
+        tmdb_id: tmdbId,
+        media_type: mediaType,
+        kinopoisk_id: kinopoiskId,
+        title,
+        release_year: Number.isInteger(Number(body?.release_year)) && Number(body?.release_year) > 0
+          ? Number(body.release_year) : null,
+        imdb_id: /^tt[0-9]{5,12}$/.test(String(body?.imdb_id ?? "")) ? String(body.imdb_id) : null,
+        wikidata_id: /^Q[0-9]+$/.test(String(body?.wikidata_id ?? "")) ? String(body.wikidata_id) : null,
+        match_method: matchMethod,
+        confidence,
+        status: "matched",
+        verified_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      const stored = await fetch(
+        `${supabaseUrl}/rest/v1/kinokino_id_map?on_conflict=tmdb_id,media_type`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "apikey": serviceKey,
+            "Authorization": `Bearer ${serviceKey}`,
+            "Prefer": "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify(record),
+        },
+      );
+      if (!stored.ok) {
+        const detail = await stored.text();
+        console.error("[kinokino-id-cache] database write failed", stored.status, detail);
+        return json({ error: "Could not store mapping" }, 502);
+      }
+      return json({ cached: true });
+    }
+
+    const apiToken = Deno.env.get("KINOPOISK_API_TOKEN");
+    if (!apiToken) return json({
+      error: "Kinopoisk API token is not configured on the server.",
+      code: "KINOPOISK_TOKEN_MISSING",
+    }, 503);
+
     const filmId = Number(body?.film_id);
     let path: string;
     if (action === "search") {
