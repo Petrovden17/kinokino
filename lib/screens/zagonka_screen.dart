@@ -48,8 +48,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   static const List<String> _playerSourceHosts = <String>[
     'www.kinokino.win',
-    'www.ggpoisk.ru',
-    'www.sspoisk.ru',
+    'ggpoisk.ru',
+    'sspoisk.ru',
   ];
 
   WebUri _urlForSource(int index) {
