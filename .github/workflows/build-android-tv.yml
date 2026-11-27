@@ -65,11 +65,11 @@ jobs:
 
           tv = Path("android/app/src/tv")
           tv.mkdir(parents=True, exist_ok=True)
-          (tv / "AndroidManifest.xml").write_text("""<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          (tv / "AndroidManifest.xml").write_text("""<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
               <uses-permission android:name="android.permission.INTERNET" />
               <uses-feature android:name="android.software.leanback" android:required="true" />
               <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-              <application android:label="KinoKino TV" android:banner="@drawable/tv_banner">
+              <application android:label="KinoKino TV" android:banner="@drawable/tv_banner" tools:replace="android:label,android:banner">
                   <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
