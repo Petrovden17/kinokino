@@ -154,7 +154,7 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
                   .catchError((_) { _profileEnsuredForUser = null; });
               }
               return _ready
-                ? HomeScreen(profileService: _profiles, settingsService: _settings)
+                ? HomeScreen(profileService: _profiles, settingsService: _settings, tvMode: widget.tvMode)
                 : const Scaffold(body: Center(child: CircularProgressIndicator()));
             },
           ),
