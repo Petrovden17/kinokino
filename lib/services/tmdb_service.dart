@@ -42,7 +42,7 @@ class TmdbService {
     final results = (response.data['results'] as List? ?? const []);
     return results.whereType<Map>()
         .map((row) => MediaItem.fromJson(Map<String, dynamic>.from(row)))
-        .where((item) => item.id != 0 && item.hasConfirmedRelease &&
+        .where((item) => item.id != 0 &&
             (item.mediaType == 'movie' || item.mediaType == 'tv'))
         .toList();
   }
@@ -65,7 +65,7 @@ class TmdbService {
     final response = await _dio.get(path, queryParameters: extra);
     final results = (response.data['results'] as List? ?? const []);
     return results.whereType<Map>().map((e) => MediaItem.fromJson(Map<String, dynamic>.from(e)))
-      .where((e) => e.id != 0 && e.hasRussianTitle && e.hasConfirmedRelease &&
+      .where((e) => e.id != 0 && e.hasRussianTitle &&
         (e.mediaType == 'movie' || e.mediaType == 'tv')).toList();
   }
 }
