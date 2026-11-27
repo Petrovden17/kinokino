@@ -10,6 +10,7 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   dio: ^5.7.0
+  dpad: ^3.3.0
   cached_network_image: ^3.4.1
   shared_preferences: ^2.3.2
   sqflite: ^2.4.0
