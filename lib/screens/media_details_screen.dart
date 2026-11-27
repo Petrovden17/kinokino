@@ -64,7 +64,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     Map<String, dynamic>? details,
   ) async {
     try {
-      final cached = await _kinopoisk.cachedMatch(widget.item.id, mediaType: _type)
+      final cached = await _kinopoisk.cachedMatch(widget.item.id, mediaType: _type, fallbackTitle: _displayTitle)
           .timeout(const Duration(seconds: 4));
       if (cached != null) return cached;
     } catch (e) {
