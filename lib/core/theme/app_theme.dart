@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color background = Color(0xFF080D19);
-  static const Color surface = Color(0xFF121D31);
-  static const Color surfaceRaised = Color(0xFF1A2942);
-  static const Color accent = Color(0xFFFF765E);
-  static const Color gold = Color(0xFFFFC45C);
-  static const Color aqua = Color(0xFF5ED8D0);
+  static const Color background = Color(0xFF090A0C);
+  static const Color surface = Color(0xFF17181A);
+  static const Color surfaceRaised = Color(0xFF222326);
+  static const Color accent = Color(0xFFFFD21F);
+  static const Color gold = Color(0xFFFFD21F);
+  static const Color aqua = Color(0xFFB7B7B7);
 
   static ThemeData get dark => darkWithAccent(accent);
 
