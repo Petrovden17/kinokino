@@ -23,6 +23,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _bootstrapController;
   bool _pageLoaded = false;
   bool _playerWindowOpened = false;
+  int? _playerWindowId;
   bool _isFullscreen = false;
   String? _error;
   final Set<String> _openedPlayerUrls = <String>{};
@@ -73,13 +74,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   // The catalogue page is only a hidden bootstrap. It is never presented to
   // the user. We ask it to activate the site's own "watch/play" control;
   // Android's onCreateWindow then hands the real player window to this screen.
+  // Keep the real site's launch control, but visually isolate it. The user
+  // taps the original DOM element, preserving a trusted gesture and the site's
+  // cookies/referrer/session checks. Never synthesize an automatic click.
   Future<void> _activateSitePlayer(InAppWebViewController controller) async {
     const script = r"""
       (() => {
-        if (window.__kinoPlayerLauncherInstalled) return;
-        window.__kinoPlayerLauncherInstalled = true;
-        const activate = () => {
-          if (window.__kinoPlayerWindowRequested) return;
+        const isolate = () => {
           const nodes = Array.from(document.querySelectorAll(
             'a,button,[role="button"],input[type="button"],input[type="submit"]'
           ));
@@ -87,36 +88,51 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const text = ((node.innerText || node.value || node.getAttribute('aria-label') || '') + ' ' +
               (node.getAttribute('title') || '')).trim().toLowerCase();
             const rect = node.getBoundingClientRect();
-            const visible = rect.width > 0 && rect.height > 0 &&
-              getComputedStyle(node).visibility !== 'hidden' &&
-              getComputedStyle(node).display !== 'none';
-            return visible && /смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text);
+            const style = getComputedStyle(node);
+            return rect.width > 0 && rect.height > 0 &&
+              style.visibility !== 'hidden' && style.display !== 'none' &&
+              /смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text);
           });
-          if (candidate) {
-            window.__kinoPlayerWindowRequested = true;
-            candidate.click();
-            console.log('[KinoKino] activated site watch control');
-            return true;
+          if (!candidate) return false;
+          let branch = candidate;
+          while (branch && branch !== document.body) {
+            const parent = branch.parentElement;
+            if (!parent) break;
+            for (const sibling of Array.from(parent.children)) {
+              if (sibling !== branch) sibling.style.setProperty('visibility', 'hidden', 'important');
+            }
+            branch.style.setProperty('visibility', 'visible', 'important');
+            branch = parent;
           }
-          return false;
+          document.documentElement.style.setProperty('background', '#000', 'important');
+          document.body.style.setProperty('background', '#000', 'important');
+          Object.entries({
+            position:'fixed', left:'50%', top:'50%', transform:'translate(-50%, -50%)',
+            'z-index':'2147483647', visibility:'visible', opacity:'1',
+            'pointer-events':'auto', 'min-width':'220px', 'min-height':'52px',
+            'font-size':'16px', padding:'14px 24px', 'border-radius':'12px',
+            background:'#202020', color:'#fff', border:'1px solid #666',
+            'box-shadow':'0 4px 24px #000'
+          }).forEach(([key,value]) => candidate.style.setProperty(key,value,'important'));
+          console.log('[KinoKino] isolated original launch control; waiting for user gesture');
+          return true;
         };
+        if (isolate()) return;
         let attempts = 0;
         const timer = setInterval(() => {
           attempts += 1;
-          if (activate() || attempts >= 40) clearInterval(timer);
+          if (isolate() || attempts >= 40) clearInterval(timer);
         }, 500);
-        activate();
+        new MutationObserver(() => isolate()).observe(document.documentElement, {childList:true,subtree:true});
       })();
     """;
     try {
       await controller.evaluateJavascript(source: script);
     } catch (e) {
-      debugPrint('[KinoKino] player activation script failed: $e');
+      debugPrint('[KinoKino] launch control isolation failed: $e');
     }
   }
 
-  // StreamBridge watches for an actual embedded player, not the catalogue UI.
-  // Direct HLS/DASH URLs are logged only because they may require session headers or DRM.
   Future<void> _installStreamBridge(InAppWebViewController controller) async {
     const script = r"""
       (() => {
@@ -174,80 +190,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   }
 
   Future<void> _handleStreamBridgeCall(List<dynamic> args) async {
-    if (!mounted || args.isEmpty || args.first is! Map) return;
+    if (args.isEmpty || args.first is! Map) return;
     final data = Map<String, dynamic>.from(args.first as Map);
     final rawUrl = data['url']?.toString() ?? '';
     final kind = data['kind']?.toString() ?? '';
-    final uri = Uri.tryParse(rawUrl);
-    if (uri == null || !uri.hasScheme || !{'http', 'https'}.contains(uri.scheme)) return;
     debugPrint('[StreamBridge] detected $kind: $rawUrl');
-    if (kind != 'player' || _playerWindowOpened || !_openedPlayerUrls.add(rawUrl)) return;
-    await _showDetectedPlayer(rawUrl);
-  }
-
-  Future<void> _showDetectedPlayer(String url) async {
-    if (!mounted || _playerWindowOpened) return;
-    _playerWindowOpened = true;
-    await _enterFullscreen();
-    if (mounted) setState(() => _error = null);
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      useSafeArea: false,
-      builder: (dialogContext) => PopScope(
-        canPop: true,
-        onPopInvokedWithResult: (didPop, result) {
-          if (didPop) {
-            _playerWindowOpened = false;
-            _leaveFullscreen();
-          }
-        },
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          body: SizedBox.expand(
-            child: InAppWebView(
-              key: const ValueKey('kino-streambridge-player'),
-              initialUrlRequest: URLRequest(url: WebUri(url)),
-              initialSettings: _webSettings,
-              onWebViewCreated: (controller) {
-                controller.addJavaScriptHandler(
-                  handlerName: 'streamBridge',
-                  callback: (args) {
-                    _handleStreamBridgeCall(args);
-                    return {'accepted': true};
-                  },
-                );
-                debugPrint('[StreamBridge] player view attached');
-              },
-              onLoadStart: (_, uri) => debugPrint('[StreamBridge] loading player: $uri'),
-              onLoadStop: (controller, uri) {
-                debugPrint('[StreamBridge] player loaded: $uri');
-                _installStreamBridge(controller);
-                _probePlayerWindow(controller);
-              },
-              onReceivedError: (_, request, error) => debugPrint(
-                '[StreamBridge] error main=${request.isForMainFrame}: ${error.description}; ${request.url}',
-              ),
-              onCloseWindow: (_) {
-                _playerWindowOpened = false;
-                if (Navigator.of(dialogContext).canPop()) Navigator.of(dialogContext).pop();
-                _leaveFullscreen();
-              },
-              onEnterFullscreen: (_) => _enterFullscreen(),
-              onExitFullscreen: (_) => _leaveFullscreen(),
-              onCreateWindow: (_, nestedAction) async {
-                debugPrint('[StreamBridge] blocked nested popup: ${nestedAction.request.url}');
-                return false;
-              },
-            ),
-          ),
-        ),
-      ),
-    ).then((_) {
-      _playerWindowOpened = false;
-      _leaveFullscreen();
-      if (mounted) setState(() {});
-    });
+    // Keep the source browsing context. A bare iframe URL in a new WebView
+    // can lose the site's opener, referrer and session state.
   }
 
   Future<void> _probePlayerWindow(InAppWebViewController controller) async {
@@ -385,7 +334,18 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: _playerWindowId == null,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _playerWindowId != null) {
+          setState(() {
+            _playerWindowId = null;
+            _playerWindowOpened = false;
+          });
+          _leaveFullscreen();
+        }
+      },
+      child: Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
@@ -420,12 +380,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     if (mounted) setState(() {});
                   }
                 },
-                // A popup is often the whole catalogue page, not the player.
-                // Block it. StreamBridge independently extracts the actual
-                // external iframe from the hidden source page and opens only that URL.
+                // Attach the original popup WebView in this screen. It
+                // retains opener/session/referrer state and the site's user gesture.
                 onCreateWindow: (_, action) async {
-                  debugPrint('[KinoKino bootstrap] blocked popup; waiting for embedded player iframe: ${action.request.url}');
-                  return false;
+                  if (!mounted || _playerWindowId != null) return false;
+                  debugPrint('[KinoKino] attaching original player window: ${action.request.url}');
+                  setState(() {
+                    _playerWindowId = action.windowId;
+                    _playerWindowOpened = true;
+                  });
+                  return true;
                 },
                 onReceivedError: (_, request, error) {
                   debugPrint(
@@ -442,6 +406,39 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               ),
             ),
           ),
+          if (_playerWindowId != null)
+            Positioned.fill(
+              child: InAppWebView(
+                key: ValueKey('kino-inline-player-$_playerWindowId'),
+                windowId: _playerWindowId,
+                initialSettings: _webSettings,
+                onLoadStart: (_, url) => debugPrint('[KinoKino player] loading: $url'),
+                onLoadStop: (controller, url) async {
+                  debugPrint('[KinoKino player] loaded: $url');
+                  await _installStreamBridge(controller);
+                  _probePlayerWindow(controller);
+                },
+                onReceivedError: (_, request, error) => debugPrint(
+                  '[KinoKino player] error main=${request.isForMainFrame}: ${error.description}; ${request.url}',
+                ),
+                onReceivedHttpError: (_, request, response) => debugPrint(
+                  '[KinoKino player] HTTP ${response.statusCode} main=${request.isForMainFrame}: ${request.url}',
+                ),
+                onCloseWindow: (_) {
+                  if (mounted) setState(() {
+                    _playerWindowId = null;
+                    _playerWindowOpened = false;
+                  });
+                  _leaveFullscreen();
+                },
+                onEnterFullscreen: (_) => _enterFullscreen(),
+                onExitFullscreen: (_) => _leaveFullscreen(),
+                onCreateWindow: (_, nested) async {
+                  debugPrint('[KinoKino player] blocked nested popup: ${nested.request.url}');
+                  return false;
+                },
+              ),
+            ),
           if (!_playerWindowOpened)
             Center(
               child: Padding(
@@ -493,6 +490,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               ),
             ),
         ],
+      ),
       ),
     );
   }
