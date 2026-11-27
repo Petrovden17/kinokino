@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 
+import '../services/ad_filter_engine.dart';
+
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({
     super.key,
@@ -29,6 +31,15 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   int? _playerWindowId;
   bool _isFullscreen = false;
   String? _error;
+  final Expando<String> _sourceUrlByController = Expando<String>('kinoSourceUrl');
+
+  @override
+  void initState() {
+    super.initState();
+    AdFilterEngine.instance.initialize().catchError((Object error) {
+      debugPrint('[KinoKino] filter-list initialization failed: $error');
+    });
+  }
 
   WebUri get _pageUrl {
     final id = widget.kinopoiskId;
@@ -78,14 +89,28 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     if (defaultTargetPlatform != TargetPlatform.android) return null;
 
     final rawUrl = request.url.toString();
-    if (!_isAdvertisingUrl(rawUrl)) return null;
+    final sourceUrl = _sourceUrlByController[controller] ?? _pageUrl.toString();
+    if (request.isForMainFrame == true) {
+      _sourceUrlByController[controller] = rawUrl;
+    }
+    final builtInBlocked = _isAdvertisingUrl(rawUrl);
+    final listBlocked = AdFilterEngine.instance.shouldBlock(
+      rawUrl: rawUrl,
+      sourceUrl: sourceUrl,
+      isMainFrame: request.isForMainFrame ?? false,
+      headers: request.headers,
+    );
+    if (!builtInBlocked && !listBlocked) return null;
 
     final uri = Uri.tryParse(rawUrl);
-    if (uri != null && _loggedBlockedAdResources.length < 300) {
+    if (uri != null && _loggedBlockedAdResources.length < 500) {
       final safePath =
           uri.path.length > 180 ? uri.path.substring(0, 180) : uri.path;
-      if (_loggedBlockedAdResources.add(uri.host + safePath)) {
-        debugPrint('[KinoKino][BLOCKED_AD] ' + uri.host + safePath);
+      final key = '${uri.host}$safePath';
+      if (_loggedBlockedAdResources.add(key)) {
+        debugPrint(listBlocked && !builtInBlocked
+            ? '[KinoKino][FILTER_LIST_BLOCK] $key'
+            : '[KinoKino][BLOCKED_AD] $key');
       }
     }
 
@@ -119,9 +144,48 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         ),
       ];
 
+  List<UserScript> get _popupGuardScripts => [
+        UserScript(
+          injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+          forMainFrameOnly: false,
+          source: r"""
+            (() => {
+              const denyPopup = () => null;
+              try {
+                Object.defineProperty(window, 'open', {
+                  configurable: false,
+                  enumerable: true,
+                  writable: false,
+                  value: denyPopup
+                });
+              } catch (_) {
+                try { window.open = denyPopup; } catch (_) {}
+              }
+              const blockBlankTarget = (event) => {
+                const link = event.target && event.target.closest
+                  ? event.target.closest('a[target="_blank"],area[target="_blank"]')
+                  : null;
+                if (!link) return;
+                event.preventDefault();
+                event.stopImmediatePropagation();
+              };
+              document.addEventListener('click', blockBlankTarget, true);
+              document.addEventListener('auxclick', blockBlankTarget, true);
+              document.addEventListener('submit', (event) => {
+                const form = event.target;
+                if (form && form.target === '_blank') {
+                  event.preventDefault();
+                  event.stopImmediatePropagation();
+                }
+              }, true);
+            })();
+          """,
+        ),
+      ];
+
   InAppWebViewSettings get _webSettings => InAppWebViewSettings(
         javaScriptEnabled: true,
-        javaScriptCanOpenWindowsAutomatically: true,
+        javaScriptCanOpenWindowsAutomatically: false,
         mediaPlaybackRequiresUserGesture: false,
         allowsInlineMediaPlayback: true,
         domStorageEnabled: true,
@@ -131,7 +195,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         enableEncryptedMedia: true,
         enableMedia: true,
         isElementFullscreenEnabled: true,
-        supportMultipleWindows: true,
+        supportMultipleWindows: false,
         useHybridComposition: defaultTargetPlatform == TargetPlatform.android,
         mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
         transparentBackground: false,
@@ -535,6 +599,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 child: InAppWebView(
                 initialUrlRequest: URLRequest(url: _pageUrl),
                 initialSettings: _webSettings,
+                initialUserScripts: _popupGuardScripts,
                 onWebViewCreated: (controller) {
                   _bootstrapController = controller;
                   controller.addJavaScriptHandler(
@@ -573,7 +638,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   }
                   return NavigationActionPolicy.ALLOW;
                 },
+                onLoadStart: (controller, url) {
+                  if (url != null) _sourceUrlByController[controller] = url.toString();
+                },
                 onLoadStop: (controller, url) async {
+                  if (url != null) _sourceUrlByController[controller] = url.toString();
                   debugPrint('[KinoKino bootstrap] loaded: $url');
                   await _installAdHiding(controller);
                   await _installStreamBridge(controller);
@@ -612,7 +681,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 key: ValueKey('kino-inline-player-$_playerWindowId'),
                 windowId: _playerWindowId,
                 initialSettings: _webSettings,
-                onLoadStart: (_, url) => debugPrint('[KinoKino player] loading: $url'),
+                initialUserScripts: _popupGuardScripts,
+                onLoadStart: (controller, url) {
+                  if (url != null) _sourceUrlByController[controller] = url.toString();
+                  debugPrint('[KinoKino player] loading: $url');
+                },
                 shouldInterceptRequest: (controller, request) =>
                     _interceptAdResource(controller, request),
                 shouldOverrideUrlLoading: (controller, action) async {
