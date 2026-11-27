@@ -87,6 +87,20 @@ jobs:
           if "android.permission.INTERNET" not in content:
               content = content.replace("    <application", permission + "    <application", 1)
 
+          tv_features = (
+              '    <uses-feature android:name="android.software.leanback" android:required="false" />\\n'
+              '    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\\n'
+          )
+          if "android.software.leanback" not in content:
+              content = content.replace("    <application", tv_features + "    <application", 1)
+
+          launcher_category = '<category android:name="android.intent.category.LAUNCHER" />'
+          leanback_category = '<category android:name="android.intent.category.LEANBACK_LAUNCHER" />'
+          if leanback_category not in content:
+              if launcher_category not in content:
+                  raise SystemExit("Android manifest has no standard launcher category")
+              content = content.replace(launcher_category, launcher_category + "\\n            " + leanback_category, 1)
+
           app_start = content.find("<application")
           app_end = content.find(">", app_start)
           if app_start < 0 or app_end < 0:
