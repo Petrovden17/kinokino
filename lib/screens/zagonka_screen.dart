@@ -751,7 +751,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               target.dispatchEvent(new PointerEvent('pointerup', options));
               target.dispatchEvent(new MouseEvent('mouseup', options));
               target.dispatchEvent(new MouseEvent('click', options));
-              target.click?.();
             }
             return true;
           })();
