@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/local_database.dart';
@@ -234,6 +236,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _surpriseMe() async {
+    if (_items.isEmpty) {
+      await _loadTrending();
+    }
+    if (!mounted || _items.isEmpty) return;
+    final candidates = _items;
+    final item = candidates[math.Random().nextInt(candidates.length)];
+    await _open(item);
+  }
+
   Future<void> _open(MediaItem item) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => MediaDetailsScreen(
       item: item,
@@ -400,6 +412,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(children: [
           const Text('KinoKino', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
           const Spacer(),
+          IconButton(
+            tooltip: 'Удиви меня',
+            onPressed: _surpriseMe,
+            icon: const Icon(Icons.casino_outlined, color: Color(0xFFFFD21F)),
+          ),
           IconButton(onPressed: () => setState(() => _selectedTab = 2), icon: const Icon(Icons.search)),
           IconButton(onPressed: () => _openPage(SettingsScreen(service: widget.settingsService)), icon: const Icon(Icons.settings_outlined)),
         ]),
