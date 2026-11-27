@@ -115,14 +115,26 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             if (!isVisible(frame) || !frame.src) return false;
             try {
               const u = new URL(frame.src, location.href);
+              const hints = [u.hostname, u.pathname, u.search, frame.title || '',
+                frame.id || '', typeof frame.className === 'string' ? frame.className : ''].join(' ').toLowerCase();
               if (u.origin === location.origin || /(^|\.)kinokino\.win$/i.test(u.hostname)) return false;
-              if (/doubleclick|adservice|analytics|metrika|captcha|banner|reklam/i.test(u.hostname + u.pathname)) return false;
-              return true;
+              // Reject ad/tracker frames using URL and DOM metadata, not URL alone.
+              if (/doubleclick|adservice|analytics|metrika|captcha|banner|reklam|advert|\bads?\b|popunder|tracker|promo|sponsor/i.test(hints)) return false;
+              if (/^(about:blank|javascript:)/i.test(frame.src)) return false;
+              const rect = frame.getBoundingClientRect();
+              const playerHint = /player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo|movie|watch/i.test(hints);
+              const largeFrame = rect.width >= Math.min(320, innerWidth * 0.55) &&
+                rect.height >= Math.min(180, innerHeight * 0.35);
+              return playerHint || largeFrame;
             } catch (_) { return false; }
           });
-          // Prefer iframe URLs that look like an actual embedded player.
+          // Explicit player URLs win; large visible frames are a fallback.
           frames.sort((a, b) => {
-            const score = (f) => /player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo/i.test(f.src) ? 1 : 0;
+            const score = (f) => {
+              const meta = [f.src, f.title || '', f.id || '', typeof f.className === 'string' ? f.className : ''].join(' ');
+              return (/player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo/i.test(meta) ? 100 : 0) +
+                Math.min(50, Math.round(f.getBoundingClientRect().width / Math.max(1, innerWidth) * 50));
+            };
             return score(b) - score(a);
           });
           return frames[0] || null;
@@ -170,13 +182,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           };
           if (isFrame) {
             target.addEventListener('load', ready, {once:true});
-            setTimeout(() => { if (!finished) ready(); }, 12000);
+            setTimeout(() => { if (!finished) ready(); }, 5000);
           } else if (target.readyState >= 2 && target.videoWidth > 0) {
             ready();
           } else {
             target.addEventListener('loadeddata', ready, {once:true});
             target.addEventListener('canplay', ready, {once:true});
-            setTimeout(() => { if (!finished) ready(); }, 12000);
+            setTimeout(() => { if (!finished) ready(); }, 5000);
           }
         };
         const detect = () => {
