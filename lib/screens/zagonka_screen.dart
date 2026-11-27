@@ -33,6 +33,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   bool _isFullscreen = false;
   int _sourceAttemptIndex = 0;
   final Set<int> _verifiedPlayerSourceIndices = <int>{};
+  final Map<int, String> _verifiedPlayerHosts = <int, String>{};
   int _playerCheckToken = 0;
   String? _error;
   final Expando<String> _sourceUrlByController = Expando<String>('kinoSourceUrl');
@@ -117,6 +118,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   Future<void> _tryNextPlayerSource(String reason) async {
     if (!mounted) return;
     _verifiedPlayerSourceIndices.remove(_sourceAttemptIndex);
+    _verifiedPlayerHosts.remove(_sourceAttemptIndex);
     _playerCheckToken++;
     final nextIndex = _sourceAttemptIndex + 1;
     if (nextIndex >= _playerSourceHosts.length) {
@@ -168,7 +170,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             return r.width > 100 && r.height > 60 && s.display !== 'none' &&
               s.visibility !== 'hidden' && Number(s.opacity) > 0;
           };
-          const hasPlayer = Array.from(document.querySelectorAll('video,iframe')).some((el) => {
+          const player = Array.from(document.querySelectorAll('video,iframe')).find((el) => {
             if (!visible(el)) return false;
             if (el.tagName === 'VIDEO') return true;
             const u = (el.src || '').toLowerCase();
@@ -182,14 +184,36 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const t = ((el.innerText || el.value || el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')).toLowerCase();
             return visible(el) && /смотреть|watch|play|воспроизвести|запустить/.test(t);
           });
-          return hasPlayer ? 2 : ((notFound || !hasLaunch) ? 0 : 1);
+          if (player) {
+            let playerHost = '';
+            try {
+              const playerUrl = player.tagName === 'VIDEO'
+                ? (player.currentSrc || player.src || '')
+                : (player.src || '');
+              playerHost = new URL(playerUrl, location.href).hostname.toLowerCase();
+            } catch (_) {}
+            return '2|' + playerHost;
+          }
+          return (notFound || !hasLaunch) ? 0 : 1;
         })();
       """;
       try {
         final result = await controller.evaluateJavascript(source: probe);
-        final state = int.tryParse(result.toString()) ?? -1;
+        final parts = result.toString().split('|');
+        final state = int.tryParse(parts.first) ?? -1;
         if (state == 2) {
+          final playerHost = parts.length > 1 ? parts[1].trim().toLowerCase() : '';
+          final duplicate = playerHost.isNotEmpty &&
+              _verifiedPlayerHosts.entries.any((entry) =>
+                  entry.key != _sourceAttemptIndex && entry.value == playerHost);
+          if (duplicate) {
+            await _tryNextPlayerSource('duplicate player host $playerHost');
+            return;
+          }
           _verifiedPlayerSourceIndices.add(_sourceAttemptIndex);
+          if (playerHost.isNotEmpty) {
+            _verifiedPlayerHosts[_sourceAttemptIndex] = playerHost;
+          }
           if (mounted) setState(() => _playerLoading = false);
           return;
         }
@@ -455,8 +479,13 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         let exposed = false;
         let waitingForPlayer = false;
         let launchNotified = false;
-        const notify = (state) => {
-          try { window.flutter_inappwebview.callHandler('playerState', {state}); } catch (_) {}
+        const notify = (state, target) => {
+          let host = '';
+          try {
+            const raw = target && (target.currentSrc || target.src || '');
+            if (raw) host = new URL(raw, location.href).hostname.toLowerCase();
+          } catch (_) {}
+          try { window.flutter_inappwebview.callHandler('playerState', {state, host}); } catch (_) {}
         };
         const revealWhenReady = (target, isFrame) => {
           if (waitingForPlayer) return;
@@ -466,7 +495,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           const ready = () => {
             if (finished) return;
             finished = true;
-            setTimeout(() => notify('ready'), 500);
+            setTimeout(() => notify('ready', target), 500);
           };
           if (isFrame) {
             target.addEventListener('load', ready, {once:true});
@@ -786,11 +815,24 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                           _playerLoading = false;
                         });
                       } else if (mounted && state == 'ready') {
-                        _playerCheckToken++;
-                        _verifiedPlayerSourceIndices.add(_sourceAttemptIndex);
-                        setState(() {
-                          _playerLoading = false;
-                        });
+                        final playerHost = args.isNotEmpty && args.first is Map
+                            ? ((args.first as Map)['host']?.toString() ?? '').trim().toLowerCase()
+                            : '';
+                        final duplicate = playerHost.isNotEmpty &&
+                            _verifiedPlayerHosts.entries.any((entry) =>
+                                entry.key != _sourceAttemptIndex && entry.value == playerHost);
+                        if (duplicate) {
+                          _tryNextPlayerSource('duplicate player host $playerHost');
+                        } else {
+                          _playerCheckToken++;
+                          _verifiedPlayerSourceIndices.add(_sourceAttemptIndex);
+                          if (playerHost.isNotEmpty) {
+                            _verifiedPlayerHosts[_sourceAttemptIndex] = playerHost;
+                          }
+                          setState(() {
+                            _playerLoading = false;
+                          });
+                        }
                       }
                       return {'accepted': true};
                     },
