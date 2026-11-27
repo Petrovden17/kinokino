@@ -28,6 +28,7 @@ class ZagonkaScreen extends StatefulWidget {
 
 class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _bootstrapController;
+  Offset _tvPointerPosition = const Offset(0.5, 0.5);
   bool _pageLoaded = false;
   bool _playerLoading = false;
   bool _playerWindowOpened = false;
@@ -700,6 +701,57 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
+  KeyEventResult _handleTvPointerKey(FocusNode node, KeyEvent event) {
+    if (!widget.tvMode || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    const step = 0.035;
+    var next = _tvPointerPosition;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.arrowLeft) {
+      next = Offset((next.dx - step).clamp(0.0, 1.0), next.dy);
+    } else if (key == LogicalKeyboardKey.arrowRight) {
+      next = Offset((next.dx + step).clamp(0.0, 1.0), next.dy);
+    } else if (key == LogicalKeyboardKey.arrowUp) {
+      next = Offset(next.dx, (next.dy - step).clamp(0.0, 1.0));
+    } else if (key == LogicalKeyboardKey.arrowDown) {
+      next = Offset(next.dx, (next.dy + step).clamp(0.0, 1.0));
+    } else if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.gameButtonA) {
+      final controller = _bootstrapController;
+      if (controller != null) {
+        final x = _tvPointerPosition.dx.toStringAsFixed(4);
+        final y = _tvPointerPosition.dy.toStringAsFixed(4);
+        controller.evaluateJavascript(source: """
+          (() => {
+            const x = innerWidth * $x;
+            const y = innerHeight * $y;
+            const target = document.elementFromPoint(x, y);
+            if (!target) return false;
+            target.focus?.({preventScroll:true});
+            if (target.tagName === 'IFRAME') {
+              target.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, clientX:x, clientY:y}));
+              target.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, clientX:x, clientY:y, button:0}));
+              target.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, clientX:x, clientY:y, button:0}));
+              target.dispatchEvent(new MouseEvent('click', {bubbles:true, clientX:x, clientY:y, button:0}));
+            } else {
+              target.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, clientX:x, clientY:y}));
+              target.click?.();
+            }
+            return true;
+          })();
+        """);
+      }
+      return KeyEventResult.handled;
+    } else {
+      return KeyEventResult.ignored;
+    }
+    setState(() => _tvPointerPosition = next);
+    return KeyEventResult.handled;
+  }
+
   @override
   void dispose() {
     SystemChrome.setPreferredOrientations(const []);
@@ -956,6 +1008,43 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
             const Positioned.fill(
               child: ColoredBox(color: Colors.black),
+            ),
+          if (widget.tvMode && _pageLoaded && !_playerLoading && _error == null)
+            Positioned.fill(
+              child: Focus(
+                autofocus: true,
+                onKeyEvent: _handleTvPointerKey,
+                child: IgnorePointer(
+                  child: Align(
+                    alignment: Alignment(
+                      _tvPointerPosition.dx * 2 - 1,
+                      _tvPointerPosition.dy * 2 - 1,
+                    ),
+                    child: Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0x33FFD21F),
+                        border: Border.all(color: const Color(0xFFFFD21F), width: 2),
+                        boxShadow: const [
+                          BoxShadow(color: Color(0xAA000000), blurRadius: 5),
+                        ],
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 5,
+                          height: 5,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFFD21F),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
             Center(
