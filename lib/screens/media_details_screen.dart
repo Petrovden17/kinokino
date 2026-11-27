@@ -36,9 +36,38 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final localized = (d['title'] ?? d['name'] ?? '').toString().trim();
     return RegExp(r'[А-Яа-яЁё]').hasMatch(localized) ? localized : widget.item.title;
   }
+  DateTime? get _releaseDate {
+    final candidates = [
+      _details?['release_date'],
+      _details?['first_air_date'],
+      widget.item.releaseDate,
+    ];
+    for (final candidate in candidates) {
+      final raw = (candidate ?? '').toString().trim();
+      if (raw.length < 10) continue;
+      final parsed = DateTime.tryParse(raw.substring(0, 10));
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  bool get _hasReleased {
+    final date = _releaseDate;
+    if (date == null) return false;
+    final today = DateTime.now();
+    return !DateTime(date.year, date.month, date.day)
+        .isAfter(DateTime(today.year, today.month, today.day));
+  }
+
+  String get _releaseStatus {
+    final date = _releaseDate;
+    if (date == null) return 'Дата выхода неизвестна';
+    if (_hasReleased) return 'Уже вышел';
+    return 'Выйдет ${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+  }
+
   int get _releaseYear {
-    final date = (_details?['release_date'] ?? _details?['first_air_date'] ?? widget.item.releaseDate).toString();
-    final year = int.tryParse(date.length >= 4 ? date.substring(0, 4) : '') ?? 0;
+    final year = _releaseDate?.year ?? 0;
     return year >= 1888 && year <= DateTime.now().year ? year : 0;
   }
   String get _preferredArchiveLanguage => widget.preferredAudioLanguage == 'original'
@@ -160,10 +189,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           rawType.contains('SERIES') || rawType.contains('MINI');
       final typeKnown = rawType.isNotEmpty;
       final yearScore = year == 0 || candidateYear == 0
-          ? 0 : (candidateYear == year ? 20 : -35);
-      final typeScore = !typeKnown ? 0 : (candidateIsSeries == isSeries ? 15 : -35);
+          ? 0 : (candidateYear == year ? 15 : -15);
+      final typeScore = !typeKnown ? 0 : (candidateIsSeries == isSeries ? 10 : -10);
       return (candidate: candidate, score: titleScore + yearScore + typeScore);
-    }).where((entry) => entry.score >= 65).toList()
+    }).where((entry) => entry.score >= 55).toList()
       ..sort((a, b) => b.score.compareTo(a.score));
     return ranked.isEmpty ? null : ranked.first.candidate;
   }
@@ -247,7 +276,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         final data = Map<String, dynamic>.from(row);
         data.putIfAbsent('media_type', () => _type);
         final item = MediaItem.fromJson(data);
-        if (item.id != widget.item.id && item.hasConfirmedRelease &&
+        if (item.id != widget.item.id &&
             (item.mediaType == 'movie' || item.mediaType == 'tv')) {
           found['${item.mediaType}:${item.id}'] = item;
         }
@@ -532,7 +561,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       final episodeDate = (selectedEpisode['air_date'] ?? '').toString();
       expectedYear = int.tryParse(episodeDate.length >= 4 ? episodeDate.substring(0, 4) : '') ?? _releaseYear;
     }
-    if (!widget.item.hasConfirmedRelease) {
+    if (!_hasReleased) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Эта карточка не прошла проверку даты выхода и недоступна для просмотра.'),
       ));
@@ -669,6 +698,14 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   bool _resolvingKinopoisk = false;
 
   Future<void> _openKinoKino() async {
+    if (!_hasReleased) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(_releaseStatus == 'Дата выхода неизвестна'
+            ? 'Не удалось подтвердить дату выхода. Просмотр пока недоступен.'
+            : 'Этот фильм ещё не вышел. Просмотр откроется после даты выхода.'),
+      ));
+      return;
+    }
     if (_resolvingKinopoisk) return;
     var id = _kinopoiskId;
     if (id == null || id <= 0) {
@@ -757,7 +794,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           const SizedBox(height: 8),
           Wrap(spacing: 12, children: [
             Chip(label: Text(item.mediaType == 'tv' ? 'Сериал' : 'Фильм')),
-            if (item.releaseDate.isNotEmpty) Chip(label: Text(item.releaseDate.split('-').first)),
+            Chip(label: Text(_releaseStatus)),
+            if (_releaseYear > 0) Chip(label: Text('$_releaseYear')),
             if (_type == 'movie' && (_details?['runtime'] as num? ?? 0) > 0) Chip(label: Text('${_details!['runtime']} мин.')),
           ]),
           if (genres.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8), child: Text(genres)),
@@ -780,11 +818,13 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           const SizedBox(height: 12),
           Wrap(spacing: 10, runSpacing: 8, children: [
             FilledButton.icon(
-              onPressed: _resolvingKinopoisk ? null : _openKinoKino,
+              onPressed: _resolvingKinopoisk || !_hasReleased ? null : _openKinoKino,
               icon: _resolvingKinopoisk
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.play_arrow),
-              label: Text(_resolvingKinopoisk ? 'Получаем ID…' : 'Начать просмотр'),
+              label: Text(_resolvingKinopoisk
+                  ? 'Получаем ID…'
+                  : (_hasReleased ? 'Начать просмотр' : _releaseStatus)),
             ),
             OutlinedButton.icon(onPressed: () async {
               await LocalDatabase.setFavorite(item.id, item.title, item.posterPath, true, mediaType: _type);
