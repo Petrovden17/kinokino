@@ -11,9 +11,7 @@ class CatalogApiGateway {
   static const String _workerUrl =
       'https://kinokino-tmdb.get46-get47.workers.dev';
 
-  late final Dio _edge = _createDio(
-    baseUrl: '$_supabaseUrl/functions/v1/tmdb-catalog-proxy',
-  );
+  late final Dio _edge = _createDio(baseUrl: _supabaseUrl);
   late final Dio _worker = _createDio(baseUrl: _workerUrl);
 
   Dio _createDio({required String baseUrl}) {
@@ -47,8 +45,9 @@ class CatalogApiGateway {
     Map<String, dynamic>? queryParameters,
   }) async {
     try {
+      final edgePath = '/functions/v1/tmdb-catalog-proxy$path';
       return await _edge.get<dynamic>(
-        path,
+        edgePath,
         queryParameters: queryParameters,
       );
     } on DioException {
