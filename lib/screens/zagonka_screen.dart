@@ -50,12 +50,17 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     'www.kinokino.win',
     'ggpoisk.ru',
     'sspoisk.ru',
+    'kinobox.tv',
   ];
 
   WebUri _urlForSource(int index) {
     final id = widget.kinopoiskId;
     final host = _playerSourceHosts[index];
     if (id == null || id <= 0) return WebUri('https://$host/');
+    if (host == 'kinobox.tv') {
+      final type = widget.isSeries ? 'serials' : 'films';
+      return WebUri('https://kinobox.tv/#/$type/$id');
+    }
     final type = widget.isSeries ? 'series' : 'film';
     return WebUri('https://$host/$type/$id/');
   }
