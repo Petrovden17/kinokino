@@ -87,17 +87,23 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       for (final batch in candidateBatches) ...batch,
     ];
 
-    // TMDB's Wikidata cross-reference is a fast exact-match fallback.
+    // Prefer exact IMDb cross-reference over title-only matching.
+    // It avoids choosing a different film with a similar translated title.
     try {
       final external = await _tmdb.externalIds(widget.item.id, type: _type)
           .timeout(const Duration(seconds: 8));
+      final imdbId = external['imdb_id']?.toString() ?? '';
+      if (imdbId.isNotEmpty) {
+        candidates.addAll(await _kinopoisk.byImdbId(imdbId)
+            .timeout(const Duration(seconds: 8)));
+      }
       final wikidataId = external['wikidata_id']?.toString() ?? '';
       if (wikidataId.isNotEmpty) {
         candidates.addAll(await _kinopoisk.byWikidataId(wikidataId)
             .timeout(const Duration(seconds: 8)));
       }
     } catch (e) {
-      debugPrint('[KinoKino] Wikidata ID lookup failed: $e');
+      debugPrint('[KinoKino] external ID lookup failed: $e');
     }
 
     return _selectKinopoiskMatch(
@@ -685,9 +691,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       } catch (e) {
         debugPrint('[KinoKino] could not resolve Kinopoisk ID: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Не удалось получить ID фильма. Проверь интернет и нажми «Начать просмотр» ещё раз.'),
-          ));
+          debugPrint('[KinoKino] ID lookup failed; no user-facing error dialog shown.');
         }
       } finally {
         if (mounted) setState(() => _resolvingKinopoisk = false);
@@ -695,9 +699,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
     if (!mounted) return;
     if (id == null || id <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Фильм не найден в каталоге Kinopoisk. Попробуй позже.'),
-      ));
+      debugPrint('[KinoKino] no Kinopoisk ID resolved for TMDB item ${widget.item.id}; player was not opened.');
       return;
     }
     await Navigator.push(context, MaterialPageRoute(
@@ -784,7 +786,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
               icon: _resolvingKinopoisk
                   ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.play_arrow),
-              label: Text(_resolvingKinopoisk ? 'Получаем ID…' : 'Начать просмотр'),
+              label: const Text('Начать просмотр'),
             ),
             OutlinedButton.icon(onPressed: () async {
               await LocalDatabase.setFavorite(item.id, item.title, item.posterPath, true, mediaType: _type);
