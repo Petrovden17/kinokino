@@ -8,7 +8,7 @@ class AppSettings {
     this.maxChildRating = 12,
     this.autoUpdatesEnabled = true,
     this.updateIntervalHours = 24,
-    this.accentColorValue = 0xFFFF765E,
+    this.accentColorValue = 0xFFFFD21F,
     this.animationsEnabled = true,
     this.animationSpeed = 1.0,
     this.preferredAudioLanguage = 'auto',
