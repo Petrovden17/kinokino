@@ -1,0 +1,130 @@
+name: Build KinoKino TV for Android TV
+
+concurrency:
+  group: kinokino-android-tv-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/build-android-tv.yml"
+      - "pubspec.yaml"
+      - "pubspec.lock"
+      - "lib/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android TV runner and dedicated application variant
+        run: |
+          flutter create --platforms=android --org com.osirisvectory --project-name=kinokino .
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle = Path("android/app/build.gradle.kts")
+          source = gradle.read_text(encoding="utf-8")
+          source, count = re.subn(
+              r'applicationId\s*=\s*"[^"]+"',
+              'applicationId = "com.osirisvectory.kinokino.tv"',
+              source,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Could not set the Android TV application ID")
+          marker = "    buildTypes {"
+          if marker not in source:
+              raise SystemExit("Could not find Android buildTypes block")
+          source = source.replace(marker, """    flavorDimensions += "device"
+              productFlavors {
+                  create("tv") {
+                      dimension = "device"
+                      applicationId = "com.osirisvectory.kinokino.tv"
+                      versionNameSuffix = "-tv"
+                  }
+              }
+
+              buildTypes {""", 1)
+          gradle.write_text(source, encoding="utf-8")
+
+          tv = Path("android/app/src/tv")
+          tv.mkdir(parents=True, exist_ok=True)
+          (tv / "AndroidManifest.xml").write_text("""<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-feature android:name="android.software.leanback" android:required="true" />
+              <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+              <application android:label="KinoKino TV" android:banner="@drawable/tv_banner">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          """, encoding="utf-8")
+
+          drawable = Path("android/app/src/tv/res/drawable")
+          drawable.mkdir(parents=True, exist_ok=True)
+          (drawable / "tv_banner.xml").write_text("""<vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="320dp" android:height="180dp"
+              android:viewportWidth="320" android:viewportHeight="180">
+              <path android:fillColor="#090A0C" android:pathData="M0,0h320v180h-320z" />
+              <path android:fillColor="#182238" android:pathData="M0,0h320v180h-320z" />
+              <path android:fillColor="#FFD21F" android:pathData="M132,48 L132,132 L202,90 Z" />
+              <path android:fillColor="#35D6CF" android:pathData="M218,78h38v5h-38z M218,97h26v5h-26z" />
+          </vector>
+          """, encoding="utf-8")
+          PY
+
+      - name: Configure persistent Android signing key
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: kinokino-android-signing-v1
+
+      - name: Create signing key if needed
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=KinoKino TV, OU=Android, O=KinoKino, L=Unknown, ST=Unknown, C=US"
+          fi
+
+      - name: Allow legacy WebView ProGuard configuration on AGP 9
+        run: echo 'android.r8.proguardAndroidTxt.disallowed=false' >> android/gradle.properties
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Dart code
+        run: flutter analyze --no-pub --no-fatal-infos
+
+      - name: Build Android TV APK
+        run: flutter build apk --release --flavor tv -t lib/main_tv.dart --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }} --dart-define=APP_BUILD=${{ github.run_number }}
+
+      - name: Upload Android TV APK
+        if: always() && hashFiles('build/app/outputs/flutter-apk/app-tv-release.apk') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: KinoKino-TV-APK
+          path: build/app/outputs/flutter-apk/app-tv-release.apk
+          if-no-files-found: error
+          retention-days: 30
