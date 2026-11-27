@@ -462,7 +462,7 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(color: const Color(0xFF252525), borderRadius: BorderRadius.circular(18)),
         child: Stack(fit: StackFit.expand, children: [
           if (feature?.backdropPath != null)
-            CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w1280\${feature!.backdropPath}', fit: BoxFit.cover)
+            CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w1280${feature!.backdropPath}', fit: BoxFit.cover)
           else const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF512C1D), Color(0xFF141414)]))),
           const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
             begin: Alignment.centerLeft, end: Alignment.centerRight,
@@ -543,7 +543,7 @@ class _HomeScreenState extends State<HomeScreen> {
           return ListTile(onTap: () => _open(item), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             leading: ClipRRect(borderRadius: BorderRadius.circular(8), child: SizedBox(width: 52, height: 70,
               child: poster == null ? const ColoredBox(color: Color(0xFF202124), child: Icon(Icons.movie))
-                : CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w185\${poster}', fit: BoxFit.cover))),
+                : CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w185${poster}', fit: BoxFit.cover))),
             title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(item.mediaType == 'tv' ? 'Сериал' : 'Фильм'),
             trailing: const Icon(Icons.chevron_right));
