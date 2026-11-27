@@ -520,6 +520,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     """;
     try {
       await controller.evaluateJavascript(source: script);
+      if (widget.tvMode) {
+        await controller.evaluateJavascript(
+          source: "try { window.focus(); document.activeElement?.focus(); } catch (_) {}",
+        );
+      }
     } catch (e) {
       debugPrint('[KinoKino] embedded player isolation failed: $e');
     }
@@ -714,21 +719,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           });
           _leaveFullscreen();
         }
-      },
-      child: Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (!widget.tvMode || event is! KeyDownEvent) return KeyEventResult.ignored;
-        if (event.logicalKey == LogicalKeyboardKey.escape) {
-          if (_playerWindowId != null) {
-            setState(() { _playerWindowId = null; _playerWindowOpened = false; });
-            _leaveFullscreen();
-          } else {
-            Navigator.of(context).maybePop();
-          }
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
       },
       child: Scaffold(
       backgroundColor: Colors.black,
@@ -1023,7 +1013,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               ),
             ),
         ],
-      ),
       ),
       ),
     );
