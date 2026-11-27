@@ -15,6 +15,7 @@ class PosterCard extends StatefulWidget {
 
 class _PosterCardState extends State<PosterCard> {
   bool _hovered = false;
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +29,7 @@ class _PosterCardState extends State<PosterCard> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedScale(
-        scale: _hovered ? 1.025 : 1.0,
+        scale: (_hovered || _focused) ? 1.045 : 1.0,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOutCubic,
         child: AnimatedContainer(
@@ -36,13 +37,17 @@ class _PosterCardState extends State<PosterCard> {
           curve: Curves.easeOutCubic,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: _focused ? Theme.of(context).colorScheme.primary : Colors.transparent,
+              width: _focused ? 3 : 0,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(
-                  alpha: _hovered ? .34 : .12,
+                  alpha: (_hovered || _focused) ? .38 : .12,
                 ),
-                blurRadius: _hovered ? 18 : 7,
-                offset: Offset(0, _hovered ? 8 : 3),
+                blurRadius: (_hovered || _focused) ? 22 : 7,
+                offset: Offset(0, (_hovered || _focused) ? 9 : 3),
               ),
             ],
           ),
@@ -51,6 +56,11 @@ class _PosterCardState extends State<PosterCard> {
             borderRadius: BorderRadius.circular(18),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
+              canRequestFocus: true,
+              onFocusChange: (focused) {
+                if (mounted) setState(() => _focused = focused);
+              },
+              focusColor: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
               onTap: widget.onTap,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
