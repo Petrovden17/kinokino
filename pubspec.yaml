@@ -34,3 +34,7 @@ dev_dependencies:
   flutter_lints: ^4.0.0
 flutter:
   uses-material-design: true
+dependency_overrides:
+  # Keep the Windows native implementation aligned with the API it was built for.
+  flutter_inappwebview_forge_windows: 1.0.15
+  flutter_inappwebview_forge_platform_interface: 1.1.22
