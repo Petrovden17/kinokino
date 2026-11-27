@@ -32,8 +32,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   int? _playerWindowId;
   bool _isFullscreen = false;
   int _sourceAttemptIndex = 0;
-  final Set<int> _verifiedPlayerSourceIndices = <int>{};
-  final Map<int, String> _verifiedPlayerHosts = <int, String>{};
   int _playerCheckToken = 0;
   String? _error;
   final Expando<String> _sourceUrlByController = Expando<String>('kinoSourceUrl');
@@ -71,7 +69,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   Future<void> _selectPlayerSource(int index) async {
     if (!mounted || index < 0 || index >= _playerSourceHosts.length ||
-        !_verifiedPlayerSourceIndices.contains(index) ||
         index == _sourceAttemptIndex) return;
     _playerCheckToken++;
     setState(() {
@@ -88,56 +85,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     );
   }
 
-  Future<void> _tryNextUnverifiedPlayerSource() async {
-    if (!mounted) return;
-    int? nextIndex;
-    for (var index = 0; index < _playerSourceHosts.length; index++) {
-      if (index != _sourceAttemptIndex &&
-          !_verifiedPlayerSourceIndices.contains(index)) {
-        nextIndex = index;
-        break;
-      }
-    }
-    final targetIndex = nextIndex;
-    if (targetIndex == null) return;
-    _playerCheckToken++;
-    setState(() {
-      _sourceAttemptIndex = targetIndex;
-      _playerWindowId = null;
-      _playerWindowOpened = false;
-      _pageLoaded = false;
-      _playerLoading = true;
-      _error = null;
-    });
-    await _leaveFullscreen();
-    await _bootstrapController?.loadUrl(
-      urlRequest: URLRequest(url: _urlForSource(targetIndex)),
-    );
-  }
-
   Future<void> _tryNextPlayerSource(String reason) async {
     if (!mounted) return;
-    _verifiedPlayerSourceIndices.remove(_sourceAttemptIndex);
-    _verifiedPlayerHosts.remove(_sourceAttemptIndex);
     _playerCheckToken++;
     final nextIndex = _sourceAttemptIndex + 1;
     if (nextIndex >= _playerSourceHosts.length) {
-      final fallbackIndex = _verifiedPlayerSourceIndices.isEmpty
-          ? null
-          : (_verifiedPlayerSourceIndices.toList()..sort()).first;
-      if (fallbackIndex != null) {
-        debugPrint('[KinoKino] no new source after $reason; returning to verified player');
-        setState(() {
-          _sourceAttemptIndex = fallbackIndex;
-          _pageLoaded = false;
-          _playerLoading = true;
-          _error = null;
-        });
-        await _bootstrapController?.loadUrl(
-          urlRequest: URLRequest(url: _urlForSource(fallbackIndex)),
-        );
-        return;
-      }
       debugPrint('[KinoKino] no player source left after ' + reason);
       setState(() {
         _pageLoaded = false;
@@ -170,13 +122,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             return r.width > 100 && r.height > 60 && s.display !== 'none' &&
               s.visibility !== 'hidden' && Number(s.opacity) > 0;
           };
-          const player = Array.from(document.querySelectorAll('video,iframe')).find((el) => {
+          const hasPlayer = Array.from(document.querySelectorAll('video,iframe')).some((el) => {
             if (!visible(el)) return false;
             if (el.tagName === 'VIDEO') return true;
             const u = (el.src || '').toLowerCase();
-            const playerUrl = /player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo|movie|watch/i.test(u);
-            return !!u && playerUrl &&
-              !/doubleclick|adservice|analytics|metrika|captcha|banner|reklam|advert|popunder/i.test(u);
+            return !!u && !/doubleclick|adservice|analytics|metrika|captcha|banner|reklam|advert|popunder/i.test(u);
           });
           const text = (document.body?.innerText || '').toLowerCase();
           const notFound = /ничего не найдено|фильм не найден|сериал не найден|материал не найден|контент не найден|страница не найдена|404|not found|no results/i.test(text);
@@ -184,42 +134,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const t = ((el.innerText || el.value || el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')).toLowerCase();
             return visible(el) && /смотреть|watch|play|воспроизвести|запустить/.test(t);
           });
-          if (player) {
-            let playerHost = '';
-            try {
-              const playerUrl = player.tagName === 'VIDEO'
-                ? (player.currentSrc || player.src || '')
-                : (player.src || '');
-              playerHost = new URL(playerUrl, location.href).hostname.toLowerCase();
-            } catch (_) {}
-            return '2|' + playerHost;
-          }
-          return (notFound || !hasLaunch) ? 0 : 1;
+          return hasPlayer ? 2 : ((notFound || !hasLaunch) ? 0 : 1);
         })();
       """;
       try {
         final result = await controller.evaluateJavascript(source: probe);
-        final parts = result.toString().split('|');
-        final state = int.tryParse(parts.first) ?? -1;
-        if (state == 2) {
-          final playerHost = parts.length > 1 ? parts[1].trim().toLowerCase() : '';
-          final duplicate = playerHost.isNotEmpty &&
-              _verifiedPlayerHosts.entries.any((entry) =>
-                  entry.key != _sourceAttemptIndex && entry.value == playerHost);
-          if (duplicate) {
-            await _tryNextPlayerSource('duplicate player host $playerHost');
-            return;
-          }
-          _verifiedPlayerSourceIndices.add(_sourceAttemptIndex);
-          if (playerHost.isNotEmpty) {
-            _verifiedPlayerHosts[_sourceAttemptIndex] = playerHost;
-          }
-          if (mounted) setState(() => _playerLoading = false);
-          return;
+        final state = int.tryParse(result.toString()) ?? -1;
+        if (state == 2) return;
+        if (state == 0 || _playerLoading) {
+          await _tryNextPlayerSource(state == 0 ? 'no embedded player / not found page' : 'player launch timed out');
         }
-        await _tryNextPlayerSource(
-          state == 0 ? 'no embedded player / not found page' : 'no confirmed video player',
-        );
       } catch (e) {
         debugPrint('[KinoKino] player availability check failed: $e');
       }
@@ -479,13 +403,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         let exposed = false;
         let waitingForPlayer = false;
         let launchNotified = false;
-        const notify = (state, target) => {
-          let host = '';
-          try {
-            const raw = target && (target.currentSrc || target.src || '');
-            if (raw) host = new URL(raw, location.href).hostname.toLowerCase();
-          } catch (_) {}
-          try { window.flutter_inappwebview.callHandler('playerState', {state, host}); } catch (_) {}
+        const notify = (state) => {
+          try { window.flutter_inappwebview.callHandler('playerState', {state}); } catch (_) {}
         };
         const revealWhenReady = (target, isFrame) => {
           if (waitingForPlayer) return;
@@ -495,7 +414,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           const ready = () => {
             if (finished) return;
             finished = true;
-            setTimeout(() => notify('ready', target), 500);
+            setTimeout(() => notify('ready'), 500);
           };
           if (isFrame) {
             target.addEventListener('load', ready, {once:true});
@@ -815,24 +734,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                           _playerLoading = false;
                         });
                       } else if (mounted && state == 'ready') {
-                        final playerHost = args.isNotEmpty && args.first is Map
-                            ? ((args.first as Map)['host']?.toString() ?? '').trim().toLowerCase()
-                            : '';
-                        final duplicate = playerHost.isNotEmpty &&
-                            _verifiedPlayerHosts.entries.any((entry) =>
-                                entry.key != _sourceAttemptIndex && entry.value == playerHost);
-                        if (duplicate) {
-                          _tryNextPlayerSource('duplicate player host $playerHost');
-                        } else {
-                          _playerCheckToken++;
-                          _verifiedPlayerSourceIndices.add(_sourceAttemptIndex);
-                          if (playerHost.isNotEmpty) {
-                            _verifiedPlayerHosts[_sourceAttemptIndex] = playerHost;
-                          }
-                          setState(() {
-                            _playerLoading = false;
-                          });
-                        }
+                        _playerCheckToken++;
+                        setState(() {
+                          _playerLoading = false;
+                        });
                       }
                       return {'accepted': true};
                     },
@@ -951,22 +856,14 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 },
               ),
             ),
-          if (_pageLoaded && !_playerLoading && _error == null &&
-              (_verifiedPlayerSourceIndices.length > 1 ||
-                  _verifiedPlayerSourceIndices.length < _playerSourceHosts.length))
+          if (_pageLoaded && !_playerLoading && _error == null)
             Positioned(
               top: 12,
               right: 12,
               child: SafeArea(
                 child: PopupMenuButton<int>(
                   tooltip: 'Сменить плеер',
-                  onSelected: (index) {
-                    if (index == -1) {
-                      _tryNextUnverifiedPlayerSource();
-                    } else {
-                      _selectPlayerSource(index);
-                    }
-                  },
+                  onSelected: _selectPlayerSource,
                   color: const Color(0xFF202124),
                   icon: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -984,34 +881,23 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                       ],
                     ),
                   ),
-                  itemBuilder: (context) {
-                    final available = _verifiedPlayerSourceIndices.toList()..sort();
-                    return [
-                      for (var position = 0; position < available.length; position++)
-                        PopupMenuItem<int>(
-                          value: available[position],
-                          child: Row(
-                            children: [
-                              Icon(
-                                available[position] == _sourceAttemptIndex
-                                    ? Icons.radio_button_checked
-                                    : Icons.radio_button_off,
-                                color: const Color(0xFFFFD21F),
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              Text('Плеер ${position + 1}', style: const TextStyle(color: Colors.white)),
-                            ],
-                          ),
+                  itemBuilder: (context) => [
+                    for (var i = 0; i < _playerSourceHosts.length; i++)
+                      PopupMenuItem<int>(
+                        value: i,
+                        child: Row(
+                          children: [
+                            Icon(
+                              i == _sourceAttemptIndex ? Icons.radio_button_checked : Icons.radio_button_off,
+                              color: const Color(0xFFFFD21F),
+                              size: 18,
+                            ),
+                            const SizedBox(width: 10),
+                            Text('Плеер ${i + 1}', style: const TextStyle(color: Colors.white)),
+                          ],
                         ),
-                      if (available.length < _playerSourceHosts.length)
-                        const PopupMenuItem<int>(
-                          value: -1,
-                          child: Text('Проверить другой плеер',
-                              style: TextStyle(color: Colors.white)),
-                        ),
-                    ];
-                  },
+                      ),
+                  ],
                 ),
               ),
             ),
