@@ -33,6 +33,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   Timer? _tvControlsTimer;
   Timer? _tvPointerTimer;
   bool _tvControlsVisible = true;
+  bool _tvPlayerReady = false;
   double _tvPlaybackSpeed = 1.0;
   bool _tvPointerVisible = false;
   Offset _tvPointerPosition = const Offset(0.5, 0.5);
@@ -87,7 +88,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       _playerWindowOpened = false;
       _activePlayerController = null;
       _pageLoaded = false;
-      _playerLoading = true;
+      _playerLoading = false;
+      _tvPlayerReady = false;
+      _tvControlsVisible = true;
       _error = null;
     });
     await _leaveFullscreen();
@@ -114,6 +117,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       _sourceAttemptIndex = nextIndex;
       _pageLoaded = false;
       _playerLoading = false;
+      _tvPlayerReady = false;
+      _tvControlsVisible = true;
       _playerWindowId = null;
       _playerWindowOpened = false;
       _error = null;
@@ -147,15 +152,19 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const t = ((el.innerText || el.value || el.getAttribute('aria-label') || '') + ' ' + (el.getAttribute('title') || '')).toLowerCase();
             return visible(el) && /смотреть|watch|play|воспроизвести|запустить/.test(t);
           });
-          return hasPlayer ? 2 : ((notFound || !hasLaunch) ? 0 : 1);
+          return hasPlayer ? 2 : (notFound ? 0 : (hasLaunch ? 1 : 3));
         })();
       """;
       try {
         final result = await controller.evaluateJavascript(source: probe);
         final state = int.tryParse(result.toString()) ?? -1;
         if (state == 2) return;
-        if (state == 0 || _playerLoading) {
-          await _tryNextPlayerSource(state == 0 ? 'no embedded player / not found page' : 'player launch timed out');
+        if (state == 0) {
+          await _tryNextPlayerSource('source reports no matching title');
+        } else if (_playerLoading) {
+          await _tryNextPlayerSource('player launch timed out after user activation');
+        } else {
+          debugPrint('[KinoKino] source page loaded; waiting for user to launch the player (state=$state)');
         }
       } catch (e) {
         debugPrint('[KinoKino] player availability check failed: $e');
@@ -758,7 +767,15 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       if (mounted && _tvPointerVisible) setState(() => _tvPointerVisible = false);
     });
   }
-  void _scheduleTvControlsHide() { _tvControlsTimer?.cancel(); if (!widget.tvMode) return; _tvControlsTimer = Timer(const Duration(seconds: 6), () { if (mounted && _tvControlsVisible) setState(() => _tvControlsVisible = false); }); }
+  void _scheduleTvControlsHide() {
+    _tvControlsTimer?.cancel();
+    if (!widget.tvMode || !_tvPlayerReady) return;
+    _tvControlsTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted && _tvPlayerReady && _tvControlsVisible) {
+        setState(() => _tvControlsVisible = false);
+      }
+    });
+  }
   KeyEventResult _handleTvControlsKey(FocusNode node, KeyEvent event) {
     if (!widget.tvMode || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
       return KeyEventResult.ignored;
@@ -1003,7 +1020,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                         _playerCheckToken++;
                         setState(() {
                           _playerLoading = false;
+                          _tvPlayerReady = true;
+                          _tvControlsVisible = true;
                         });
+                        _scheduleTvControlsHide();
                       }
                       return {'accepted': true};
                     },
@@ -1038,7 +1058,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   if (!_pageLoaded) {
                     _pageLoaded = true;
                     _scheduleTvControlsHide();
-                    if (mounted) setState(() => _playerLoading = true);
+                    if (mounted) setState(() {
+                      _playerLoading = false;
+                      _tvPlayerReady = false;
+                      _tvControlsVisible = true;
+                    });
                     await _activateSitePlayer(controller);
                     if (mounted) setState(() {});
                     _schedulePlayerCheck(controller, const Duration(seconds: 12));
@@ -1189,7 +1213,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 ),
               ),
             ),
-          if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
+          if (!_pageLoaded && !_playerWindowOpened)
             const Positioned.fill(
               child: ColoredBox(color: Colors.black),
             ),
@@ -1203,7 +1227,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             ),
           if (widget.tvMode && _pageLoaded && _error == null && _tvPointerVisible) _buildTvPointer(),
           if (widget.tvMode && _pageLoaded && _error == null && _tvControlsVisible) _buildTvPlayerControls(),
-          if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
+          if (!_pageLoaded && !_playerWindowOpened)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(28),
@@ -1240,6 +1264,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                             _error = null;
                             _pageLoaded = false;
                             _playerLoading = false;
+                            _tvPlayerReady = false;
+                            _tvControlsVisible = true;
                             _sourceAttemptIndex = 0;
                           });
                           _playerCheckToken++;
