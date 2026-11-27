@@ -10,12 +10,12 @@ class AppTheme {
 
   static ThemeData get dark => darkWithAccent(accent);
 
-  static ThemeData darkWithAccent(Color selectedAccent) {
+  static ThemeData darkWithAccent(Color gold) {
     final selectedSurface = surface;
     final scheme = ColorScheme.fromSeed(
-      seedColor: selectedAccent, brightness: Brightness.dark, surface: selectedSurface,
+      seedColor: gold, brightness: Brightness.dark, surface: selectedSurface,
     ).copyWith(
-      primary: selectedAccent, secondary: gold, tertiary: aqua,
+      primary: gold, secondary: gold, tertiary: aqua,
       surface: selectedSurface, onSurface: const Color(0xFFF4F6FC),
     );
     return ThemeData(
@@ -47,24 +47,24 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: selectedAccent, width: 1.5),
+          borderSide: BorderSide(color: gold, width: 1.5),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: selectedAccent, foregroundColor: Colors.white,
+          backgroundColor: gold, foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: selectedAccent, foregroundColor: Colors.white,
+          backgroundColor: gold, foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: surfaceRaised, selectedColor: selectedAccent.withValues(alpha: .22),
+        backgroundColor: surfaceRaised, selectedColor: gold.withValues(alpha: .22),
         side: BorderSide(color: Colors.white.withValues(alpha: .08)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         labelStyle: const TextStyle(color: Colors.white),
