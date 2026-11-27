@@ -420,10 +420,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   }
                   return NavigationActionPolicy.ALLOW;
                 },
-                onLoadStart: (controller, url) {
-                },
                 onLoadStop: (controller, url) async {
-                  if (url != null) _sourceUrlByController[controller] = url.toString();
                   debugPrint('[KinoKino bootstrap] loaded: $url');
                   await _installStreamBridge(controller);
                   if (!_pageLoaded && mounted) {
@@ -481,14 +478,12 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 initialSettings: _webSettings,
                 initialUserScripts: _popupGuardScripts,
                 onLoadStart: (controller, url) {
-                  if (url != null) _sourceUrlByController[controller] = url.toString();
                   debugPrint('[KinoKino player] loading: $url');
                 },
                 shouldInterceptRequest: (controller, request) =>
                     _interceptAdResource(controller, request),
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
-                  final source = _sourceUrlByController[controller] ?? _pageUrl.toString();
                   if (_isAdvertisingUrl(target)) {
                     debugPrint('[KinoKino player] blocked ad navigation: $target');
                     return NavigationActionPolicy.CANCEL;
