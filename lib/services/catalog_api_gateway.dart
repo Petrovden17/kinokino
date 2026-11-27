@@ -11,10 +11,10 @@ class CatalogApiGateway {
   static const String _workerUrl =
       'https://kinokino-tmdb.get46-get47.workers.dev';
 
-  late final Dio _edge = _createDio(baseUrl: _supabaseUrl);
+  late final Dio _edge = _createDio(baseUrl: _supabaseUrl, useSupabaseAuth: true);
   late final Dio _worker = _createDio(baseUrl: _workerUrl);
 
-  Dio _createDio({required String baseUrl}) {
+  Dio _createDio({required String baseUrl, bool useSupabaseAuth = false}) {
     final dio = Dio(BaseOptions(
       baseUrl: baseUrl,
       connectTimeout: const Duration(seconds: 10),
@@ -24,15 +24,17 @@ class CatalogApiGateway {
     ));
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) {
-        options.headers['apikey'] = _publishableKey;
-        try {
-          final session = Supabase.instance.client.auth.currentSession;
-          final token = session?.accessToken;
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
+        if (useSupabaseAuth) {
+          options.headers['apikey'] = _publishableKey;
+          try {
+            final session = Supabase.instance.client.auth.currentSession;
+            final token = session?.accessToken;
+            if (token != null && token.isNotEmpty) {
+              options.headers['Authorization'] = 'Bearer $token';
+            }
+          } catch (_) {
+            // The direct Worker fallback remains available during app startup.
           }
-        } catch (_) {
-          // The direct Worker fallback remains available during app startup.
         }
         handler.next(options);
       },
