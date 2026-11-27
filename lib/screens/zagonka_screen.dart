@@ -253,22 +253,24 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           forMainFrameOnly: false,
           source: r"""
             (() => {
-              const denyPopup = () => null;
+              const nativeOpen = window.open.bind(window);
+              const isAdTarget = (value) => /doubleclick|googlesyndication|googleadservices|adservice|taboola|outbrain|popunder|popads|popcash|exoclick|propellerads|adsterra|clickadu|hilltopads|admaven|adfox|adriver|vast|vpaid/i.test(String(value || ''));
+              const safeOpen = (url, ...args) => isAdTarget(url) ? null : nativeOpen(url, ...args);
               try {
                 Object.defineProperty(window, 'open', {
-                  configurable: false,
+                  configurable: true,
                   enumerable: true,
-                  writable: false,
-                  value: denyPopup
+                  writable: true,
+                  value: safeOpen
                 });
               } catch (_) {
-                try { window.open = denyPopup; } catch (_) {}
+                try { window.open = safeOpen; } catch (_) {}
               }
               const blockBlankTarget = (event) => {
                 const link = event.target && event.target.closest
                   ? event.target.closest('a[target="_blank"],area[target="_blank"]')
                   : null;
-                if (!link) return;
+                if (!link || !isAdTarget(link.href)) return;
                 event.preventDefault();
                 event.stopImmediatePropagation();
               };
@@ -276,7 +278,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               document.addEventListener('auxclick', blockBlankTarget, true);
               document.addEventListener('submit', (event) => {
                 const form = event.target;
-                if (form && form.target === '_blank') {
+                if (form && form.target === '_blank' && isAdTarget(form.action)) {
                   event.preventDefault();
                   event.stopImmediatePropagation();
                 }
@@ -288,7 +290,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   InAppWebViewSettings get _webSettings => InAppWebViewSettings(
         javaScriptEnabled: true,
-        javaScriptCanOpenWindowsAutomatically: false,
+        javaScriptCanOpenWindowsAutomatically: true,
         mediaPlaybackRequiresUserGesture: false,
         allowsInlineMediaPlayback: true,
         domStorageEnabled: true,
@@ -298,7 +300,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         enableEncryptedMedia: true,
         enableMedia: true,
         isElementFullscreenEnabled: true,
-        supportMultipleWindows: false,
+        supportMultipleWindows: true,
         useHybridComposition: defaultTargetPlatform == TargetPlatform.android,
         mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
         transparentBackground: false,
@@ -780,10 +782,23 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 // Attach the original popup WebView in this screen. It
                 // retains opener/session/referrer state and the site's user gesture.
                 onCreateWindow: (_, action) async {
-                  // The desired KinoKino player is embedded in the current page.
-                  // Reject all new windows so ad pop-ups/pop-unders never load.
-                  debugPrint('[KinoKino] blocked new window: ${action.request.url}');
-                  return false;
+                  final target = action.request.url?.toString();
+                  if (_isAdvertisingUrl(target)) {
+                    debugPrint('[KinoKino] blocked advertising window: $target');
+                    return false;
+                  }
+                  // Some providers launch the actual video in a separate
+                  // WebView window. Attach that native window instead of
+                  // silently rejecting it and leaving only the poster page.
+                  if (!mounted || action.windowId == null) return false;
+                  setState(() {
+                    _playerWindowId = action.windowId;
+                    _playerWindowOpened = true;
+                    _playerLoading = false;
+                    _error = null;
+                  });
+                  debugPrint('[KinoKino] opened video window: $target');
+                  return true;
                 },
                 onReceivedError: (_, request, error) {
                   debugPrint(
