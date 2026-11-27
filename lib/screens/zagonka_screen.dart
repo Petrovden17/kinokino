@@ -193,9 +193,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           if (mounted) setState(() => _playerLoading = false);
           return;
         }
-        if (state == 0 || _playerLoading) {
-          await _tryNextPlayerSource(state == 0 ? 'no embedded player / not found page' : 'player launch timed out');
-        }
+        await _tryNextPlayerSource(
+          state == 0 ? 'no embedded player / not found page' : 'no confirmed video player',
+        );
       } catch (e) {
         debugPrint('[KinoKino] player availability check failed: $e');
       }
