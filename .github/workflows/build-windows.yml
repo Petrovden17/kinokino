@@ -86,7 +86,16 @@ jobs:
           if ($pluginPatched -notmatch 'add_dependencies\(\$\{PLUGIN_NAME\}\s+\$\{PROJECT_NAME\}_DEPS\)') {
             $libPattern = '(?s)(add_library\(\$\{PLUGIN_NAME\} SHARED.*?\r?\n\))'
             if ($pluginPatched -notmatch $libPattern) { throw 'Could not locate WebView add_library declaration.' }
-            $pluginPatched = [regex]::Replace($pluginPatched, $libPattern, '$1' + "`r`nadd_dependencies(`$\{PLUGIN_NAME\} `$\{PROJECT_NAME\}_DEPS)", 1)
+            $dependencyLine = 'add_dependencies(${PLUGIN_NAME} ${PROJECT_NAME}_DEPS)'
+            $pluginPatched = [regex]::Replace(
+              $pluginPatched,
+              $libPattern,
+              [System.Text.RegularExpressions.MatchEvaluator]{
+                param($match)
+                return $match.Groups[1].Value + [Environment]::NewLine + $dependencyLine
+              },
+              1
+            )
           }
           if ($pluginPatched -match '(?m)^\s*DEPENDS\s+\$\{NUGET\}') { throw 'Invalid DEPENDS argument remains in WebView CMake.' }
           [IO.File]::WriteAllText((Resolve-Path $pluginCmake), $pluginPatched)
