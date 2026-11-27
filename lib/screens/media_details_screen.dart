@@ -91,22 +91,31 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     ];
 
     // Prefer exact IMDb cross-reference over title-only matching.
-    // It avoids choosing a different film with a similar translated title.
+    // A failure in one external-ID provider must not disable the other.
+    Map<String, dynamic> external = {};
     try {
-      final external = await _tmdb.externalIds(widget.item.id, type: _type)
+      external = await _tmdb.externalIds(widget.item.id, type: _type)
           .timeout(const Duration(seconds: 8));
-      final imdbId = external['imdb_id']?.toString() ?? '';
-      if (imdbId.isNotEmpty) {
+    } catch (e) {
+      debugPrint('[KinoKino] TMDB external IDs lookup failed: $e');
+    }
+    final imdbId = external['imdb_id']?.toString() ?? '';
+    if (imdbId.isNotEmpty) {
+      try {
         candidates.addAll(await _kinopoisk.byImdbId(imdbId)
             .timeout(const Duration(seconds: 8)));
+      } catch (e) {
+        debugPrint('[KinoKino] IMDb-to-Kinopoisk lookup failed: $e');
       }
-      final wikidataId = external['wikidata_id']?.toString() ?? '';
-      if (wikidataId.isNotEmpty) {
+    }
+    final wikidataId = external['wikidata_id']?.toString() ?? '';
+    if (wikidataId.isNotEmpty) {
+      try {
         candidates.addAll(await _kinopoisk.byWikidataId(wikidataId)
             .timeout(const Duration(seconds: 8)));
+      } catch (e) {
+        debugPrint('[KinoKino] Wikidata ID lookup failed: $e');
       }
-    } catch (e) {
-      debugPrint('[KinoKino] external ID lookup failed: $e');
     }
 
     return _selectKinopoiskMatch(
