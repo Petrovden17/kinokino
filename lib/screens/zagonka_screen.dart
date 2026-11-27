@@ -791,8 +791,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       setState(() {
         _tvPointerVisible = true;
         _tvPointerPosition = Offset(
-          (_tvPointerPosition.dx + dx).clamp(0.015, 0.985),
-          (_tvPointerPosition.dy + dy).clamp(0.015, 0.985),
+          (_tvPointerPosition.dx + dx).clamp(0.015, 0.985).toDouble(),
+          (_tvPointerPosition.dy + dy).clamp(0.015, 0.985).toDouble(),
         );
       });
       return KeyEventResult.handled;
