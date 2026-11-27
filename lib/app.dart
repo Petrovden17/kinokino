@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:dpad/dpad.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/scheduler.dart' show timeDilation;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -131,7 +132,9 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
         enabled: settings.animationsEnabled,
         child: MediaQuery(
           data: media.copyWith(disableAnimations: !settings.animationsEnabled || media.disableAnimations),
-          child: child ?? const SizedBox.shrink(),
+          child: widget.tvMode
+              ? Dpad.wrap()(context, child ?? const SizedBox.shrink())
+              : child ?? const SizedBox.shrink(),
         ),
       );
     },
