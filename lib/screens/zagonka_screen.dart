@@ -34,6 +34,23 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     return WebUri('https://www.kinokino.win/$type/$id/');
   }
 
+  List<ContentBlocker> get _adContentBlockers => [
+        // Block common ad networks, trackers and pop-under delivery hosts.
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(
+            urlFilter: r".*://([^/]*\\.)?(doubleclick\\.net|googlesyndication\\.com|googleadservices\\.com|adservice\\.google\\.[^/]+|adnxs\\.com| 광고\\.com|taboola\\.com|outbrain\\.com|mgid\\.com|popads\\.net|popcash\\.net|exoclick\\.com|propellerads\\.com|trafficjunky\\.net|adsterra\\.com|pushground\\.com|onclicka\\.com|clickadu\\.com|hilltopads\\.com|admaven\\.com)(/|$).*",
+          ),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+        // Common ad and tracking endpoints; deliberately avoid generic video/media URLs.
+        ContentBlocker(
+          trigger: ContentBlockerTrigger(
+            urlFilter: r".*://[^/]+/(ads?|adserver|adservice|banner|popunder|track|pixel)(/|\\?|$).*",
+          ),
+          action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+        ),
+      ];
+
   InAppWebViewSettings get _webSettings => InAppWebViewSettings(
         javaScriptEnabled: true,
         javaScriptCanOpenWindowsAutomatically: true,
@@ -51,6 +68,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
         transparentBackground: false,
         supportZoom: false,
+        contentBlockers: _adContentBlockers,
       );
 
   Future<void> _enterFullscreen() async {
@@ -195,6 +213,46 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       await controller.evaluateJavascript(source: script);
     } catch (e) {
       debugPrint('[KinoKino] embedded player isolation failed: $e');
+    }
+  }
+
+  Future<void> _installAdHiding(InAppWebViewController controller) async {
+    const script = r"""
+      (() => {
+        if (window.__kinoAdFilterInstalled) return;
+        window.__kinoAdFilterInstalled = true;
+        const selectors = [
+          'iframe[src*="doubleclick"]','iframe[src*="googlesyndication"]',
+          'iframe[src*="adservice"]','iframe[src*="taboola"]',
+          'iframe[src*="outbrain"]','iframe[src*="mgid"]',
+          '[id*="google_ads"]','[id*="ad-container"]','[id*="ad_"]',
+          '[class*="advert"]','[class*="banner-ad"]','[class*="ad-container"]',
+          '[class*="adsbygoogle"]','[class*="popunder"]','[class*="popup-ad"]',
+          '[data-ad]','ins.adsbygoogle'
+        ];
+        const removeAds = () => {
+          for (const selector of selectors) {
+            document.querySelectorAll(selector).forEach((el) => {
+              // Never remove a video or an ancestor containing the actual player.
+              if (el.matches('video') || el.querySelector('video') ||
+                  el.querySelector('iframe[src*="player"],iframe[src*="video"],iframe[src*="embed"]')) return;
+              el.remove();
+            });
+          }
+        };
+        // Block unsolicited popup attempts. The real inline player remains in-page.
+        window.open = () => null;
+        removeAds();
+        new MutationObserver(removeAds).observe(document.documentElement, {
+          childList: true, subtree: true
+        });
+        console.log('[KinoKino] ad filtering enabled');
+      })();
+    """;
+    try {
+      await controller.evaluateJavascript(source: script);
+    } catch (e) {
+      debugPrint('[KinoKino] ad filter injection failed: $e');
     }
   }
 
@@ -361,6 +419,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 },
                 onLoadStop: (controller, url) async {
                   debugPrint('[KinoKino bootstrap] loaded: $url');
+                  await _installAdHiding(controller);
                   await _installStreamBridge(controller);
                   if (!_pageLoaded) {
                     _pageLoaded = true;
