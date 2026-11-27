@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:typed_data';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 
 class ZagonkaScreen extends StatefulWidget {
@@ -45,8 +46,12 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       'adnxs.com', 'taboola.com', 'outbrain.com', 'mgid.com', 'popads.net',
       'popcash.net', 'exoclick.com', 'propellerads.com', 'trafficjunky.net',
       'adsterra.com', 'pushground.com', 'onclicka.com', 'clickadu.com',
-      'hilltopads.com', 'admaven.com', 'juicyads.com', ' adf.ly',
+      'hilltopads.com', 'admaven.com', 'juicyads.com', 'adf.ly',
       'trafficstars.com', 'adroll.com', 'criteo.com', 'smartadserver.com',
+      'adfox.ru', 'yandexadexchange.net', 'an.yandex.ru', 'ad.mail.ru',
+      'target.my.com', 'adriver.ru', 'begun.ru', 'adform.net',
+      'rubiconproject.com', 'openx.net', 'pubmatic.com', 'casalemedia.com',
+      'adsrvr.org', 'media.net', 'smi2.net', 'rtb.mts.ru',
     ];
     if (adHosts.any((domain) => domain.trim().isNotEmpty &&
         (host == domain.trim() || host.endsWith('.${domain.trim()}')))) {
@@ -55,11 +60,27 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     final pathParts = uri.path.toLowerCase().split('/');
     const adPathParts = <String>{
       'ad', 'ads', 'adserver', 'adservice', 'banner', 'banners',
-      'popunder', 'vast', 'vpaid',
+      'popunder', 'vast', 'vpaid', 'adunit', 'adsystem', 'preroll', 'creative',
     };
     if (pathParts.any(adPathParts.contains)) return true;
-    const adQueryKeys = <String>{'adtag', 'ad_tag', 'vast', 'vpaid', 'advertising'};
+    const adQueryKeys = <String>{'adtag', 'ad_tag', 'vast', 'vpaid', 'advertising', 'adunit', 'ad_type'};
     return uri.queryParameters.keys.any((key) => adQueryKeys.contains(key.toLowerCase()));
+  }
+
+  WebResourceResponse? _interceptAdRequest(WebResourceRequest request) {
+    final url = request.url.toString();
+    if (!_isAdvertisingUrl(url)) return null;
+    debugPrint('[KinoKino] blocked ad resource: $url');
+    // Return an empty response at the network layer. This also covers
+    // subresources requested by cross-origin player iframes on Android.
+    return WebResourceResponse(
+      contentType: 'text/plain',
+      contentEncoding: 'utf-8',
+      data: Uint8List(0),
+      statusCode: 204,
+      reasonPhrase: 'No Content',
+      headers: const {'Cache-Control': 'no-store'},
+    );
   }
 
   List<ContentBlocker> get _adContentBlockers => [
@@ -97,6 +118,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         transparentBackground: false,
         supportZoom: false,
         contentBlockers: _adContentBlockers,
+        useShouldInterceptRequest: true,
       );
 
   Future<void> _enterFullscreen() async {
@@ -522,6 +544,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     },
                   );
                 },
+                shouldInterceptRequest: (controller, request) async =>
+                    _interceptAdRequest(request),
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
                   if (_isAdvertisingUrl(target)) {
@@ -570,6 +594,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 windowId: _playerWindowId,
                 initialSettings: _webSettings,
                 onLoadStart: (_, url) => debugPrint('[KinoKino player] loading: $url'),
+                shouldInterceptRequest: (controller, request) async =>
+                    _interceptAdRequest(request),
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
                   if (_isAdvertisingUrl(target)) {
