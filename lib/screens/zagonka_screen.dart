@@ -26,7 +26,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   int? _playerWindowId;
   bool _isFullscreen = false;
   String? _error;
-  final Set<String> _openedPlayerUrls = <String>{};
 
   WebUri get _pageUrl {
     final id = widget.kinopoiskId;
