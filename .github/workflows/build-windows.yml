@@ -54,6 +54,20 @@ jobs:
       - name: Generate Windows runner
         run: flutter create --platforms=windows --project-name=kinokino .
 
+      - name: Align Forge WebView native package versions for Windows
+        shell: pwsh
+        run: |
+          $pubspec = [IO.File]::ReadAllText('pubspec.yaml')
+          $pubspec = $pubspec.Replace('flutter_inappwebview_forge: 2.1.77', 'flutter_inappwebview_forge: 2.1.79')
+          $pubspec = $pubspec.Replace('flutter_inappwebview_forge_windows: 1.0.15', 'flutter_inappwebview_forge_windows: 1.0.16')
+          $pubspec = $pubspec.Replace('flutter_inappwebview_forge_platform_interface: 1.1.22', 'flutter_inappwebview_forge_platform_interface: 1.1.23')
+          if ($pubspec -notmatch 'flutter_inappwebview_forge: 2\.1\.79' -or
+              $pubspec -notmatch 'flutter_inappwebview_forge_windows: 1\.0\.16' -or
+              $pubspec -notmatch 'flutter_inappwebview_forge_platform_interface: 1\.1\.23') {
+            throw 'Could not align Forge WebView package versions in the Windows build workspace.'
+          }
+          [IO.File]::WriteAllText((Resolve-Path 'pubspec.yaml'), $pubspec)
+
       - name: Get Flutter dependencies
         run: flutter pub get
 
