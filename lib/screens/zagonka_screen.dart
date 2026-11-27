@@ -97,10 +97,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         break;
       }
     }
-    if (nextIndex == null) return;
+    final targetIndex = nextIndex;
+    if (targetIndex == null) return;
     _playerCheckToken++;
     setState(() {
-      _sourceAttemptIndex = nextIndex!;
+      _sourceAttemptIndex = targetIndex;
       _playerWindowId = null;
       _playerWindowOpened = false;
       _pageLoaded = false;
@@ -109,7 +110,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     });
     await _leaveFullscreen();
     await _bootstrapController?.loadUrl(
-      urlRequest: URLRequest(url: _urlForSource(nextIndex)),
+      urlRequest: URLRequest(url: _urlForSource(targetIndex)),
     );
   }
 
