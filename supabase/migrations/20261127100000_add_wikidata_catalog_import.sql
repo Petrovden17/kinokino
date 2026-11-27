@@ -1,4 +1,3 @@
-create extension if not exists pg_net with schema extensions;
 create extension if not exists http with schema extensions;
 
 create or replace function public.import_kinokino_wikidata_batch(p_offset integer default 0,p_limit integer default 20)
