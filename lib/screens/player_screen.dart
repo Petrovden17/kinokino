@@ -8,7 +8,7 @@ import '../services/legal_source_service.dart';
 import '../services/internet_archive_service.dart';
 
 class PlayerScreen extends StatefulWidget {
-  const PlayerScreen({super.key, required this.streamUrl, required this.title, this.variants = const [], this.preferredVideoQuality = 'auto', this.onChooseEpisode, this.onResolveEpisode, this.onResolveAudio});
+  const PlayerScreen({super.key, required this.streamUrl, required this.title, this.variants = const [], this.preferredVideoQuality = 'auto', this.onChooseEpisode, this.onResolveEpisode, this.onResolveAudio, this.tvMode = false});
   final String streamUrl;
   final String title;
   final List<ArchiveVideoVariant> variants;
@@ -16,6 +16,7 @@ class PlayerScreen extends StatefulWidget {
   final Future<Map<String, dynamic>?> Function()? onChooseEpisode;
   final Future<ArchiveVideo?> Function(Map<String, dynamic>)? onResolveEpisode;
   final Future<ArchiveVideo?> Function(String language)? onResolveAudio;
+  final bool tvMode;
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -267,6 +268,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  KeyEventResult _handleRemoteKey(FocusNode node, KeyEvent event) {
+    if (!widget.tvMode || event is! KeyDownEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.mediaPlayPause) {
+      if (_controller?.value.isPlaying == true) {
+        _controller?.pause();
+      } else {
+        _controller?.play();
+      }
+      _revealControls();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.mediaPlay) {
+      _controller?.play();
+      _revealControls();
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.mediaPause) {
+      _controller?.pause();
+      _revealControls();
+      return KeyEventResult.handled;
+    }
+    if (!_controlsVisible && key == LogicalKeyboardKey.arrowLeft) {
+      _seek(const Duration(seconds: -10));
+      _revealControls();
+      return KeyEventResult.handled;
+    }
+    if (!_controlsVisible && key == LogicalKeyboardKey.arrowRight) {
+      _seek(const Duration(seconds: 10));
+      _revealControls();
+      return KeyEventResult.handled;
+    }
+    if (!_controlsVisible &&
+        (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.select)) {
+      _revealControls();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = _controller;
@@ -396,6 +437,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       },
       child: Focus(
         autofocus: true,
+        onKeyEvent: _handleRemoteKey,
         child: Scaffold(
           backgroundColor: Colors.black,
           appBar: _fullscreen ? null : AppBar(
