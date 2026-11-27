@@ -14,7 +14,8 @@ import 'services/settings_service.dart';
 import 'services/app_update_service.dart';
 
 class KinoKinoApp extends StatefulWidget {
-  const KinoKinoApp({super.key});
+  const KinoKinoApp({super.key, this.tvMode = false});
+  final bool tvMode;
   @override
   State<KinoKinoApp> createState() => _KinoKinoAppState();
 }
@@ -31,11 +32,17 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
   @override
   void initState() {
     super.initState();
-    Future.wait([_profiles.initialize(), _settings.initialize()]).then((_) {
-      if (!mounted) return;
-      setState(() => _ready = true);
-      _scheduleUpdateChecks();
-    });
+    _initializeServices();
+  }
+
+  Future<void> _initializeServices() async {
+    // TV firmware can lack secure-storage services. A local storage failure
+    // must not strand a successfully authenticated user on a loading screen.
+    try { await _profiles.initialize(); } catch (_) {}
+    try { await _settings.initialize(); } catch (_) {}
+    if (!mounted) return;
+    setState(() => _ready = true);
+    _scheduleUpdateChecks();
   }
 
   void _scheduleUpdateChecks() {
@@ -137,7 +144,7 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
             stream: Supabase.instance.client.auth.onAuthStateChange,
             builder: (context, snapshot) {
               final user = Supabase.instance.client.auth.currentUser;
-              if (user == null) return const AuthScreen();
+              if (user == null) return AuthScreen(tvMode: widget.tvMode);
               if (_profileEnsuredForUser != user.id) {
                 _profileEnsuredForUser = user.id;
                 AuthService().ensureProfile(user.id, user.userMetadata?['display_name'] as String?)
