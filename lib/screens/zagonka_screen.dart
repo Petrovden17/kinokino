@@ -831,7 +831,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 },
                 onReceivedHttpError: (_, request, response) {
                   if (request.isForMainFrame == true &&
-                      response.statusCode >= 400 &&
+                      (response.statusCode ?? 0) >= 400 &&
                       mounted) {
                     final failedUri = Uri.tryParse(request.url.toString());
                     final currentUri = Uri.parse(_pageUrl.toString());
