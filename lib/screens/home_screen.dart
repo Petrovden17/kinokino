@@ -1,5 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../services/local_database.dart';
 import '../services/auth_service.dart';
 import '../services/creator_service.dart';
 import '../models/media_item.dart';
@@ -40,6 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _sort = 'popularity.desc';
   int? _genreId;
   double _minRating = 0;
+  int _selectedTab = 0;
 
   String get _apiType => _type == 'tv' || _type == 'animated_tv' ? 'tv' : 'movie';
   int? get _effectiveGenre => _type == 'animation' || _type == 'animated_tv' ? 16 : _genreId;
@@ -391,174 +394,208 @@ class _HomeScreenState extends State<HomeScreen> {
     ]),
   );
 
-  Widget _heroHeader() => Container(
-    margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-    padding: const EdgeInsets.fromLTRB(20, 18, 18, 18),
-    decoration: BoxDecoration(
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xFF263B5B), Color(0xFF191D37), Color(0xFF332346)],
-      ),
-      borderRadius: BorderRadius.circular(24),
-      border: Border.all(color: Colors.white.withValues(alpha: .10)),
-      boxShadow: [
-        BoxShadow(color: Colors.black.withValues(alpha: .22), blurRadius: 22, offset: const Offset(0, 9)),
-      ],
-    ),
-    child: Row(children: [
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('ТВОЯ КИНОТЕКА', style: TextStyle(
-          color: AppTheme.aqua, fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w900,
-        )),
-        const SizedBox(height: 7),
-        const Text('Найди свою\nследующую историю', style: TextStyle(
-          fontSize: 23, height: 1.08, fontWeight: FontWeight.w900,
-        )),
-        const SizedBox(height: 7),
-        Text('Фильмы, сериалы и анимация в одном месте',
-          style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: .72))),
-      ])),
-      const SizedBox(width: 8),
-      Container(
-        width: 58, height: 58,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white.withValues(alpha: .07),
-          border: Border.all(color: AppTheme.aqua.withValues(alpha: .32)),
-        ),
-        child: const Icon(Icons.movie_filter_rounded, size: 30, color: AppTheme.aqua),
-      ),
-    ]),
+
+  Widget _heading(String title) => Padding(
+    padding: const EdgeInsets.fromLTRB(18, 18, 18, 10),
+    child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
   );
+
+  Widget _strip(List<MediaItem> list) => SizedBox(
+    height: 236,
+    child: ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      scrollDirection: Axis.horizontal,
+      itemCount: list.length,
+      separatorBuilder: (_, __) => const SizedBox(width: 11),
+      itemBuilder: (_, i) => SizedBox(width: 136, child: PosterCard(item: list[i], onTap: () => _open(list[i]))),
+    ),
+  );
+
+  Widget _grid() {
+    if (_loading) return const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()));
+    if (_error != null) return SliverFillRemaining(hasScrollBody: false, child: Center(child: Text(_error!)));
+    if (_items.isEmpty) return const SliverFillRemaining(hasScrollBody: false, child: Center(child: Text('Ничего не найдено.')));
+    final width = MediaQuery.sizeOf(context).width;
+    final cols = width > 1000 ? 6 : width > 700 ? 4 : width > 500 ? 3 : 2;
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 22),
+      sliver: SliverGrid(
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: cols, childAspectRatio: .57, crossAxisSpacing: 12, mainAxisSpacing: 14),
+        delegate: SliverChildBuilderDelegate(
+          (_, i) => i >= _items.length ? const Center(child: CircularProgressIndicator())
+            : PosterCard(item: _items[i], onTap: () => _open(_items[i])),
+          childCount: _items.length + (_hasMore ? 1 : 0)),
+      ),
+    );
+  }
+
+  Widget _homePage() {
+    final feature = _items.isEmpty ? null : _items.first;
+    Widget genre(String title, IconData icon, int id) => Padding(
+      padding: const EdgeInsets.only(right: 9),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(13),
+        onTap: () { setState(() { _genreId = id; _type = 'all'; _selectedTab = 1; }); _applyFilters(); },
+        child: Container(width: 112, padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: const Color(0xFF202124), borderRadius: BorderRadius.circular(13)),
+          child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Icon(icon, color: const Color(0xFFFFD21F)), const SizedBox(height: 5),
+            Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      ),
+    );
+    return CustomScrollView(slivers: [
+      SliverToBoxAdapter(child: Padding(
+        padding: const EdgeInsets.fromLTRB(18, 12, 14, 14),
+        child: Row(children: [
+          const Text('KinoKino', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+          const Spacer(),
+          IconButton(onPressed: () => setState(() => _selectedTab = 2), icon: const Icon(Icons.search)),
+          IconButton(onPressed: () => _openPage(SettingsScreen(service: widget.settingsService)), icon: const Icon(Icons.settings_outlined)),
+        ]),
+      )),
+      SliverToBoxAdapter(child: Container(
+        height: 222, margin: const EdgeInsets.symmetric(horizontal: 14),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(color: const Color(0xFF252525), borderRadius: BorderRadius.circular(18)),
+        child: Stack(fit: StackFit.expand, children: [
+          if (feature?.backdropPath != null)
+            CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w1280\${feature!.backdropPath}', fit: BoxFit.cover)
+          else const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [Color(0xFF512C1D), Color(0xFF141414)]))),
+          const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(
+            begin: Alignment.centerLeft, end: Alignment.centerRight,
+            colors: [Color(0xDD000000), Color(0x66000000), Color(0x11000000)]))),
+          Positioned(left: 20, bottom: 18, right: 16, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('ВЫБОР KINOKINO', style: TextStyle(color: Color(0xFFFFD21F), fontSize: 10, letterSpacing: 2, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 7),
+            Text(feature?.title ?? 'Открой мир кино', maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: feature == null ? () => setState(() => _selectedTab = 1) : () => _open(feature),
+              icon: const Icon(Icons.play_arrow, color: Colors.black),
+              label: const Text('Смотреть', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w800)),
+              style: FilledButton.styleFrom(backgroundColor: const Color(0xFFFFD21F), minimumSize: const Size(130, 40)),
+            ),
+          ])),
+        ]),
+      )),
+      SliverToBoxAdapter(child: _heading('Подборки')),
+      SliverToBoxAdapter(child: SizedBox(height: 88, child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 14), scrollDirection: Axis.horizontal,
+        children: [
+          genre('Боевики', Icons.bolt, 28), genre('Комедии', Icons.mood, 35),
+          genre('Драмы', Icons.theater_comedy, 18), genre('Фантастика', Icons.rocket_launch, 878),
+          genre('Ужасы', Icons.dark_mode, 27), genre('Триллеры', Icons.visibility, 53),
+        ],
+      ))),
+      SliverToBoxAdapter(child: _heading('Популярные новинки')),
+      if (_loading) const SliverToBoxAdapter(child: SizedBox(height: 150, child: Center(child: CircularProgressIndicator())))
+      else if (_items.isNotEmpty) SliverToBoxAdapter(child: _strip(_items.take(12).toList())),
+      SliverToBoxAdapter(child: _heading('Популярное сейчас')),
+      if (_items.length > 12) SliverToBoxAdapter(child: _strip(_items.skip(12).take(12).toList())),
+      const SliverToBoxAdapter(child: SizedBox(height: 24)),
+    ]);
+  }
+
+  Widget _catalogPage() => CustomScrollView(slivers: [
+    const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(18, 20, 18, 8),
+      child: Text('Каталог', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)))),
+    SliverToBoxAdapter(child: _filters()),
+    SliverToBoxAdapter(child: _heading('Фильмы и сериалы')),
+    _grid(),
+  ]);
+
+  Widget _searchPage() => CustomScrollView(slivers: [
+    const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(18, 20, 18, 16),
+      child: Text('Поиск', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)))),
+    SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: TextField(controller: _search, textInputAction: TextInputAction.search, onSubmitted: _searchMedia,
+        decoration: InputDecoration(hintText: 'Введите название фильма...', prefixIcon: const Icon(Icons.search),
+          suffixIcon: IconButton(onPressed: () { _search.clear(); _loadTrending(); }, icon: const Icon(Icons.close)))))),
+    SliverToBoxAdapter(child: _heading('Быстрые жанры')),
+    SliverToBoxAdapter(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14), child: Wrap(spacing: 8, runSpacing: 8,
+      children: [
+        for (final g in const [('Боевики',28),('Комедии',35),('Драмы',18),('Фантастика',878),('Ужасы',27),('Триллеры',53)])
+          ActionChip(label: Text(g.$1), backgroundColor: const Color(0xFF202124), side: BorderSide.none,
+            onPressed: () { setState(() { _genreId = g.$2; _type = 'all'; _selectedTab = 1; }); _applyFilters(); }),
+      ]))),
+    SliverToBoxAdapter(child: _heading(_search.text.isEmpty ? 'Популярное' : 'Результаты поиска')),
+    _grid(),
+  ]);
+
+  Widget _favoritesPage() => CustomScrollView(slivers: [
+    const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(18, 20, 18, 12),
+      child: Text('Избранное', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)))),
+    SliverToBoxAdapter(child: FutureBuilder<List<Map<String, Object?>>>(
+      future: LocalDatabase.favorites(),
+      builder: (context, snap) {
+        if (!snap.hasData) return const SizedBox(height: 180, child: Center(child: CircularProgressIndicator()));
+        final rows = snap.data!;
+        if (rows.isEmpty) return const Padding(padding: EdgeInsets.all(28), child: Center(child: Text('Здесь пока пусто. Добавляй фильмы в избранное.')));
+        return Column(children: rows.map((row) {
+          final poster = row['poster_path'] as String?;
+          final item = MediaItem(id: (row['id'] as num?)?.toInt() ?? 0,
+            title: row['title'] as String? ?? 'Без названия', posterPath: poster,
+            mediaType: row['media_type'] as String? ?? 'movie');
+          return ListTile(onTap: () => _open(item), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: ClipRRect(borderRadius: BorderRadius.circular(8), child: SizedBox(width: 52, height: 70,
+              child: poster == null ? const ColoredBox(color: Color(0xFF202124), child: Icon(Icons.movie))
+                : CachedNetworkImage(imageUrl: 'https://image.tmdb.org/t/p/w185\${poster}', fit: BoxFit.cover))),
+            title: Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: Text(item.mediaType == 'tv' ? 'Сериал' : 'Фильм'),
+            trailing: const Icon(Icons.chevron_right));
+        }).toList());
+      },
+    )),
+  ]);
+
+  Widget _profilePage() {
+    final profile = widget.profileService.activeProfile;
+    Widget action(IconData icon, String title, VoidCallback callback) => ListTile(
+      leading: Icon(icon, color: const Color(0xFFFFD21F)), title: Text(title),
+      trailing: const Icon(Icons.chevron_right, color: Colors.white54), onTap: callback);
+    return ListView(padding: const EdgeInsets.fromLTRB(16, 20, 16, 24), children: [
+      const Text('Профиль', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)),
+      const SizedBox(height: 18),
+      Container(padding: const EdgeInsets.all(18), decoration: BoxDecoration(color: const Color(0xFF202124), borderRadius: BorderRadius.circular(18)),
+        child: Row(children: [
+          const CircleAvatar(radius: 28, backgroundColor: Color(0xFF3A3B3D), child: Icon(Icons.person, size: 34)),
+          const SizedBox(width: 14),
+          Text(profile?.name ?? 'Гость', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+        ])),
+      const SizedBox(height: 14),
+      Card(child: Column(children: [
+        action(Icons.settings_outlined, 'Настройки', () => _openPage(SettingsScreen(service: widget.settingsService))),
+        const Divider(height: 1),
+        action(Icons.people_outline, 'Профили', () => _openPage(ProfilesScreen(service: widget.profileService))),
+        const Divider(height: 1),
+        action(Icons.history, 'История просмотров', () => _openPage(const LibraryScreen())),
+        const Divider(height: 1),
+        action(Icons.info_outline, 'О приложении', () => _openPage(const AboutScreen())),
+        if (_isCreator) action(Icons.admin_panel_settings_outlined, 'Панель создателя', () => _openPage(const CreatorConsoleScreen())),
+        const Divider(height: 1),
+        action(Icons.logout, 'Выйти', () => AuthService().signOut()),
+      ])),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final profile = widget.profileService.activeProfile;
+    final pages = [_homePage(), _catalogPage(), _searchPage(), _favoritesPage(), _profilePage()];
+    const names = ['Главная', 'Каталог', 'Поиск', 'Избранное', 'Профиль'];
+    const icons = [Icons.home_rounded, Icons.grid_view_rounded, Icons.search_rounded, Icons.favorite_border_rounded, Icons.person_outline_rounded];
     return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: const Color(0xEE080D19),
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('KinoKino', style: TextStyle(fontWeight: FontWeight.bold)),
-          Text(_isCreator ? 'by Osirisvectory · Создатель' : 'by Osirisvectory',
-              style: const TextStyle(fontSize: 10, color: Colors.white60)),
-        ]),
-        actions: [
-          IconButton(
-            tooltip: 'Удиви меня',
-            onPressed: _loading ? null : _surpriseMe,
-            icon: const Icon(Icons.shuffle_rounded),
-          ),
-          if (_showTopSearch)
-            IconButton(
-              tooltip: 'Поиск',
-              onPressed: _showSearchDialog,
-              icon: const Icon(Icons.search_rounded),
-            ),
-          if (profile != null)
-            Padding(padding: const EdgeInsets.only(right: 6),
-              child: Center(child: Text(profile.name, style: const TextStyle(color: Colors.white70)))),
-          PopupMenuButton<String>(
-            onSelected: (value) async {
-              switch (value) {
-                case 'profiles': await _openPage(ProfilesScreen(service: widget.profileService)); break;
-                case 'creator': await _openPage(const CreatorConsoleScreen()); break;
-                case 'library': await _openPage(const LibraryScreen()); break;
-                case 'settings': await _openPage(SettingsScreen(service: widget.settingsService)); break;
-                case 'about': await _openPage(const AboutScreen()); break;
-                case 'logout': await AuthService().signOut(); break;
-              }
-            },
-            itemBuilder: (context) => [
-              if (_isCreator) const PopupMenuItem(value: 'creator',
-                  child: ListTile(leading: Icon(Icons.admin_panel_settings_outlined), title: Text('Панель создателя'))),
-              const PopupMenuItem(value: 'profiles', child: ListTile(leading: Icon(Icons.people), title: Text('Профили'))),
-              const PopupMenuItem(value: 'library', child: ListTile(leading: Icon(Icons.video_library), title: Text('Библиотека'))),
-              const PopupMenuItem(value: 'settings', child: ListTile(leading: Icon(Icons.settings), title: Text('Настройки'))),
-              const PopupMenuItem(value: 'about', child: ListTile(leading: Icon(Icons.info_outline), title: Text('О приложении'))),
-              const PopupMenuItem(value: 'logout', child: ListTile(leading: Icon(Icons.logout), title: Text('Выйти из аккаунта'))),
-            ],
-          ),
-        ],
-      ),
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft, end: Alignment.bottomRight,
-            colors: [Color(0xFF101B30), Color(0xFF080D19), Color(0xFF171329)],
-            stops: [0, .55, 1],
-          ),
-        ),
-        child: Stack(children: [
-          Positioned(top: 30, right: -120, child: IgnorePointer(child: Container(
-            width: 340, height: 340,
-            decoration: BoxDecoration(shape: BoxShape.circle,
-              gradient: RadialGradient(colors: [Theme.of(context).colorScheme.primary.withValues(alpha: .13), Colors.transparent])),
-          ))),
-          CustomScrollView(
-            controller: _scroll,
-            slivers: [
-              SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).top + kToolbarHeight + 8)),
-              SliverToBoxAdapter(child: _heroHeader()),
-              SliverToBoxAdapter(child: _filters()),
-              SliverToBoxAdapter(child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 5, 18, 10),
-                child: Row(children: [
-                  const Text('Популярное сейчас', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                  const Spacer(),
-                  Icon(Icons.auto_awesome, color: Theme.of(context).colorScheme.secondary, size: 18),
-                ]),
-              )),
-              if (_loading)
-                const SliverFillRemaining(hasScrollBody: false, child: Center(child: CircularProgressIndicator()))
-              else if (_error != null)
-                SliverFillRemaining(hasScrollBody: false, child: Center(child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Text(_error!, textAlign: TextAlign.center),
-                    const SizedBox(height: 12),
-                    FilledButton.icon(onPressed: _loadTrending, icon: const Icon(Icons.refresh), label: const Text('Повторить')),
-                  ]),
-                )))
-              else if (_items.isEmpty)
-                const SliverFillRemaining(hasScrollBody: false, child: Center(child: Text('Ничего не найдено.')))
-              else
-                SliverLayoutBuilder(builder: (context, constraints) {
-                  final width = MediaQuery.sizeOf(context).width;
-                  final columns = width > 1200 ? 6 : width > 900 ? 5 : width > 650 ? 4 : 2;
-                  return SliverPadding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    sliver: SliverGrid(
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: columns, childAspectRatio: .58,
-                        crossAxisSpacing: 14, mainAxisSpacing: 16,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, i) => i >= _items.length
-                            ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-                            : TweenAnimationBuilder<double>(
-                                tween: Tween<double>(begin: 0, end: 1),
-                                duration: Duration(milliseconds: 320 + (i % 8) * 35),
-                                curve: Curves.easeOutCubic,
-                                builder: (context, value, child) => Opacity(
-                                  opacity: value,
-                                  child: Transform.translate(
-                                    offset: Offset(0, (1 - value) * 18),
-                                    child: child,
-                                  ),
-                                ),
-                                child: PosterCard(item: _items[i], onTap: () => _open(_items[i])),
-                              ),
-                        childCount: _items.length + (_hasMore ? 1 : 0),
-                      ),
-                    ),
-                  );
-                }),
-              const SliverToBoxAdapter(child: SizedBox(height: 22)),
-            ],
-          ),
-        ]),
+      backgroundColor: const Color(0xFF090A0C),
+      body: SafeArea(child: IndexedStack(index: _selectedTab, children: pages)),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedTab, onDestinationSelected: (i) => setState(() => _selectedTab = i),
+        backgroundColor: const Color(0xFF111214), indicatorColor: const Color(0x22FFD21F), height: 68,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: [for (var i = 0; i < names.length; i++) NavigationDestination(
+          icon: Icon(icons[i], size: 22), selectedIcon: Icon(icons[i], color: const Color(0xFFFFD21F), size: 23), label: names[i])],
       ),
     );
   }
