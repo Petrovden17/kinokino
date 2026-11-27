@@ -23,6 +23,11 @@ class _PosterCardState extends State<PosterCard> {
         ? item.releaseDate.substring(0, 4)
         : '';
     final kind = item.mediaType == 'tv' ? 'СЕРИАЛ' : 'ФИЛЬМ';
+    final releaseStatus = item.releaseDate.isEmpty
+        ? 'Дата выхода неизвестна'
+        : item.hasConfirmedRelease
+            ? 'Уже вышел'
+            : 'Выйдет ${item.releaseDate.substring(8, 10)}.${item.releaseDate.substring(5, 7)}.${item.releaseDate.substring(0, 4)}';
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -149,6 +154,19 @@ class _PosterCardState extends State<PosterCard> {
                             ),
                           ),
                         ],
+                        const SizedBox(height: 3),
+                        Text(
+                          releaseStatus,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: item.hasConfirmedRelease
+                                ? const Color(0xFF8DD9A8)
+                                : const Color(0xFFFFC46B),
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ],
                     ),
                   ),
