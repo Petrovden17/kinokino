@@ -13,7 +13,7 @@ class AppTheme {
   static ThemeData darkWithAccent(Color selectedAccent) {
     final selectedSurface = surface;
     final scheme = ColorScheme.fromSeed(
-      seedColor: gold, brightness: Brightness.dark, surface: selectedSurface,
+      seedColor: selectedAccent, brightness: Brightness.dark, surface: selectedSurface,
     ).copyWith(
       primary: gold, secondary: gold, tertiary: aqua,
       surface: selectedSurface, onSurface: const Color(0xFFF4F6FC),
