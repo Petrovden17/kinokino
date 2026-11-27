@@ -220,7 +220,6 @@ class AdFilterEngine {
       thirdParty: thirdParty,
       includedDomains: includedDomains,
       excludedDomains: excludedDomains,
-      exception: exception,
     );
   }
 
@@ -263,20 +262,27 @@ class AdFilterEngine {
     bool thirdParty,
   ) {
     final matches = <_AdRule>[];
-    for (final entry in rules.entries) {
-      if (host != entry.key && !host.endsWith('.${entry.key}')) continue;
-      for (final rule in entry.value) {
-        if (rule.pathRegex != null &&
-            !rule.pathRegex!.hasMatch(uri.path)) continue;
-        if (rule.resourceTypes.isNotEmpty &&
-            !rule.resourceTypes.contains(resourceType)) continue;
-        if (rule.thirdParty != null && rule.thirdParty != thirdParty) continue;
-        if (rule.includedDomains != null &&
-            !_domainOptionMatches(sourceHost, rule.includedDomains!)) continue;
-        if (rule.excludedDomains != null &&
-            _domainOptionMatches(sourceHost, rule.excludedDomains!)) continue;
-        matches.add(rule);
+    var suffixStart = 0;
+    while (suffixStart < host.length) {
+      final domain = host.substring(suffixStart);
+      final domainRules = rules[domain];
+      if (domainRules != null) {
+        for (final rule in domainRules) {
+          if (rule.pathRegex != null &&
+              !rule.pathRegex!.hasMatch(uri.path)) continue;
+          if (rule.resourceTypes.isNotEmpty &&
+              !rule.resourceTypes.contains(resourceType)) continue;
+          if (rule.thirdParty != null && rule.thirdParty != thirdParty) continue;
+          if (rule.includedDomains != null &&
+              !_domainOptionMatches(sourceHost, rule.includedDomains!)) continue;
+          if (rule.excludedDomains != null &&
+              _domainOptionMatches(sourceHost, rule.excludedDomains!)) continue;
+          matches.add(rule);
+        }
       }
+      final dot = host.indexOf('.', suffixStart);
+      if (dot < 0) break;
+      suffixStart = dot + 1;
     }
     return matches;
   }
@@ -326,7 +332,6 @@ class _AdRule {
     required this.thirdParty,
     required this.includedDomains,
     required this.excludedDomains,
-    required this.exception,
   });
 
   final String host;
@@ -335,5 +340,4 @@ class _AdRule {
   final bool? thirdParty;
   final String? includedDomains;
   final String? excludedDomains;
-  final bool exception;
 }
