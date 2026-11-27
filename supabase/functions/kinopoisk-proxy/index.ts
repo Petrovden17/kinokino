@@ -31,6 +31,10 @@ Deno.serve(async (req: Request) => {
       const query = String(body?.query ?? "").trim();
       if (query.length < 2 || query.length > 120) return json({ error: "Invalid search query" }, 400);
       path = "/v2.1/films/search-by-keyword?keyword=" + encodeURIComponent(query) + "&page=1";
+    } else if (action === "imdb") {
+      const imdbId = String(body?.imdb_id ?? "").trim();
+      if (!/^tt[0-9]{5,12}$/.test(imdbId)) return json({ error: "Invalid IMDb id" }, 400);
+      path = "/v2.2/films?imdbId=" + encodeURIComponent(imdbId);
     } else {
       if (!Number.isSafeInteger(filmId) || filmId <= 0) return json({ error: "Invalid film id" }, 400);
       switch (action) {
