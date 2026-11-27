@@ -10,7 +10,7 @@ class AppTheme {
 
   static ThemeData get dark => darkWithAccent(accent);
 
-  static ThemeData darkWithAccent(Color gold) {
+  static ThemeData darkWithAccent(Color selectedAccent) {
     final selectedSurface = surface;
     final scheme = ColorScheme.fromSeed(
       seedColor: gold, brightness: Brightness.dark, surface: selectedSurface,
