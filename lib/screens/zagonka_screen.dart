@@ -447,6 +447,26 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                       return {'accepted': true};
                     },
                   );
+                  controller.addJavaScriptHandler(
+                    handlerName: 'playerState',
+                    callback: (args) {
+                      final state = args.isNotEmpty && args.first is Map
+                          ? (args.first as Map)['state']?.toString()
+                          : null;
+                      if (mounted && state == 'loading') {
+                        setState(() {
+                          _playerLoading = true;
+                          _playerReady = false;
+                        });
+                      } else if (mounted && state == 'ready') {
+                        setState(() {
+                          _playerLoading = false;
+                          _playerReady = true;
+                        });
+                      }
+                      return {'accepted': true};
+                    },
+                  );
                 },
                 onLoadStop: (controller, url) async {
                   debugPrint('[KinoKino bootstrap] loaded: $url');
@@ -514,11 +534,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 },
               ),
             ),
-          if (!_playerWindowOpened && !_pageLoaded)
+          if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
             const Positioned.fill(
               child: ColoredBox(color: Colors.black),
             ),
-          if (!_playerWindowOpened && !_pageLoaded)
+          if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(28),
@@ -536,9 +556,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     const SizedBox(height: 18),
                     Text(
                       _error ??
-                          (_pageLoaded
-                              ? 'Запускаем встроенный плеер…'
-                              : 'Подключаем плеер…'),
+                          (_playerLoading
+                              ? 'Загружаем видеоплеер…'
+                              : (_pageLoaded
+                                  ? 'Плеер готовится к запуску…'
+                                  : 'Подключаем плеер…')),
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                         color: Colors.white70,
