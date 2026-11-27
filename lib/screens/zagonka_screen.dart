@@ -76,59 +76,125 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   // Keep the real site's launch control, but visually isolate it. The user
   // taps the original DOM element, preserving a trusted gesture and the site's
   // cookies/referrer/session checks. Never synthesize an automatic click.
+  // KinoKino embeds its player in the film page itself. Do not wait for a
+  // popup/new window: after the user taps the site's real play control, find
+  // the newly-created video/iframe and expand that element in the same WebView.
+  // This preserves the document, cookies, referrer and playback session.
   Future<void> _activateSitePlayer(InAppWebViewController controller) async {
     const script = r"""
       (() => {
-        const isolate = () => {
+        if (window.__kinoInlinePlayerWatcher) return;
+        window.__kinoInlinePlayerWatcher = true;
+        const isVisible = (node) => {
+          const r = node.getBoundingClientRect();
+          const s = getComputedStyle(node);
+          return r.width > 100 && r.height > 60 &&
+            s.display !== 'none' && s.visibility !== 'hidden' && Number(s.opacity) > 0;
+        };
+        const playerFrame = () => {
+          const frames = Array.from(document.querySelectorAll('iframe')).filter((frame) => {
+            if (!isVisible(frame) || !frame.src) return false;
+            try {
+              const u = new URL(frame.src, location.href);
+              if (u.origin === location.origin || /(^|\\.)kinokino\\.win$/i.test(u.hostname)) return false;
+              if (/doubleclick|adservice|analytics|metrika|captcha|banner|reklam/i.test(u.hostname + u.pathname)) return false;
+              return true;
+            } catch (_) { return false; }
+          });
+          // Prefer iframe URLs that look like an actual embedded player.
+          frames.sort((a, b) => {
+            const score = (f) => /player|video|embed|stream|kodik|alloha|collaps|videocdn|kinogo/i.test(f.src) ? 1 : 0;
+            return score(b) - score(a);
+          });
+          return frames[0] || null;
+        };
+        const exposeOnly = (target) => {
+          let branch = target;
+          while (branch && branch !== document.body && branch.parentElement) {
+            const parent = branch.parentElement;
+            for (const sibling of Array.from(parent.children)) {
+              if (sibling !== branch) sibling.style.setProperty('display', 'none', 'important');
+            }
+            branch = parent;
+          }
+          document.documentElement.style.cssText += ';background:#000!important;overflow:hidden!important;width:100%!important;height:100%!important';
+          document.body.style.cssText += ';background:#000!important;overflow:hidden!important;margin:0!important;padding:0!important;width:100%!important;height:100%!important';
+          target.style.setProperty('position', 'fixed', 'important');
+          target.style.setProperty('inset', '0', 'important');
+          target.style.setProperty('width', '100vw', 'important');
+          target.style.setProperty('height', '100dvh', 'important');
+          target.style.setProperty('max-width', '100vw', 'important');
+          target.style.setProperty('max-height', '100dvh', 'important');
+          target.style.setProperty('z-index', '2147483647', 'important');
+          target.style.setProperty('border', '0', 'important');
+          target.style.setProperty('margin', '0', 'important');
+          target.style.setProperty('display', 'block', 'important');
+          target.style.setProperty('visibility', 'visible', 'important');
+          target.style.setProperty('opacity', '1', 'important');
+          console.log('[KinoKino] embedded player isolated in the original page');
+          return true;
+        };
+        let exposed = false;
+        const detect = () => {
+          if (exposed) return;
+          const frame = playerFrame();
+          if (frame) {
+            exposed = exposeOnly(frame);
+            return;
+          }
+          const video = Array.from(document.querySelectorAll('video')).find(isVisible);
+          if (video) {
+            exposed = exposeOnly(video);
+          }
+        };
+        const launch = () => {
           const nodes = Array.from(document.querySelectorAll(
             'a,button,[role="button"],input[type="button"],input[type="submit"]'
           ));
           const candidate = nodes.find((node) => {
             const text = ((node.innerText || node.value || node.getAttribute('aria-label') || '') + ' ' +
               (node.getAttribute('title') || '')).trim().toLowerCase();
-            const rect = node.getBoundingClientRect();
-            const style = getComputedStyle(node);
-            return rect.width > 0 && rect.height > 0 &&
-              style.visibility !== 'hidden' && style.display !== 'none' &&
+            return isVisible(node) &&
               /смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text);
           });
           if (!candidate) return false;
+          // Isolate only the launch control until it is tapped. Once the actual
+          // embedded player appears, detect() replaces this view with the player.
           let branch = candidate;
-          while (branch && branch !== document.body) {
+          while (branch && branch !== document.body && branch.parentElement) {
             const parent = branch.parentElement;
-            if (!parent) break;
             for (const sibling of Array.from(parent.children)) {
               if (sibling !== branch) sibling.style.setProperty('visibility', 'hidden', 'important');
             }
             branch.style.setProperty('visibility', 'visible', 'important');
             branch = parent;
           }
-          document.documentElement.style.setProperty('background', '#000', 'important');
-          document.body.style.setProperty('background', '#000', 'important');
           Object.entries({
             position:'fixed', left:'50%', top:'50%', transform:'translate(-50%, -50%)',
             'z-index':'2147483647', visibility:'visible', opacity:'1',
             'pointer-events':'auto', 'min-width':'220px', 'min-height':'52px',
             'font-size':'16px', padding:'14px 24px', 'border-radius':'12px',
-            background:'#202020', color:'#fff', border:'1px solid #666',
-            'box-shadow':'0 4px 24px #000'
+            background:'#202020', color:'#fff', border:'1px solid #666'
           }).forEach(([key,value]) => candidate.style.setProperty(key,value,'important'));
-          console.log('[KinoKino] isolated original launch control; waiting for user gesture');
           return true;
         };
-        if (isolate()) return;
-        let attempts = 0;
-        const timer = setInterval(() => {
-          attempts += 1;
-          if (isolate() || attempts >= 40) clearInterval(timer);
-        }, 500);
-        new MutationObserver(() => isolate()).observe(document.documentElement, {childList:true,subtree:true});
+        const observer = new MutationObserver(() => {
+          detect();
+          if (!exposed) launch();
+        });
+        observer.observe(document.documentElement, {
+          childList:true, subtree:true, attributes:true,
+          attributeFilter:['src','style','class']
+        });
+        launch();
+        detect();
+        setInterval(detect, 700);
       })();
     """;
     try {
       await controller.evaluateJavascript(source: script);
     } catch (e) {
-      debugPrint('[KinoKino] launch control isolation failed: $e');
+      debugPrint('[KinoKino] embedded player isolation failed: $e');
     }
   }
 
