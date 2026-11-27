@@ -209,20 +209,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     final rawUrl = request.url.toString();
     final sourceUrl = _sourceUrlByController[controller] ?? _pageUrl.toString();
     if (request.isForMainFrame == true) {
-      if (!_isAllowedPlayerMainFrameUrl(rawUrl)) {
-        debugPrint('[KinoKino][BLOCKED_TOP_LEVEL_REDIRECT] $rawUrl');
-        return WebResourceResponse(
-          contentType: '',
-          contentEncoding: 'utf-8',
-          data: Uint8List(0),
-          statusCode: 204,
-          reasonPhrase: 'No Content',
-          headers: const <String, String>{
-            'Cache-Control': 'no-store, max-age=0',
-            'Content-Length': '0',
-          },
-        );
-      }
+      // Track the active document, but do not restrict legitimate player
+      // provider domains: some sources redirect through their own domains.
       _sourceUrlByController[controller] = rawUrl;
     }
     final builtInBlocked = _isAdvertisingUrl(rawUrl);
@@ -777,12 +765,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     _interceptAdResource(controller, request),
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
-                  if (defaultTargetPlatform == TargetPlatform.android &&
-                      action.isForMainFrame &&
-                      !_isAllowedPlayerMainFrameUrl(target)) {
-                    debugPrint('[KinoKino] blocked top-level redirect: $target');
-                    return NavigationActionPolicy.CANCEL;
-                  }
                   final source = _sourceUrlByController[controller] ?? _pageUrl.toString();
                   final listBlocked = target != null &&
                       AdFilterEngine.instance.shouldBlock(
