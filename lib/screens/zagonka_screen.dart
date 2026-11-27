@@ -428,6 +428,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         let exposed = false;
         let waitingForPlayer = false;
         let launchNotified = false;
+        let launchActivated = false;
         const notify = (state) => {
           try { window.flutter_inappwebview.callHandler('playerState', {state}); } catch (_) {}
         };
@@ -453,7 +454,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           }
         };
         const detect = () => {
-          if (exposed) return;
+          // Do not replace the site's visible play button with an iframe that
+          // may already exist but is still waiting for the user's launch action.
+          if (exposed || !launchActivated) return;
           const frame = playerFrame();
           if (frame) { revealWhenReady(frame, true); return; }
           const video = Array.from(document.querySelectorAll('video')).find(isVisible);
@@ -504,7 +507,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           if (!clicked) return;
           const text = ((clicked.innerText || clicked.value || clicked.getAttribute('aria-label') || '') + ' ' +
             (clicked.getAttribute('title') || '')).trim().toLowerCase();
-          if (/смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text)) notify('loading');
+          if (/смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text)) {
+            launchActivated = true;
+            notify('loading');
+            setTimeout(detect, 250);
+          }
         }, true);
         const observer = new MutationObserver(() => {
           detect();
@@ -728,16 +735,22 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           (() => {
             const x = innerWidth * $x;
             const y = innerHeight * $y;
-            const target = document.elementFromPoint(x, y);
-            if (!target) return false;
+            const hit = document.elementFromPoint(x, y);
+            if (!hit) return false;
+            const target = hit.closest?.('a,button,[role=button],input[type=button],input[type=submit]') || hit;
             target.focus?.({preventScroll:true});
             if (target.tagName === 'IFRAME') {
-              target.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, clientX:x, clientY:y}));
-              target.dispatchEvent(new MouseEvent('mousedown', {bubbles:true, clientX:x, clientY:y, button:0}));
-              target.dispatchEvent(new MouseEvent('mouseup', {bubbles:true, clientX:x, clientY:y, button:0}));
-              target.dispatchEvent(new MouseEvent('click', {bubbles:true, clientX:x, clientY:y, button:0}));
+              // Focus transfers subsequent hardware-key input into the embedded
+              // player; synthetic DOM clicks cannot cross an iframe origin.
+              target.focus?.({preventScroll:true});
+              target.contentWindow?.focus?.();
             } else {
-              target.dispatchEvent(new MouseEvent('mousemove', {bubbles:true, clientX:x, clientY:y}));
+              const options = {bubbles:true, cancelable:true, view:window, clientX:x, clientY:y, button:0};
+              target.dispatchEvent(new PointerEvent('pointerdown', options));
+              target.dispatchEvent(new MouseEvent('mousedown', options));
+              target.dispatchEvent(new PointerEvent('pointerup', options));
+              target.dispatchEvent(new MouseEvent('mouseup', options));
+              target.dispatchEvent(new MouseEvent('click', options));
               target.click?.();
             }
             return true;
@@ -1009,7 +1022,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const Positioned.fill(
               child: ColoredBox(color: Colors.black),
             ),
-          if (widget.tvMode && _pageLoaded && !_playerLoading && _error == null)
+          if (widget.tvMode && _pageLoaded && _error == null)
             Positioned.fill(
               child: Focus(
                 autofocus: true,
