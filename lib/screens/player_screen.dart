@@ -199,6 +199,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _scheduleControlsHide() {
     _controlsTimer?.cancel();
+    // Keep TV controls visible so D-pad focus never disappears.
+    if (widget.tvMode) return;
     if (!_controlsVisible || _controller?.value.isPlaying != true) return;
     _controlsTimer = Timer(const Duration(milliseconds: 2500), () {
       if (mounted && _controller?.value.isPlaying == true) {
@@ -263,7 +265,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       onPressed: action,
       iconSize: size,
       color: Colors.white,
-      style: IconButton.styleFrom(backgroundColor: Colors.black54),
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.black54,
+        shape: const CircleBorder(),
+        focusColor: widget.tvMode ? const Color(0x99FFD21F) : null,
+      ),
       icon: Icon(icon),
     );
   }
