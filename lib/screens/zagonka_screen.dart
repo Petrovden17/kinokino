@@ -353,12 +353,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           // Keep the source page alive for cookies/session and popup creation,
           // but never expose its catalogue or film page on screen.
           Positioned.fill(
-            child: IgnorePointer(
-              child: Opacity(
-                // Keep the source page fully laid out: many embedded players
-                // refuse to initialize when their parent WebView is 1x1.
-                opacity: 0.01,
-                child: InAppWebView(
+            child: InAppWebView(
                 initialUrlRequest: URLRequest(url: _pageUrl),
                 initialSettings: _webSettings,
                 onWebViewCreated: (controller) {
@@ -402,8 +397,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 },
                   onConsoleMessage: (_, message) =>
                       debugPrint('[KinoKino bootstrap console] ${message.message}'),
-                ),
-              ),
             ),
           ),
           if (_playerWindowId != null)
@@ -439,7 +432,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 },
               ),
             ),
-          if (!_playerWindowOpened)
+          if (!_playerWindowOpened && !_pageLoaded)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(28),
