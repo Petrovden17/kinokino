@@ -53,7 +53,29 @@ jobs:
         run: flutter create --platforms=windows --project-name=kinokino .
 
       - name: Get Flutter dependencies
-        run: flutter pub get
+        shell: pwsh
+        run: |
+          # Use the Windows WebView implementation and interface versions
+          # that include the Visual Studio 2026 / MSVC 14.5x compatibility fixes.
+          $pubspec = 'pubspec.yaml'
+          $source = [IO.File]::ReadAllText((Resolve-Path $pubspec))
+          $source = $source.Replace(
+            'flutter_inappwebview_forge_windows: 1.0.15',
+            'flutter_inappwebview_forge_windows: 1.0.16'
+          )
+          $source = $source.Replace(
+            'flutter_inappwebview_forge_platform_interface: 1.1.22',
+            'flutter_inappwebview_forge_platform_interface: 1.1.23'
+          )
+          if (-not $source.Contains('flutter_inappwebview_forge_windows: 1.0.16')) {
+            throw 'Windows WebView 1.0.16 override was not applied.'
+          }
+          if (-not $source.Contains('flutter_inappwebview_forge_platform_interface: 1.1.23')) {
+            throw 'WebView platform interface 1.1.23 override was not applied.'
+          }
+          [IO.File]::WriteAllText((Resolve-Path $pubspec), $source)
+          flutter pub get
+          if ($LASTEXITCODE -ne 0) { throw 'flutter pub get failed.' }
 
       - name: Repair Windows WebView CMake target names
         shell: pwsh
