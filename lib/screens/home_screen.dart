@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/local_database.dart';
@@ -233,57 +232,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  Future<void> _surpriseMe() async {
-    var candidates = _items.where((item) => item.hasRussianTitle).toList();
-    if (candidates.isEmpty) {
-      try {
-        candidates = (await _tmdb.trending(page: 1))
-            .where((item) => item.hasRussianTitle).toList();
-      } catch (_) {}
-    }
-    if (!mounted) return;
-    if (candidates.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пока нет подходящих фильмов для случайного выбора.')),
-      );
-      return;
-    }
-    final item = candidates[Random().nextInt(candidates.length)];
-    await _open(item);
-  }
-
-  Future<void> _showSearchDialog() async {
-    final controller = TextEditingController(text: _search.text);
-    final query = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Найти фильм или сериал'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          onSubmitted: (value) => Navigator.pop(dialogContext, value),
-          decoration: const InputDecoration(
-            hintText: 'Введите название',
-            prefixIcon: Icon(Icons.search),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
-          FilledButton.icon(
-            onPressed: () => Navigator.pop(dialogContext, controller.text),
-            icon: const Icon(Icons.search),
-            label: const Text('Найти'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (query == null) return;
-    _search.text = query;
-    await _searchMedia(query);
-    if (_scroll.hasClients) _scroll.animateTo(0, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
   }
 
   Future<void> _open(MediaItem item) async {
