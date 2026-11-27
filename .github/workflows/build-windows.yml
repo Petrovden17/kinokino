@@ -23,6 +23,8 @@ on:
       - "pubspec.yaml"
       - "pubspec.lock"
       - "lib/**"
+      - "!lib/screens/zagonka_screen.dart"
+      - "!.github/workflows/build-windows.yml"
       - "windows/**"
 
 jobs:
