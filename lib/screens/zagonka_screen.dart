@@ -33,6 +33,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   Timer? _tvControlsTimer;
   bool _tvControlsVisible = true;
   double _tvPlaybackSpeed = 1.0;
+  bool _tvPointerVisible = false;
+  Offset _tvPointerPosition = const Offset(0.5, 0.5);
   bool _pageLoaded = false;
   bool _playerLoading = false;
   bool _playerWindowOpened = false;
@@ -300,6 +302,24 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 event.preventDefault();
                 event.stopImmediatePropagation();
               };
+              if (window.__kinoTvPointerBridgeInstalled !== true) {
+                window.__kinoTvPointerBridgeInstalled = true;
+                window.addEventListener('message', (event) => {
+                  const data = event.data;
+                  if (!data || data.channel !== 'kino-tv-pointer' ||
+                      !Number.isFinite(data.x) || !Number.isFinite(data.y)) return;
+                  const x = Math.max(0, Math.min(1, data.x)) * window.innerWidth;
+                  const y = Math.max(0, Math.min(1, data.y)) * window.innerHeight;
+                  const target = document.elementFromPoint(x, y);
+                  if (!target) return;
+                  const options = {bubbles:true, cancelable:true, view:window, clientX:x, clientY:y};
+                  try { target.dispatchEvent(new PointerEvent('pointerdown', {...options, pointerId:1, pointerType:'mouse', isPrimary:true, buttons:1})); } catch (_) {}
+                  try { target.dispatchEvent(new MouseEvent('mousedown', {...options, buttons:1})); } catch (_) {}
+                  try { target.dispatchEvent(new PointerEvent('pointerup', {...options, pointerId:1, pointerType:'mouse', isPrimary:true, buttons:0})); } catch (_) {}
+                  try { target.dispatchEvent(new MouseEvent('mouseup', {...options, buttons:0})); } catch (_) {}
+                  target.dispatchEvent(new MouseEvent('click', options));
+                });
+              }
               if (window.__kinoTvControlBridgeInstalled !== true) {
                 window.__kinoTvControlBridgeInstalled = true;
                 window.addEventListener('message', (event) => {
@@ -731,7 +751,132 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   void _showTvControls() { if (!widget.tvMode || !mounted) return; setState(() => _tvControlsVisible = true); _scheduleTvControlsHide(); }
   void _scheduleTvControlsHide() { _tvControlsTimer?.cancel(); if (!widget.tvMode) return; _tvControlsTimer = Timer(const Duration(seconds: 6), () { if (mounted && _tvControlsVisible) setState(() => _tvControlsVisible = false); }); }
-  KeyEventResult _handleTvControlsKey(FocusNode node, KeyEvent event) { if (!widget.tvMode || (event is! KeyDownEvent && event is! KeyRepeatEvent)) return KeyEventResult.ignored; _showTvControls(); return KeyEventResult.ignored; }
+  KeyEventResult _handleTvControlsKey(FocusNode node, KeyEvent event) {
+    if (!widget.tvMode || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter ||
+        key == LogicalKeyboardKey.gameButtonA) {
+      if (!_tvPointerVisible) {
+        setState(() {
+          _tvPointerVisible = true;
+          _tvPointerPosition = const Offset(0.5, 0.5);
+        });
+      } else {
+        _clickTvPointerTarget();
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.browserBack) {
+      if (_tvPointerVisible) {
+        setState(() => _tvPointerVisible = false);
+        return KeyEventResult.handled;
+      }
+      _showTvControls();
+      return KeyEventResult.handled;
+    }
+    const step = 0.035;
+    double dx = 0;
+    double dy = 0;
+    if (key == LogicalKeyboardKey.arrowLeft) dx = -step;
+    if (key == LogicalKeyboardKey.arrowRight) dx = step;
+    if (key == LogicalKeyboardKey.arrowUp) dy = -step;
+    if (key == LogicalKeyboardKey.arrowDown) dy = step;
+    if (dx != 0 || dy != 0) {
+      setState(() {
+        _tvPointerVisible = true;
+        _tvPointerPosition = Offset(
+          (_tvPointerPosition.dx + dx).clamp(0.015, 0.985).toDouble(),
+          (_tvPointerPosition.dy + dy).clamp(0.015, 0.985).toDouble(),
+        );
+      });
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  Future<void> _clickTvPointerTarget() async {
+    final controller = _activePlayerController ?? _bootstrapController;
+    if (controller == null) return;
+    final x = _tvPointerPosition.dx.toStringAsFixed(4);
+    final y = _tvPointerPosition.dy.toStringAsFixed(4);
+    const prefix = r"""
+      (() => {
+        const x = window.innerWidth * __X__;
+        const y = window.innerHeight * __Y__;
+        const target = document.elementFromPoint(x, y);
+        if (!target) return false;
+        if (target.tagName === 'IFRAME') {
+          const rect = target.getBoundingClientRect();
+          const nx = Math.max(0, Math.min(1, (x - rect.left) / Math.max(1, rect.width)));
+          const ny = Math.max(0, Math.min(1, (y - rect.top) / Math.max(1, rect.height)));
+          try { target.contentWindow.postMessage({channel:'kino-tv-pointer', x:nx, y:ny}, '*'); } catch (_) {}
+          return true;
+        }
+        const options = {bubbles:true, cancelable:true, view:window, clientX:x, clientY:y};
+        try { target.dispatchEvent(new PointerEvent('pointerdown', {...options, pointerId:1, pointerType:'mouse', isPrimary:true, buttons:1})); } catch (_) {}
+        try { target.dispatchEvent(new MouseEvent('mousedown', {...options, buttons:1})); } catch (_) {}
+        try { target.dispatchEvent(new PointerEvent('pointerup', {...options, pointerId:1, pointerType:'mouse', isPrimary:true, buttons:0})); } catch (_) {}
+        try { target.dispatchEvent(new MouseEvent('mouseup', {...options, buttons:0})); } catch (_) {}
+        target.dispatchEvent(new MouseEvent('click', options));
+        return true;
+      })();
+    """;
+    final script = prefix.replaceAll('__X__', x).replaceAll('__Y__', y);
+    try {
+      await controller.evaluateJavascript(source: script);
+    } catch (error) {
+      debugPrint('[KinoKino TV pointer] click failed: $error');
+    }
+  }
+
+  Widget _buildTvPointer() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final left = constraints.maxWidth * _tvPointerPosition.dx - 13;
+            final top = constraints.maxHeight * _tvPointerPosition.dy - 13;
+            return Stack(
+              children: [
+                Positioned(
+                  left: left,
+                  top: top,
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0x33FFD21F),
+                      border: Border.all(color: const Color(0xFFFFD21F), width: 2.5),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black87, blurRadius: 5, spreadRadius: 1),
+                      ],
+                    ),
+                    child: Center(
+                      child: Container(
+                        width: 5,
+                        height: 5,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Color(0xFFFFD21F),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
   Future<void> _sendTvPlayerCommand(String action, {double? value}) async {
     final controller = _activePlayerController ?? _bootstrapController; if (!widget.tvMode || controller == null) return;
     final valueLiteral = value == null ? 'null' : value.toStringAsFixed(2);
@@ -1034,6 +1179,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const Positioned.fill(
               child: ColoredBox(color: Colors.black),
             ),
+          if (widget.tvMode && _pageLoaded && _error == null && _tvPointerVisible) _buildTvPointer(),
           if (widget.tvMode && _pageLoaded && _error == null && _tvControlsVisible) _buildTvPlayerControls(),
           if (widget.tvMode && _pageLoaded && _error == null && !_tvControlsVisible)
             Positioned.fill(child: Focus(autofocus: true, onKeyEvent: _handleTvControlsKey, child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _showTvControls, child: const SizedBox.expand()))),
