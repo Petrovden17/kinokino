@@ -22,6 +22,8 @@ class ZagonkaScreen extends StatefulWidget {
 class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _bootstrapController;
   bool _pageLoaded = false;
+  bool _playerLoading = false;
+  bool _playerReady = false;
   bool _playerWindowOpened = false;
   int? _playerWindowId;
   bool _isFullscreen = false;
@@ -153,17 +155,37 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           return true;
         };
         let exposed = false;
+        let waitingForPlayer = false;
+        const notify = (state) => {
+          try { window.flutter_inappwebview.callHandler('playerState', {state}); } catch (_) {}
+        };
+        const revealWhenReady = (target, isFrame) => {
+          if (waitingForPlayer) return;
+          waitingForPlayer = true;
+          exposed = exposeOnly(target);
+          let finished = false;
+          const ready = () => {
+            if (finished) return;
+            finished = true;
+            setTimeout(() => notify('ready'), 500);
+          };
+          if (isFrame) {
+            target.addEventListener('load', ready, {once:true});
+            setTimeout(() => { if (!finished) ready(); }, 12000);
+          } else if (target.readyState >= 2 && target.videoWidth > 0) {
+            ready();
+          } else {
+            target.addEventListener('loadeddata', ready, {once:true});
+            target.addEventListener('canplay', ready, {once:true});
+            setTimeout(() => { if (!finished) ready(); }, 12000);
+          }
+        };
         const detect = () => {
           if (exposed) return;
           const frame = playerFrame();
-          if (frame) {
-            exposed = exposeOnly(frame);
-            return;
-          }
+          if (frame) { revealWhenReady(frame, true); return; }
           const video = Array.from(document.querySelectorAll('video')).find(isVisible);
-          if (video) {
-            exposed = exposeOnly(video);
-          }
+          if (video) revealWhenReady(video, false);
         };
         const launch = () => {
           const nodes = Array.from(document.querySelectorAll(
@@ -196,6 +218,15 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           }).forEach(([key,value]) => candidate.style.setProperty(key,value,'important'));
           return true;
         };
+        document.addEventListener('click', (event) => {
+          const clicked = event.target && event.target.closest
+            ? event.target.closest('a,button,[role="button"],input[type="button"],input[type="submit"]')
+            : null;
+          if (!clicked) return;
+          const text = ((clicked.innerText || clicked.value || clicked.getAttribute('aria-label') || '') + ' ' +
+            (clicked.getAttribute('title') || '')).trim().toLowerCase();
+          if (/смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text)) notify('loading');
+        }, true);
         const observer = new MutationObserver(() => {
           detect();
           if (!exposed) launch();
