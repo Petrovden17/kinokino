@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -45,8 +47,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       'adnxs.com', 'taboola.com', 'outbrain.com', 'mgid.com', 'popads.net',
       'popcash.net', 'exoclick.com', 'propellerads.com', 'trafficjunky.net',
       'adsterra.com', 'pushground.com', 'onclicka.com', 'clickadu.com',
-      'hilltopads.com', 'admaven.com', 'juicyads.com', ' adf.ly',
+      'hilltopads.com', 'admaven.com', 'juicyads.com', 'adf.ly',
       'trafficstars.com', 'adroll.com', 'criteo.com', 'smartadserver.com',
+      'adfox.ru', 'adfox.yandex.ru', 'an.yandex.ru',
+      'yandexadexchange.net', 'adriver.ru', 'adriver.com',
+      'adriver-sync.com', 'adriver-serv.ru',
     ];
     if (adHosts.any((domain) => domain.trim().isNotEmpty &&
         (host == domain.trim() || host.endsWith('.${domain.trim()}')))) {
@@ -62,11 +67,46 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     return uri.queryParameters.keys.any((key) => adQueryKeys.contains(key.toLowerCase()));
   }
 
+  // Android's native interceptor sees subresources loaded by the page and
+  // cross-origin player iframes. Keep the callback synchronous and lightweight.
+  final Set<String> _loggedBlockedAdResources = <String>{};
+
+  WebResourceResponse? _interceptAdResource(
+    InAppWebViewController controller,
+    WebResourceRequest request,
+  ) {
+    if (defaultTargetPlatform != TargetPlatform.android) return null;
+
+    final rawUrl = request.url.toString();
+    if (!_isAdvertisingUrl(rawUrl)) return null;
+
+    final uri = Uri.tryParse(rawUrl);
+    if (uri != null && _loggedBlockedAdResources.length < 300) {
+      final safePath =
+          uri.path.length > 180 ? uri.path.substring(0, 180) : uri.path;
+      if (_loggedBlockedAdResources.add(uri.host + safePath)) {
+        debugPrint('[KinoKino][BLOCKED_AD] ' + uri.host + safePath);
+      }
+    }
+
+    return WebResourceResponse(
+      contentType: '',
+      contentEncoding: 'utf-8',
+      data: Uint8List(0),
+      statusCode: 204,
+      reasonPhrase: 'No Content',
+      headers: const <String, String>{
+        'Cache-Control': 'no-store, max-age=0',
+        'Content-Length': '0',
+      },
+    );
+  }
+
   List<ContentBlocker> get _adContentBlockers => [
         // Block common ad networks, trackers and pop-under delivery hosts.
         ContentBlocker(
           trigger: ContentBlockerTrigger(
-            urlFilter: r".*://([^/]*\.)?(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google\.[^/]+|adnxs\.com|taboola\.com|outbrain\.com|mgid\.com|popads\.net|popcash\.net|exoclick\.com|propellerads\.com|trafficjunky\.net|adsterra\.com|pushground\.com|onclicka\.com|clickadu\.com|hilltopads\.com|admaven\.com)(/|$).*",
+            urlFilter: r".*://([^/]*\.)?(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google\.[^/]+|adnxs\.com|taboola\.com|outbrain\.com|mgid\.com|popads\.net|popcash\.net|exoclick\.com|propellerads\.com|trafficjunky\.net|adsterra\.com|pushground\.com|onclicka\.com|clickadu\.com|hilltopads\.com|admaven\.com|adfox\.ru|adfox\.yandex\.ru|an\.yandex\.ru|yandexadexchange\.net|adriver\.ru|adriver\.com|adriver-sync\.com|adriver-serv\.ru)(/|$).*,
           ),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
@@ -96,6 +136,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
         transparentBackground: false,
         supportZoom: false,
+        useShouldInterceptRequest: defaultTargetPlatform == TargetPlatform.android,
         contentBlockers: _adContentBlockers,
       );
 
@@ -522,6 +563,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     },
                   );
                 },
+                shouldInterceptRequest: (controller, request) =>
+                    _interceptAdResource(controller, request),
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
                   if (_isAdvertisingUrl(target)) {
@@ -570,6 +613,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 windowId: _playerWindowId,
                 initialSettings: _webSettings,
                 onLoadStart: (_, url) => debugPrint('[KinoKino player] loading: $url'),
+                shouldInterceptRequest: (controller, request) =>
+                    _interceptAdResource(controller, request),
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
                   if (_isAdvertisingUrl(target)) {
