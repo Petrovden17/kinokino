@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:typed_data';
 
@@ -28,6 +29,7 @@ class ZagonkaScreen extends StatefulWidget {
 
 class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _bootstrapController;
+  InAppWebViewController? _activePlayerController;
   Timer? _tvControlsTimer;
   bool _tvControlsVisible = true;
   double _tvPlaybackSpeed = 1.0;
@@ -80,6 +82,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       _sourceAttemptIndex = index;
       _playerWindowId = null;
       _playerWindowOpened = false;
+      _activePlayerController = null;
       _pageLoaded = false;
       _playerLoading = true;
       _error = null;
@@ -730,7 +733,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   void _scheduleTvControlsHide() { _tvControlsTimer?.cancel(); if (!widget.tvMode) return; _tvControlsTimer = Timer(const Duration(seconds: 6), () { if (mounted && _tvControlsVisible) setState(() => _tvControlsVisible = false); }); }
   KeyEventResult _handleTvControlsKey(FocusNode node, KeyEvent event) { if (!widget.tvMode || (event is! KeyDownEvent && event is! KeyRepeatEvent)) return KeyEventResult.ignored; _showTvControls(); return KeyEventResult.ignored; }
   Future<void> _sendTvPlayerCommand(String action, {double? value}) async {
-    final controller = _bootstrapController; if (!widget.tvMode || controller == null) return;
+    final controller = _activePlayerController ?? _bootstrapController; if (!widget.tvMode || controller == null) return;
     final valueLiteral = value == null ? 'null' : value.toStringAsFixed(2);
     final script = """(() => { const message = {channel:'kino-tv-player', action:'$action', value:$valueLiteral};
       document.querySelectorAll('video').forEach((video) => { try {
@@ -787,6 +790,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           setState(() {
             _playerWindowId = null;
             _playerWindowOpened = false;
+            _activePlayerController = null;
           });
           _leaveFullscreen();
         }
@@ -874,6 +878,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   await _installStreamBridge(controller);
                   if (!_pageLoaded) {
                     _pageLoaded = true;
+                    _scheduleTvControlsHide();
                     if (mounted) setState(() => _playerLoading = true);
                     await _activateSitePlayer(controller);
                     if (mounted) setState(() {});
@@ -922,6 +927,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               child: InAppWebView(
                 key: ValueKey('kino-inline-player-$_playerWindowId'),
                 windowId: _playerWindowId,
+                onWebViewCreated: (controller) { _activePlayerController = controller; },
                 initialSettings: _webSettings,
                 initialUserScripts: _popupGuardScripts,
                 onLoadStart: (controller, url) {
