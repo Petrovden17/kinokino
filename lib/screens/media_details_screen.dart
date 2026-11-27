@@ -727,6 +727,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     if (!mounted) return;
     if (id == null || id <= 0) {
       debugPrint('[KinoKino] no Kinopoisk ID resolved for TMDB item ${widget.item.id}; player was not opened.');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Не удалось найти фильм в каталоге источников. Попробуй позже или выбери другой фильм.'),
+        duration: Duration(seconds: 4),
+      ));
       return;
     }
     await Navigator.push(context, MaterialPageRoute(
