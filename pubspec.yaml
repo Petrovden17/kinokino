@@ -24,7 +24,7 @@ dependencies:
   archive: ^4.0.2
   crypto: ^3.0.6
   supabase_flutter: ^2.0.0
-  flutter_inappwebview_forge: ^2.1.79
+  flutter_inappwebview_forge: 2.1.77
   webview_flutter: ^4.14.1
   webview_flutter_android: ^4.14.1
   url_launcher: ^6.3.2
