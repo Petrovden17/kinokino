@@ -19,6 +19,10 @@ class AdFilterEngine {
         'https://filters.adtidy.org/extension/chromium/filters/2.txt',
     'adguard-russian':
         'https://filters.adtidy.org/extension/chromium/filters/1.txt',
+    'adguard-popups':
+        'https://filters.adtidy.org/extension/chromium/filters/19.txt',
+    'adguard-mobile-ads':
+        'https://filters.adtidy.org/extension/chromium/filters/11.txt',
     'easyprivacy': 'https://easylist.to/easylist/easyprivacy.txt',
   };
 
@@ -130,7 +134,7 @@ class AdFilterEngine {
 
         final exception = line.startsWith('@@');
         final networkRule = exception ? line.substring(2) : line;
-        final parsed = _parseRule(networkRule, exception);
+        final parsed = _parseRule(networkRule);
         if (parsed == null) continue;
         final target = exception ? allowed : blocked;
         target.putIfAbsent(parsed.host, () => <_AdRule>[]).add(parsed);
@@ -146,7 +150,7 @@ class AdFilterEngine {
     _ready = true;
   }
 
-  _AdRule? _parseRule(String line, bool exception) {
+  _AdRule? _parseRule(String line) {
     if (!line.startsWith('||')) return null;
     final optionIndex = line.indexOf(r'$');
     final pattern = optionIndex < 0 ? line : line.substring(0, optionIndex);
@@ -185,7 +189,8 @@ class AdFilterEngine {
     for (final option in options) {
       if (option.startsWith('domain=')) {
         final values = option.substring(7).split('|');
-        includedDomains = values.where((v) => !v.startsWith('~')).join('|');
+        final included = values.where((v) => !v.startsWith('~')).join('|');
+        includedDomains = included.isEmpty ? null : included;
         excludedDomains = values.where((v) => v.startsWith('~'))
             .map((v) => v.substring(1)).join('|');
       }
