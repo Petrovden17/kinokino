@@ -680,8 +680,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     if (id == null || id <= 0) {
       setState(() => _resolvingKinopoisk = true);
       try {
-        final selected = await _findKinopoiskMatch(_details)
-            .timeout(const Duration(seconds: 18));
+        final selected = await _findKinopoiskMatch(_details);
         final rawId = selected?['filmId'] ?? selected?['kinopoiskId'] ??
             selected?['kinopoisk_id'] ?? selected?['id'];
         id = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
