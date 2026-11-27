@@ -244,86 +244,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
-  // Retained for compatibility with the native popup path; the current flow blocks popups.
-  // ignore: unused_element
-  Future<bool> _showPlayerWindow(CreateWindowAction action) async {
-    if (!mounted || _playerWindowOpened) {
-      debugPrint('[KinoKino] ignoring extra popup: ${action.request.url}');
-      return false;
-    }
-    _playerWindowOpened = true;
-    await _enterFullscreen();
-    if (mounted) setState(() => _error = null);
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      useSafeArea: false,
-      builder: (dialogContext) => PopScope(
-        canPop: true,
-        onPopInvokedWithResult: (didPop, result) {
-          if (didPop) {
-            _playerWindowOpened = false;
-            _leaveFullscreen();
-          }
-        },
-        child: Scaffold(
-          backgroundColor: Colors.black,
-          body: SizedBox.expand(
-            child: InAppWebView(
-              key: ValueKey('kino-player-window-${action.windowId}'),
-              windowId: action.windowId,
-              initialSettings: _webSettings,
-              onWebViewCreated: (controller) {
-                controller.addJavaScriptHandler(
-                  handlerName: 'streamBridge',
-                  callback: (args) {
-                    _handleStreamBridgeCall(args);
-                    return {'accepted': true};
-                  },
-                );
-                debugPrint('[KinoKino] actual player popup attached');
-              },
-              onLoadStart: (_, url) =>
-                  debugPrint('[KinoKino player] loading: $url'),
-              onLoadStop: (controller, url) async {
-                debugPrint('[KinoKino player] loaded: $url');
-                await _installStreamBridge(controller);
-                _probePlayerWindow(controller);
-              },
-              onReceivedError: (_, request, error) => debugPrint(
-                '[KinoKino player] error main=${request.isForMainFrame}: ${error.description}; ${request.url}',
-              ),
-              onReceivedHttpError: (_, request, response) => debugPrint(
-                '[KinoKino player] HTTP ${response.statusCode} main=${request.isForMainFrame}: ${request.url}',
-              ),
-              onCloseWindow: (_) {
-                debugPrint('[KinoKino] player popup closed');
-                _playerWindowOpened = false;
-                if (Navigator.of(dialogContext).canPop()) {
-                  Navigator.of(dialogContext).pop();
-                }
-                _leaveFullscreen();
-              },
-              onEnterFullscreen: (_) => _enterFullscreen(),
-              onExitFullscreen: (_) => _leaveFullscreen(),
-              // Block advertising popups spawned by the player itself.
-              onCreateWindow: (_, nestedAction) async {
-                debugPrint('[KinoKino] blocked nested popup: ${nestedAction.request.url}');
-                return false;
-              },
-            ),
-          ),
-        ),
-      ),
-    ).then((_) {
-      _playerWindowOpened = false;
-      _leaveFullscreen();
-      if (mounted) setState(() {});
-    });
-    return true;
-  }
-
   @override
   void dispose() {
     SystemChrome.setPreferredOrientations(const []);
@@ -351,8 +271,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         children: [
           // Keep the source page alive for cookies/session and popup creation,
           // but never expose its catalogue or film page on screen.
+          // Keep the opener WebView alive for cookies/session and the native
+          // windowId, but never let its catalogue page paint over the real player.
+          // Opacity preserves the platform view; Offstage/removal can destroy the
+          // WebView window relationship on Android.
           Positioned.fill(
-            child: InAppWebView(
+            child: IgnorePointer(
+              ignoring: _playerWindowId != null,
+              child: Opacity(
+                opacity: _playerWindowId == null ? 1 : 0,
+                child: InAppWebView(
                 initialUrlRequest: URLRequest(url: _pageUrl),
                 initialSettings: _webSettings,
                 onWebViewCreated: (controller) {
@@ -396,6 +324,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 },
                   onConsoleMessage: (_, message) =>
                       debugPrint('[KinoKino bootstrap console] ${message.message}'),
+                ),
+              ),
             ),
           ),
           if (_playerWindowId != null)
