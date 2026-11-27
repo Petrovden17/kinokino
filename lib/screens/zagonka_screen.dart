@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -146,7 +147,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         ),
       ];
 
-  List<UserScript> get _popupGuardScripts => [
+  UnmodifiableListView<UserScript> get _popupGuardScripts =>
+      UnmodifiableListView<UserScript>([
         UserScript(
           injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
           forMainFrameOnly: false,
@@ -183,7 +185,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             })();
           """,
         ),
-      ];
+      ]);
 
   InAppWebViewSettings get _webSettings => InAppWebViewSettings(
         javaScriptEnabled: true,
