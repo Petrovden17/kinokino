@@ -22,7 +22,8 @@ class ProfileService {
   Future<void> initialize() async {
     String? raw;
     try { raw = await _storage.read(key: _storageKey); }
-    catch (_) {
+    catch (_) {}
+    if (raw == null) {
       final prefs = await SharedPreferences.getInstance();
       raw = prefs.getString(_storageKey);
     }
@@ -31,7 +32,8 @@ class ProfileService {
       _profiles.addAll(decoded.map((e) => UserProfile.fromJson(Map<String, dynamic>.from(e))));
     }
     try { _activeId = await _storage.read(key: 'kinokino_active_profile'); }
-    catch (_) {
+    catch (_) {}
+    if (_activeId == null) {
       final prefs = await SharedPreferences.getInstance();
       _activeId = prefs.getString('kinokino_active_profile');
     }
