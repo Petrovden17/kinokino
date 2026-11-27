@@ -172,7 +172,9 @@ class AdFilterEngine {
 
     var pathPattern = match.group(2) ?? '';
     if (pathPattern.startsWith('^')) pathPattern = pathPattern.substring(1);
-    if (pathPattern.isNotEmpty && !pathPattern.startsWith('/')) return null;
+    if (pathPattern.isNotEmpty &&
+        !pathPattern.startsWith('/') &&
+        !pathPattern.startsWith('?')) return null;
 
     final resourceTypes = <String>{};
     const knownTypes = {
@@ -274,7 +276,8 @@ class AdFilterEngine {
       if (domainRules != null) {
         for (final rule in domainRules) {
           if (rule.pathRegex != null &&
-              !rule.pathRegex!.hasMatch(uri.path)) continue;
+              !rule.pathRegex!.hasMatch(
+                uri.path + (uri.hasQuery ? '?${uri.query}' : ''))) continue;
           if (rule.resourceTypes.isNotEmpty &&
               !rule.resourceTypes.contains(resourceType)) continue;
           if (rule.thirdParty != null && rule.thirdParty != thirdParty) continue;
