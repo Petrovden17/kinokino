@@ -70,6 +70,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
 
   Future<void> _selectPlayerSource(int index) async {
     if (!mounted || index < 0 || index >= _playerSourceHosts.length ||
+        !_verifiedPlayerSourceIndices.contains(index) ||
         index == _sourceAttemptIndex) return;
     _playerCheckToken++;
     setState(() {
@@ -86,12 +87,54 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     );
   }
 
+  Future<void> _tryNextUnverifiedPlayerSource() async {
+    if (!mounted) return;
+    int? nextIndex;
+    for (var index = 0; index < _playerSourceHosts.length; index++) {
+      if (index != _sourceAttemptIndex &&
+          !_verifiedPlayerSourceIndices.contains(index)) {
+        nextIndex = index;
+        break;
+      }
+    }
+    if (nextIndex == null) return;
+    _playerCheckToken++;
+    setState(() {
+      _sourceAttemptIndex = nextIndex!;
+      _playerWindowId = null;
+      _playerWindowOpened = false;
+      _pageLoaded = false;
+      _playerLoading = true;
+      _error = null;
+    });
+    await _leaveFullscreen();
+    await _bootstrapController?.loadUrl(
+      urlRequest: URLRequest(url: _urlForSource(nextIndex)),
+    );
+  }
+
   Future<void> _tryNextPlayerSource(String reason) async {
     if (!mounted) return;
     _verifiedPlayerSourceIndices.remove(_sourceAttemptIndex);
     _playerCheckToken++;
     final nextIndex = _sourceAttemptIndex + 1;
     if (nextIndex >= _playerSourceHosts.length) {
+      final fallbackIndex = _verifiedPlayerSourceIndices.isEmpty
+          ? null
+          : (_verifiedPlayerSourceIndices.toList()..sort()).first;
+      if (fallbackIndex != null) {
+        debugPrint('[KinoKino] no new source after $reason; returning to verified player');
+        setState(() {
+          _sourceAttemptIndex = fallbackIndex;
+          _pageLoaded = false;
+          _playerLoading = true;
+          _error = null;
+        });
+        await _bootstrapController?.loadUrl(
+          urlRequest: URLRequest(url: _urlForSource(fallbackIndex)),
+        );
+        return;
+      }
       debugPrint('[KinoKino] no player source left after ' + reason);
       setState(() {
         _pageLoaded = false;
@@ -866,14 +909,21 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               ),
             ),
           if (_pageLoaded && !_playerLoading && _error == null &&
-              _verifiedPlayerSourceIndices.length > 1)
+              (_verifiedPlayerSourceIndices.length > 1 ||
+                  _verifiedPlayerSourceIndices.length < _playerSourceHosts.length))
             Positioned(
               top: 12,
               right: 12,
               child: SafeArea(
                 child: PopupMenuButton<int>(
                   tooltip: 'Сменить плеер',
-                  onSelected: _selectPlayerSource,
+                  onSelected: (index) {
+                    if (index == -1) {
+                      _tryNextUnverifiedPlayerSource();
+                    } else {
+                      _selectPlayerSource(index);
+                    }
+                  },
                   color: const Color(0xFF202124),
                   icon: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -910,6 +960,12 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                               Text('Плеер ${position + 1}', style: const TextStyle(color: Colors.white)),
                             ],
                           ),
+                        ),
+                      if (available.length < _playerSourceHosts.length)
+                        const PopupMenuItem<int>(
+                          value: -1,
+                          child: Text('Проверить другой плеер',
+                              style: TextStyle(color: Colors.white)),
                         ),
                     ];
                   },
