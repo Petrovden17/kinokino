@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:dpad/dpad.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/local_database.dart';
 import '../services/auth_service.dart';
@@ -177,14 +178,29 @@ class _HomeScreenState extends State<HomeScreen> {
     _page = 1;
     _hasMore = true;
     try {
-      final results = await _tmdb.trending(page: 1);
+      List<MediaItem> results;
+      try {
+        results = await _tmdb.trending(page: 1);
+      } catch (_) {
+        // Some proxy deployments do not expose the trending endpoint.
+        // Popular movie and TV lists are a safe first-page fallback.
+        final popular = await Future.wait([
+          _tmdb.popular(type: 'movie', page: 1),
+          _tmdb.popular(type: 'tv', page: 1),
+        ]);
+        final unique = <String, MediaItem>{};
+        for (final item in [...popular[0], ...popular[1]]) {
+          unique['${item.mediaType}:${item.id}'] = item;
+        }
+        results = unique.values.toList()..sort((a, b) => b.popularity.compareTo(a.popularity));
+      }
       if (mounted) setState(() {
         _items = results;
         _page = 1;
         _hasMore = results.isNotEmpty;
       });
     } catch (_) {
-      if (mounted) setState(() => _error = 'Не удалось загрузить каталог. Проверьте подключение и попробуйте ещё раз.');
+      if (mounted) setState(() => _error = 'Каталог сейчас недоступен. Проверьте интернет на телевизоре и нажмите «Повторить».');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -362,7 +378,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _strip(List<MediaItem> list) {
     final tvLayout = MediaQuery.sizeOf(context).width >= 900;
-    return SizedBox(
+    return DpadRegion(
+      child: SizedBox(
     height: tvLayout ? 292 : 236,
     child: ListView.separated(
       padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -371,7 +388,7 @@ class _HomeScreenState extends State<HomeScreen> {
       separatorBuilder: (_, __) => const SizedBox(width: 11),
       itemBuilder: (_, i) => SizedBox(width: tvLayout ? 174 : 136, child: PosterCard(item: list[i], onTap: () => _open(list[i]))),
     ),
-  );
+  ));
   }
 
   Widget _grid() {
@@ -560,27 +577,45 @@ class _HomeScreenState extends State<HomeScreen> {
     const names = ['Главная', 'Каталог', 'Поиск', 'Избранное', 'Профиль'];
     const icons = [Icons.home_rounded, Icons.grid_view_rounded, Icons.search_rounded, Icons.favorite_border_rounded, Icons.person_outline_rounded];
     final tvLayout = MediaQuery.sizeOf(context).width >= 900;
+    final content = NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (_selectedTab == 1 || _selectedTab == 2) {
+          if (notification.metrics.pixels > 150 && !_showTopSearch) {
+            setState(() => _showTopSearch = true);
+          } else if (notification.metrics.pixels <= 150 && _showTopSearch) {
+            setState(() => _showTopSearch = false);
+          }
+          if (notification.metrics.extentAfter < 700) _loadMore();
+        }
+        return false;
+      },
+      child: FocusTraversalGroup(
+        child: SafeArea(child: IndexedStack(index: _selectedTab, children: pages)),
+      ),
+    );
     return Scaffold(
       backgroundColor: const Color(0xFF090A0C),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          if (_selectedTab == 1 || _selectedTab == 2) {
-            if (notification.metrics.pixels > 150 && !_showTopSearch) {
-              setState(() => _showTopSearch = true);
-            } else if (notification.metrics.pixels <= 150 && _showTopSearch) {
-              setState(() => _showTopSearch = false);
-            }
-            if (notification.metrics.extentAfter < 700) _loadMore();
-          }
-          return false;
-        },
-        child: FocusTraversalGroup(
-          child: SafeArea(child: IndexedStack(index: _selectedTab, children: pages)),
-        ),
-      ),
-      bottomNavigationBar: NavigationBar(
+      body: tvLayout
+          ? Row(children: [
+              NavigationRail(
+                selectedIndex: _selectedTab,
+                onDestinationSelected: (i) => setState(() => _selectedTab = i),
+                labelType: NavigationRailLabelType.all,
+                backgroundColor: const Color(0xFF111214),
+                indicatorColor: const Color(0x22FFD21F),
+                minWidth: 92,
+                destinations: [for (var i = 0; i < names.length; i++) NavigationRailDestination(
+                  icon: Icon(icons[i], size: 25),
+                  selectedIcon: Icon(icons[i], color: const Color(0xFFFFD21F), size: 26),
+                  label: Text(names[i]),
+                )],
+              ),
+              Expanded(child: content),
+            ])
+          : content,
+      bottomNavigationBar: tvLayout ? null : NavigationBar(
         selectedIndex: _selectedTab, onDestinationSelected: (i) => setState(() => _selectedTab = i),
-        backgroundColor: const Color(0xFF111214), indicatorColor: const Color(0x22FFD21F), height: tvLayout ? 82 : 68,
+        backgroundColor: const Color(0xFF111214), indicatorColor: const Color(0x22FFD21F), height: 68,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: [for (var i = 0; i < names.length; i++) NavigationDestination(
           icon: Icon(icons[i], size: 22), selectedIcon: Icon(icons[i], color: const Color(0xFFFFD21F), size: 23), label: names[i])],
