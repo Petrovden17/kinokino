@@ -94,12 +94,14 @@ jobs:
           if "android.software.leanback" not in content:
               content = content.replace("    <application", tv_features + "    <application", 1)
 
-          launcher_category = '<category android:name="android.intent.category.LAUNCHER" />'
           leanback_category = '<category android:name="android.intent.category.LEANBACK_LAUNCHER" />'
           if leanback_category not in content:
-              if launcher_category not in content:
+              launcher_marker = 'android:name="android.intent.category.LAUNCHER"'
+              launcher_index = content.find(launcher_marker)
+              if launcher_index < 0:
                   raise SystemExit("Android manifest has no standard launcher category")
-              content = content.replace(launcher_category, launcher_category + "\n            " + leanback_category, 1)
+              category_end = content.find(">", launcher_index)
+              content = content[:category_end + 1] + "\n            " + leanback_category + content[category_end + 1:]
 
           app_start = content.find("<application")
           app_end = content.find(">", app_start)
