@@ -36,7 +36,7 @@ class KinopoiskService {
 
   /// Returns a previously verified TMDB → Kinopoisk mapping, if available.
   Future<Map<String, dynamic>?> cachedMatch(
-    int tmdbId, {required String mediaType}
+    int tmdbId, {required String mediaType, String? fallbackTitle}
   ) async {
     final row = await _client.from('kinokino_id_map')
         .select('kinopoisk_id, title, release_year, imdb_id, wikidata_id, match_method, confidence')
@@ -47,8 +47,8 @@ class KinopoiskService {
     if (row == null) return null;
     return {
       'filmId': row['kinopoisk_id'],
-      'nameRu': row['title'],
-      'name': row['title'],
+      'nameRu': (fallbackTitle?.trim().isNotEmpty ?? false) ? fallbackTitle!.trim() : row['title'],
+      'name': (fallbackTitle?.trim().isNotEmpty ?? false) ? fallbackTitle!.trim() : row['title'],
       'year': row['release_year'],
       'imdbId': row['imdb_id'],
       'wikidataId': row['wikidata_id'],
