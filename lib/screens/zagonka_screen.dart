@@ -433,6 +433,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               ),
             ),
           if (!_playerWindowOpened && !_pageLoaded)
+            const Positioned.fill(
+              child: ColoredBox(color: Colors.black),
+            ),
+          if (!_playerWindowOpened && !_pageLoaded)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(28),
