@@ -28,7 +28,9 @@ class ZagonkaScreen extends StatefulWidget {
 
 class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _bootstrapController;
-  Offset _tvPointerPosition = const Offset(0.5, 0.5);
+  Timer? _tvControlsTimer;
+  bool _tvControlsVisible = true;
+  double _tvPlaybackSpeed = 1.0;
   bool _pageLoaded = false;
   bool _playerLoading = false;
   bool _playerWindowOpened = false;
@@ -295,6 +297,22 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 event.preventDefault();
                 event.stopImmediatePropagation();
               };
+              if (window.__kinoTvControlBridgeInstalled !== true) {
+                window.__kinoTvControlBridgeInstalled = true;
+                window.addEventListener('message', (event) => {
+                  const data = event.data; if (!data || data.channel !== 'kino-tv-player') return;
+                  document.querySelectorAll('video').forEach((video) => { try {
+                    if (data.action === 'playPause') video.paused ? video.play() : video.pause();
+                    if (data.action === 'seekBack') video.currentTime = Math.max(0, video.currentTime - 10);
+                    if (data.action === 'seekForward') video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+                    if (data.action === 'speed' && Number.isFinite(data.value)) video.playbackRate = data.value;
+                  } catch (_) {} });
+                });
+                const style = document.createElement('style');
+                style.textContent = 'video::-webkit-media-controls{display:none!important} video::-webkit-media-controls-enclosure{display:none!important} .vjs-control-bar,.plyr__controls,.jw-controlbar,.jw-controls,.fp-controls,.dplayer-controller,.art-video-player .art-control,.shaka-controls-container{display:none!important;opacity:0!important;visibility:hidden!important;pointer-events:none!important}';
+                (document.head || document.documentElement).appendChild(style);
+                document.querySelectorAll('video').forEach((video) => { video.controls = false; });
+              }
               document.addEventListener('click', blockBlankTarget, true);
               document.addEventListener('auxclick', blockBlankTarget, true);
               document.addEventListener('submit', (event) => {
@@ -708,64 +726,53 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
-  KeyEventResult _handleTvPointerKey(FocusNode node, KeyEvent event) {
-    if (!widget.tvMode || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
-      return KeyEventResult.ignored;
-    }
-    const step = 0.035;
-    var next = _tvPointerPosition;
-    final key = event.logicalKey;
-    if (key == LogicalKeyboardKey.arrowLeft) {
-      next = Offset((next.dx - step).clamp(0.0, 1.0).toDouble(), next.dy);
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      next = Offset((next.dx + step).clamp(0.0, 1.0).toDouble(), next.dy);
-    } else if (key == LogicalKeyboardKey.arrowUp) {
-      next = Offset(next.dx, (next.dy - step).clamp(0.0, 1.0).toDouble());
-    } else if (key == LogicalKeyboardKey.arrowDown) {
-      next = Offset(next.dx, (next.dy + step).clamp(0.0, 1.0).toDouble());
-    } else if (key == LogicalKeyboardKey.enter ||
-        key == LogicalKeyboardKey.select ||
-        key == LogicalKeyboardKey.numpadEnter ||
-        key == LogicalKeyboardKey.gameButtonA) {
-      final controller = _bootstrapController;
-      if (controller != null) {
-        final x = _tvPointerPosition.dx.toStringAsFixed(4);
-        final y = _tvPointerPosition.dy.toStringAsFixed(4);
-        controller.evaluateJavascript(source: """
-          (() => {
-            const x = innerWidth * $x;
-            const y = innerHeight * $y;
-            const hit = document.elementFromPoint(x, y);
-            if (!hit) return false;
-            const target = hit.closest?.('a,button,[role=button],input[type=button],input[type=submit]') || hit;
-            target.focus?.({preventScroll:true});
-            if (target.tagName === 'IFRAME') {
-              // Focus transfers subsequent hardware-key input into the embedded
-              // player; synthetic DOM clicks cannot cross an iframe origin.
-              target.focus?.({preventScroll:true});
-              target.contentWindow?.focus?.();
-            } else {
-              const options = {bubbles:true, cancelable:true, view:window, clientX:x, clientY:y, button:0};
-              target.dispatchEvent(new PointerEvent('pointerdown', options));
-              target.dispatchEvent(new MouseEvent('mousedown', options));
-              target.dispatchEvent(new PointerEvent('pointerup', options));
-              target.dispatchEvent(new MouseEvent('mouseup', options));
-              target.dispatchEvent(new MouseEvent('click', options));
-            }
-            return true;
-          })();
-        """);
-      }
-      return KeyEventResult.handled;
-    } else {
-      return KeyEventResult.ignored;
-    }
-    setState(() => _tvPointerPosition = next);
-    return KeyEventResult.handled;
+  void _showTvControls() { if (!widget.tvMode || !mounted) return; setState(() => _tvControlsVisible = true); _scheduleTvControlsHide(); }
+  void _scheduleTvControlsHide() { _tvControlsTimer?.cancel(); if (!widget.tvMode) return; _tvControlsTimer = Timer(const Duration(seconds: 6), () { if (mounted && _tvControlsVisible) setState(() => _tvControlsVisible = false); }); }
+  KeyEventResult _handleTvControlsKey(FocusNode node, KeyEvent event) { if (!widget.tvMode || (event is! KeyDownEvent && event is! KeyRepeatEvent)) return KeyEventResult.ignored; _showTvControls(); return KeyEventResult.ignored; }
+  Future<void> _sendTvPlayerCommand(String action, {double? value}) async {
+    final controller = _bootstrapController; if (!widget.tvMode || controller == null) return;
+    final valueLiteral = value == null ? 'null' : value.toStringAsFixed(2);
+    final script = """(() => { const message = {channel:'kino-tv-player', action:'$action', value:$valueLiteral};
+      document.querySelectorAll('video').forEach((video) => { try {
+        if (message.action === 'playPause') video.paused ? video.play() : video.pause();
+        if (message.action === 'seekBack') video.currentTime = Math.max(0, video.currentTime - 10);
+        if (message.action === 'seekForward') video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+        if (message.action === 'speed') video.playbackRate = message.value;
+      } catch (_) {} });
+      document.querySelectorAll('iframe').forEach((frame) => { try { frame.contentWindow.postMessage(message, '*'); } catch (_) {} });
+    })();""";
+    try { await controller.evaluateJavascript(source: script); _showTvControls(); } catch (error) { debugPrint('[KinoKino TV controls] $action failed: $error'); }
+  }
+  Widget _tvControlButton({required IconData icon, required String label, required VoidCallback? onPressed, bool autofocus = false}) {
+    final enabled = onPressed != null;
+    return Padding(padding: const EdgeInsets.symmetric(horizontal: 5), child: IconButton(
+      autofocus: autofocus, onPressed: onPressed, tooltip: label, iconSize: 27,
+      color: enabled ? Colors.white : Colors.white30, focusColor: const Color(0x99FFD21F),
+      style: IconButton.styleFrom(backgroundColor: enabled ? const Color(0x55333333) : const Color(0x22222222), shape: const CircleBorder(), side: BorderSide(color: enabled ? const Color(0x55FFFFFF) : Colors.white12), padding: const EdgeInsets.all(14)),
+      icon: Icon(icon)));
+  }
+  Widget _buildTvPlayerControls() {
+    return Positioned(left: 28, right: 28, bottom: 24, child: SafeArea(child: Material(
+      color: const Color(0xE8171A20), borderRadius: BorderRadius.circular(22), elevation: 18,
+      child: Padding(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12), child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+          _tvControlButton(icon: Icons.replay_10_rounded, label: 'Назад на 10 секунд', onPressed: () => _sendTvPlayerCommand('seekBack')),
+          _tvControlButton(icon: Icons.play_arrow_rounded, label: 'Пауза / воспроизведение', onPressed: () => _sendTvPlayerCommand('playPause'), autofocus: true),
+          _tvControlButton(icon: Icons.forward_10_rounded, label: 'Вперёд на 10 секунд', onPressed: () => _sendTvPlayerCommand('seekForward')),
+          const SizedBox(width: 12),
+          _tvControlButton(icon: Icons.speed_rounded, label: 'Скорость ' + _tvPlaybackSpeed.toString() + '×', onPressed: () { const speeds = <double>[1.0, 1.25, 1.5, 1.75, 2.0, 0.75]; final next = speeds[(speeds.indexOf(_tvPlaybackSpeed) + 1) % speeds.length]; setState(() => _tvPlaybackSpeed = next); _sendTvPlayerCommand('speed', value: next); }),
+          _tvControlButton(icon: Icons.skip_previous_rounded, label: 'Предыдущая серия недоступна', onPressed: null),
+          _tvControlButton(icon: Icons.skip_next_rounded, label: 'Следующая серия недоступна', onPressed: null),
+          _tvControlButton(icon: Icons.subtitles_rounded, label: 'Субтитры недоступны', onPressed: null),
+        ]),
+        const SizedBox(height: 4),
+        Text('← / → — выбор   •   OK — нажать   •   Скорость: ' + _tvPlaybackSpeed.toString() + '×', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+      ])))));
   }
 
   @override
   void dispose() {
+    _tvControlsTimer?.cancel();
     SystemChrome.setPreferredOrientations(const []);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -1021,43 +1028,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const Positioned.fill(
               child: ColoredBox(color: Colors.black),
             ),
-          if (widget.tvMode && _pageLoaded && _error == null)
-            Positioned.fill(
-              child: Focus(
-                autofocus: true,
-                onKeyEvent: _handleTvPointerKey,
-                child: IgnorePointer(
-                  child: Align(
-                    alignment: Alignment(
-                      _tvPointerPosition.dx * 2 - 1,
-                      _tvPointerPosition.dy * 2 - 1,
-                    ),
-                    child: Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0x33FFD21F),
-                        border: Border.all(color: const Color(0xFFFFD21F), width: 2),
-                        boxShadow: const [
-                          BoxShadow(color: Color(0xAA000000), blurRadius: 5),
-                        ],
-                      ),
-                      child: Center(
-                        child: Container(
-                          width: 5,
-                          height: 5,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFFFD21F),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          if (widget.tvMode && _pageLoaded && _error == null && _tvControlsVisible) _buildTvPlayerControls(),
+          if (widget.tvMode && _pageLoaded && _error == null && !_tvControlsVisible)
+            Positioned.fill(child: Focus(autofocus: true, onKeyEvent: _handleTvControlsKey, child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _showTvControls, child: const SizedBox.expand()))),
           if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
             Center(
               child: Padding(
