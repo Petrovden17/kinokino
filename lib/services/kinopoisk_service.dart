@@ -159,6 +159,61 @@ class KinopoiskService {
     return results;
   }
 
+
+  /// Returns a previously verified TMDB → Kinopoisk mapping, if available.
+  Future<Map<String, dynamic>?> cachedMatch(
+    int tmdbId, {required String mediaType}
+  ) async {
+    final row = await _client.from('kinokino_id_map')
+        .select('kinopoisk_id, title, release_year, imdb_id, wikidata_id, match_method, confidence')
+        .eq('tmdb_id', tmdbId)
+        .eq('media_type', mediaType)
+        .eq('status', 'matched')
+        .maybeSingle();
+    if (row == null) return null;
+    return {
+      'filmId': row['kinopoisk_id'],
+      'nameRu': row['title'],
+      'name': row['title'],
+      'year': row['release_year'],
+      'imdbId': row['imdb_id'],
+      'wikidataId': row['wikidata_id'],
+      'matchMethod': row['match_method'],
+      'confidence': row['confidence'],
+    };
+  }
+
+  /// Stores a resolved mapping through the trusted Edge Function.
+  /// Cache writes are best-effort and must never block playback.
+  Future<void> cacheMatch({
+    required int tmdbId,
+    required String mediaType,
+    required int kinopoiskId,
+    required String title,
+    int? releaseYear,
+    String? imdbId,
+    String? wikidataId,
+    required String matchMethod,
+    required double confidence,
+  }) async {
+    try {
+      await _client.functions.invoke('kinopoisk-proxy', body: {
+        'action': 'cache',
+        'tmdb_id': tmdbId,
+        'media_type': mediaType,
+        'kinopoisk_id': kinopoiskId,
+        'title': title,
+        'release_year': releaseYear,
+        'imdb_id': imdbId,
+        'wikidata_id': wikidataId,
+        'match_method': matchMethod,
+        'confidence': confidence,
+      });
+    } catch (error) {
+      // A cache outage must not prevent a valid Kinopoisk match from opening.
+    }
+  }
+
   Future<Map<String, dynamic>> film(int id) => _invoke('film', filmId: id);
 
   Future<List<Map<String, dynamic>>> seasons(int id) async {
