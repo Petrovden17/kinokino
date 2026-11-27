@@ -45,7 +45,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         // Common ad and tracking endpoints; deliberately avoid generic video/media URLs.
         ContentBlocker(
           trigger: ContentBlockerTrigger(
-            urlFilter: r".*://[^/]+/(ads?|adserver|adservice|banner|popunder|track|pixel)(/|\\?|$).*",
+            urlFilter: r".*://[^/]+/(ads?|adserver|adservice|banner|popunder|track|pixel)(/|\?|$).*",
           ),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
