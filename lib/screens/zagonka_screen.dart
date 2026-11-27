@@ -195,14 +195,11 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     if (request.isForMainFrame == true) {
       _sourceUrlByController[controller] = rawUrl;
     }
+    // Do not apply generic EasyList rules to media/player requests. Some
+    // providers serve manifests, segments and player APIs from ad-tech-looking
+    // hosts or paths; blocking those requests leaves only the poster frame.
     final builtInBlocked = _isAdvertisingUrl(rawUrl);
-    final listBlocked = AdFilterEngine.instance.shouldBlock(
-      rawUrl: rawUrl,
-      sourceUrl: sourceUrl,
-      isMainFrame: request.isForMainFrame ?? false,
-      headers: request.headers,
-    );
-    if (!builtInBlocked && !listBlocked) return null;
+    if (!builtInBlocked) return null;
 
     final uri = Uri.tryParse(rawUrl);
     if (uri != null && _loggedBlockedAdResources.length < 500) {
@@ -210,9 +207,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           uri.path.length > 180 ? uri.path.substring(0, 180) : uri.path;
       final key = '${uri.host}$safePath';
       if (_loggedBlockedAdResources.add(key)) {
-        debugPrint(listBlocked && !builtInBlocked
-            ? '[KinoKino][FILTER_LIST_BLOCK] $key'
-            : '[KinoKino][BLOCKED_AD] $key');
+        debugPrint('[KinoKino][BLOCKED_AD] $key');
       }
     }
 
@@ -528,8 +523,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             });
           }
         };
-        // Block unsolicited popup attempts. The real inline player remains in-page.
-        window.open = () => null;
+        // Do not override window.open here: some providers open the actual
+        // video player in a new window. The document-start guard above blocks
+        // known advertising destinations while preserving legitimate players.
         const style = document.createElement('style');
         style.textContent = [
           'iframe[src*="doubleclick"],iframe[src*="googlesyndication"],',
@@ -750,14 +746,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
                   final source = _sourceUrlByController[controller] ?? _pageUrl.toString();
-                  final listBlocked = target != null &&
-                      AdFilterEngine.instance.shouldBlock(
-                        rawUrl: target,
-                        sourceUrl: source,
-                        isMainFrame: action.isForMainFrame,
-                        headers: null,
-                      );
-                  if (_isAdvertisingUrl(target) || listBlocked) {
+                  if (_isAdvertisingUrl(target)) {
                     debugPrint('[KinoKino] blocked ad navigation: $target');
                     return NavigationActionPolicy.CANCEL;
                   }
@@ -769,14 +758,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 onLoadStop: (controller, url) async {
                   if (url != null) _sourceUrlByController[controller] = url.toString();
                   debugPrint('[KinoKino bootstrap] loaded: $url');
-                  await _installAdHiding(controller);
                   await _installStreamBridge(controller);
-                  if (!_pageLoaded) {
-                    _pageLoaded = true;
-                    if (mounted) setState(() => _playerLoading = true);
-                    await _activateSitePlayer(controller);
-                    if (mounted) setState(() {});
-                    _schedulePlayerCheck(controller, const Duration(seconds: 12));
+                  if (!_pageLoaded && mounted) {
+                    // Show the real provider page. Do not replace its DOM with
+                    // a guessed iframe/poster: providers often initialise video
+                    // only after their own controls are tapped.
+                    setState(() {
+                      _pageLoaded = true;
+                      _playerLoading = false;
+                      _error = null;
+                    });
                   }
                 },
                 // Attach the original popup WebView in this screen. It
@@ -846,7 +837,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 },
                 onLoadStop: (controller, url) async {
                   debugPrint('[KinoKino player] loaded: $url');
-                  await _installAdHiding(controller);
                   await _installStreamBridge(controller);
                   _probePlayerWindow(controller);
                 },
