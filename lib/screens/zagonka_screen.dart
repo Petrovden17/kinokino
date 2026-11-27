@@ -106,7 +106,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         // Block common ad networks, trackers and pop-under delivery hosts.
         ContentBlocker(
           trigger: ContentBlockerTrigger(
-            urlFilter: r".*://([^/]*\.)?(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google\.[^/]+|adnxs\.com|taboola\.com|outbrain\.com|mgid\.com|popads\.net|popcash\.net|exoclick\.com|propellerads\.com|trafficjunky\.net|adsterra\.com|pushground\.com|onclicka\.com|clickadu\.com|hilltopads\.com|admaven\.com|adfox\.ru|adfox\.yandex\.ru|an\.yandex\.ru|yandexadexchange\.net|adriver\.ru|adriver\.com|adriver-sync\.com|adriver-serv\.ru)(/|$).*,
+            urlFilter: r".*://([^/]*\.)?(doubleclick\.net|googlesyndication\.com|googleadservices\.com|adservice\.google\.[^/]+|adnxs\.com|taboola\.com|outbrain\.com|mgid\.com|popads\.net|popcash\.net|exoclick\.com|propellerads\.com|trafficjunky\.net|adsterra\.com|pushground\.com|onclicka\.com|clickadu\.com|hilltopads\.com|admaven\.com|adfox\.ru|adfox\.yandex\.ru|an\.yandex\.ru|yandexadexchange\.net|adriver\.ru|adriver\.com|adriver-sync\.com|adriver-serv\.ru)(/|$).*",
           ),
           action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
         ),
