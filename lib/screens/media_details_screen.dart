@@ -63,6 +63,13 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Future<Map<String, dynamic>?> _findKinopoiskMatch(
     Map<String, dynamic>? details,
   ) async {
+    try {
+      final cached = await _kinopoisk.cachedMatch(widget.item.id, mediaType: _type)
+          .timeout(const Duration(seconds: 4));
+      if (cached != null) return cached;
+    } catch (e) {
+      debugPrint('[KinoKino] ID cache lookup failed: $e');
+    }
     final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
     final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
     final releaseYear = _yearFromDetails(details, widget.item.releaseDate);
@@ -89,6 +96,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final candidates = <Map<String, dynamic>>[
       for (final batch in candidateBatches) ...batch,
     ];
+    final imdbCandidates = <Map<String, dynamic>>[];
+    final wikidataCandidates = <Map<String, dynamic>>[];
 
     // Prefer exact IMDb cross-reference over title-only matching.
     // A failure in one external-ID provider must not disable the other.
@@ -102,8 +111,10 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final imdbId = external['imdb_id']?.toString() ?? '';
     if (imdbId.isNotEmpty) {
       try {
-        candidates.addAll(await _kinopoisk.byImdbId(imdbId)
-            .timeout(const Duration(seconds: 8)));
+        final matches = await _kinopoisk.byImdbId(imdbId)
+            .timeout(const Duration(seconds: 8));
+        imdbCandidates.addAll(matches);
+        candidates.addAll(matches);
       } catch (e) {
         debugPrint('[KinoKino] IMDb-to-Kinopoisk lookup failed: $e');
       }
@@ -111,19 +122,47 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     final wikidataId = external['wikidata_id']?.toString() ?? '';
     if (wikidataId.isNotEmpty) {
       try {
-        candidates.addAll(await _kinopoisk.byWikidataId(wikidataId)
-            .timeout(const Duration(seconds: 8)));
+        final matches = await _kinopoisk.byWikidataId(wikidataId)
+            .timeout(const Duration(seconds: 8));
+        wikidataCandidates.addAll(matches);
+        candidates.addAll(matches);
       } catch (e) {
         debugPrint('[KinoKino] Wikidata ID lookup failed: $e');
       }
     }
 
-    return _selectKinopoiskMatch(
+    final selected = _selectKinopoiskMatch(
       candidates,
       details: details,
       year: _yearFromDetails(details, widget.item.releaseDate),
       isSeries: _type == 'tv',
     );
+    final rawId = selected?['filmId'] ?? selected?['kinopoiskId'] ??
+        selected?['kinopoisk_id'] ?? selected?['id'];
+    final kinopoiskId = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
+    if (selected != null && kinopoiskId > 0) {
+      final isImdbMatch = imdbCandidates.any((row) =>
+          (row['filmId'] ?? row['kinopoiskId'] ?? row['kinopoisk_id'] ?? row['id']).toString() == '$kinopoiskId');
+      final isWikidataMatch = wikidataCandidates.any((row) =>
+          (row['filmId'] ?? row['kinopoiskId'] ?? row['kinopoisk_id'] ?? row['id']).toString() == '$kinopoiskId');
+      final matchMethod = isImdbMatch ? 'imdb' : (isWikidataMatch ? 'wikidata' : 'title_year');
+      try {
+        await _kinopoisk.cacheMatch(
+          tmdbId: widget.item.id,
+          mediaType: _type,
+          kinopoiskId: kinopoiskId,
+          title: _displayTitle,
+          releaseYear: releaseYear > 0 ? releaseYear : null,
+          imdbId: imdbId.isEmpty ? null : imdbId,
+          wikidataId: wikidataId.isEmpty ? null : wikidataId,
+          matchMethod: matchMethod,
+          confidence: (isImdbMatch || isWikidataMatch) ? 100 : 85,
+        );
+      } catch (e) {
+        debugPrint('[KinoKino] could not persist ID mapping: $e');
+      }
+    }
+    return selected;
   }
 
   Map<String, dynamic>? _selectKinopoiskMatch(
