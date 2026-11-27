@@ -1,13 +1,19 @@
-import 'package:dio/dio.dart';
+import '../services/catalog_api_gateway.dart';
 import '../models/media_item.dart';
 class TmdbService {
-  TmdbService() : _dio = Dio(BaseOptions(
-    baseUrl: 'https://kinokino-tmdb.get46-get47.workers.dev/3',
-    connectTimeout: const Duration(seconds: 15),
-    receiveTimeout: const Duration(seconds: 20),
-    queryParameters: const {'language': 'ru-RU'},
-  ));
-  final Dio _dio;
+  TmdbService() : _gateway = CatalogApiGateway();
+  final CatalogApiGateway _gateway;
+
+  Future<dynamic> _get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) {
+    final normalizedPath = path.startsWith('/3/') ? path : '/3$path';
+    return _gateway.get(
+      normalizedPath,
+      queryParameters: {'language': 'ru-RU', ...?queryParameters},
+    );
+  }
   bool get isConfigured => true;
   Future<List<MediaItem>> trending({int page = 1}) => _list('/trending/all/week', extra: {'page': page});
   Future<List<MediaItem>> popular({String type = 'movie', int page = 1}) => _list('/$type/popular', extra: {'page': page});
@@ -16,7 +22,7 @@ class TmdbService {
     return _list('/search/multi', extra: {'query': query.trim(), 'include_adult': false, 'page': page});
   }
   Future<List<Map<String, dynamic>>> genres({String type = 'movie'}) async {
-    final response = await _dio.get('/genre/$type/list');
+    final response = await _get('/genre/$type/list');
     final list = (response.data['genres'] as List? ?? const []);
     return list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
   }
@@ -28,17 +34,17 @@ class TmdbService {
     return _list('/discover/$type', extra: params);
   }
   Future<Map<String, dynamic>> details(int id, {String type = 'movie'}) async {
-    final response = await _dio.get('/$type/$id', queryParameters: {'append_to_response': 'credits,videos,similar,recommendations'});
+    final response = await _get('/$type/$id', queryParameters: {'append_to_response': 'credits,videos,similar,recommendations'});
     return Map<String, dynamic>.from(response.data);
   }
   Future<Map<String, dynamic>> externalIds(int id, {String type = 'movie'}) async {
-    final response = await _dio.get('/$type/$id/external_ids');
+    final response = await _get('/$type/$id/external_ids');
     return Map<String, dynamic>.from(response.data);
   }
   Future<List<MediaItem>> recommendations(int id, {String type = 'movie'}) => _relatedList('/$type/$id/recommendations');
   Future<List<MediaItem>> similar(int id, {String type = 'movie'}) => _relatedList('/$type/$id/similar');
   Future<List<MediaItem>> _relatedList(String path) async {
-    final response = await _dio.get(path);
+    final response = await _get(path);
     final results = (response.data['results'] as List? ?? const []);
     return results.whereType<Map>()
         .map((row) => MediaItem.fromJson(Map<String, dynamic>.from(row)))
@@ -47,11 +53,11 @@ class TmdbService {
         .toList();
   }
   Future<Map<String, dynamic>> seasonDetails(int id, int seasonNumber) async {
-    final response = await _dio.get('/tv/$id/season/$seasonNumber');
+    final response = await _get('/tv/$id/season/$seasonNumber');
     return Map<String, dynamic>.from(response.data);
   }
   Future<Map<String, dynamic>> watchProviders(int id, {String type = 'movie', String region = 'NL'}) async {
-    final response = await _dio.get('/$type/$id/watch/providers');
+    final response = await _get('/$type/$id/watch/providers');
     final results = response.data['results'] as Map? ?? const {};
     final country = results[region] as Map? ?? const {};
     return {
@@ -62,7 +68,7 @@ class TmdbService {
     };
   }
   Future<List<MediaItem>> _list(String path, {Map<String, dynamic> extra = const {}}) async {
-    final response = await _dio.get(path, queryParameters: extra);
+    final response = await _get(path, queryParameters: extra);
     final results = (response.data['results'] as List? ?? const []);
     return results.whereType<Map>().map((e) => MediaItem.fromJson(Map<String, dynamic>.from(e)))
       .where((e) => e.id != 0 && e.hasRussianTitle && e.hasConfirmedRelease &&
