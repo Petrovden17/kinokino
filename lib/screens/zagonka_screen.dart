@@ -31,6 +31,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   InAppWebViewController? _bootstrapController;
   InAppWebViewController? _activePlayerController;
   Timer? _tvControlsTimer;
+  Timer? _tvPointerTimer;
   bool _tvControlsVisible = true;
   double _tvPlaybackSpeed = 1.0;
   bool _tvPointerVisible = false;
@@ -750,12 +751,20 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   }
 
   void _showTvControls() { if (!widget.tvMode || !mounted) return; setState(() => _tvControlsVisible = true); _scheduleTvControlsHide(); }
+  void _scheduleTvPointerHide() {
+    _tvPointerTimer?.cancel();
+    if (!widget.tvMode || !_tvPointerVisible) return;
+    _tvPointerTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && _tvPointerVisible) setState(() => _tvPointerVisible = false);
+    });
+  }
   void _scheduleTvControlsHide() { _tvControlsTimer?.cancel(); if (!widget.tvMode) return; _tvControlsTimer = Timer(const Duration(seconds: 6), () { if (mounted && _tvControlsVisible) setState(() => _tvControlsVisible = false); }); }
   KeyEventResult _handleTvControlsKey(FocusNode node, KeyEvent event) {
     if (!widget.tvMode || (event is! KeyDownEvent && event is! KeyRepeatEvent)) {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    if (_tvPointerVisible) _scheduleTvPointerHide();
     if (key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter ||
@@ -765,8 +774,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           _tvPointerVisible = true;
           _tvPointerPosition = const Offset(0.5, 0.5);
         });
+        _scheduleTvPointerHide();
       } else {
         _clickTvPointerTarget();
+        _scheduleTvPointerHide();
       }
       return KeyEventResult.handled;
     }
@@ -774,6 +785,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         key == LogicalKeyboardKey.goBack ||
         key == LogicalKeyboardKey.browserBack) {
       if (_tvPointerVisible) {
+        _tvPointerTimer?.cancel();
         setState(() => _tvPointerVisible = false);
         return KeyEventResult.handled;
       }
@@ -795,6 +807,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           (_tvPointerPosition.dy + dy).clamp(0.015, 0.985).toDouble(),
         );
       });
+      _scheduleTvPointerHide();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -905,7 +918,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       child: Padding(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12), child: Column(mainAxisSize: MainAxisSize.min, children: [
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
           _tvControlButton(icon: Icons.replay_10_rounded, label: 'Назад на 10 секунд', onPressed: () => _sendTvPlayerCommand('seekBack')),
-          _tvControlButton(icon: Icons.play_arrow_rounded, label: 'Пауза / воспроизведение', onPressed: () => _sendTvPlayerCommand('playPause'), autofocus: true),
+          _tvControlButton(icon: Icons.play_arrow_rounded, label: 'Пауза / воспроизведение', onPressed: () => _sendTvPlayerCommand('playPause')),
           _tvControlButton(icon: Icons.forward_10_rounded, label: 'Вперёд на 10 секунд', onPressed: () => _sendTvPlayerCommand('seekForward')),
           const SizedBox(width: 12),
           _tvControlButton(icon: Icons.speed_rounded, label: 'Скорость ' + _tvPlaybackSpeed.toString() + '×', onPressed: () { const speeds = <double>[1.0, 1.25, 1.5, 1.75, 2.0, 0.75]; final next = speeds[(speeds.indexOf(_tvPlaybackSpeed) + 1) % speeds.length]; setState(() => _tvPlaybackSpeed = next); _sendTvPlayerCommand('speed', value: next); }),
@@ -921,6 +934,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   @override
   void dispose() {
     _tvControlsTimer?.cancel();
+    _tvPointerTimer?.cancel();
     SystemChrome.setPreferredOrientations(const []);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -1179,10 +1193,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const Positioned.fill(
               child: ColoredBox(color: Colors.black),
             ),
+          if (widget.tvMode && _pageLoaded && _error == null)
+            Positioned.fill(
+              child: Focus(
+                autofocus: true,
+                onKeyEvent: _handleTvControlsKey,
+                child: const IgnorePointer(child: SizedBox.expand()),
+              ),
+            ),
           if (widget.tvMode && _pageLoaded && _error == null && _tvPointerVisible) _buildTvPointer(),
           if (widget.tvMode && _pageLoaded && _error == null && _tvControlsVisible) _buildTvPlayerControls(),
-          if (widget.tvMode && _pageLoaded && _error == null && !_tvControlsVisible)
-            Positioned.fill(child: Focus(autofocus: true, onKeyEvent: _handleTvControlsKey, child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _showTvControls, child: const SizedBox.expand()))),
           if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
             Center(
               child: Padding(
