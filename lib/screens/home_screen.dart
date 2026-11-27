@@ -589,7 +589,20 @@ class _HomeScreenState extends State<HomeScreen> {
     const icons = [Icons.home_rounded, Icons.grid_view_rounded, Icons.search_rounded, Icons.favorite_border_rounded, Icons.person_outline_rounded];
     return Scaffold(
       backgroundColor: const Color(0xFF090A0C),
-      body: SafeArea(child: IndexedStack(index: _selectedTab, children: pages)),
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (_selectedTab == 1 || _selectedTab == 2) {
+            if (notification.metrics.pixels > 150 && !_showTopSearch) {
+              setState(() => _showTopSearch = true);
+            } else if (notification.metrics.pixels <= 150 && _showTopSearch) {
+              setState(() => _showTopSearch = false);
+            }
+            if (notification.metrics.extentAfter < 700) _loadMore();
+          }
+          return false;
+        },
+        child: SafeArea(child: IndexedStack(index: _selectedTab, children: pages)),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _selectedTab, onDestinationSelected: (i) => setState(() => _selectedTab = i),
         backgroundColor: const Color(0xFF111214), indicatorColor: const Color(0x22FFD21F), height: 68,
