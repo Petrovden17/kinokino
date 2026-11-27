@@ -87,22 +87,6 @@ jobs:
           if "android.permission.INTERNET" not in content:
               content = content.replace("    <application", permission + "    <application", 1)
 
-          tv_features = (
-              '    <uses-feature android:name="android.software.leanback" android:required="false" />\n'
-              '    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n'
-          )
-          if "android.software.leanback" not in content:
-              content = content.replace("    <application", tv_features + "    <application", 1)
-
-          leanback_category = '<category android:name="android.intent.category.LEANBACK_LAUNCHER" />'
-          if leanback_category not in content:
-              launcher_marker = 'android:name="android.intent.category.LAUNCHER"'
-              launcher_index = content.find(launcher_marker)
-              if launcher_index < 0:
-                  raise SystemExit("Android manifest has no standard launcher category")
-              category_end = content.find(">", launcher_index)
-              content = content[:category_end + 1] + "\n            " + leanback_category + content[category_end + 1:]
-
           app_start = content.find("<application")
           app_end = content.find(">", app_start)
           if app_start < 0 or app_end < 0:
@@ -115,26 +99,9 @@ jobs:
               additions.append('android:fullBackupContent="@xml/backup_rules"')
           if "android:dataExtractionRules=" not in app_tag:
               additions.append('android:dataExtractionRules="@xml/data_extraction_rules"')
-          if "android:banner=" not in app_tag:
-              additions.append('android:banner="@drawable/tv_banner"')
           if additions:
               content = content[:app_end] + " " + " ".join(additions) + content[app_end:]
           manifest.write_text(content, encoding="utf-8")
-
-          drawable = Path("android/app/src/main/res/drawable")
-          drawable.mkdir(parents=True, exist_ok=True)
-          (drawable / "tv_banner.xml").write_text(
-              """<vector xmlns:android="http://schemas.android.com/apk/res/android"
-                  android:width="320dp" android:height="180dp"
-                  android:viewportWidth="320" android:viewportHeight="180">
-                  <path android:fillColor="#090A0C" android:pathData="M0,0h320v180h-320z" />
-                  <path android:fillColor="#182238" android:pathData="M0,0h320v180h-320z" />
-                  <path android:fillColor="#FFD21F" android:pathData="M132,48 L132,132 L202,90 Z" />
-                  <path android:fillColor="#35D6CF" android:pathData="M218,78h38v5h-38z M218,97h26v5h-26z" />
-              </vector>
-              """,
-              encoding="utf-8",
-          )
 
           resources = Path("android/app/src/main/res/xml")
           resources.mkdir(parents=True, exist_ok=True)
