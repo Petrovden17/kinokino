@@ -63,17 +63,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Future<Map<String, dynamic>?> _findKinopoiskMatch(
     Map<String, dynamic>? details,
   ) async {
-    final candidates = <Map<String, dynamic>>[];
-    // TMDB may already know the Wikidata entity ID. Use that exact entity
-    // first instead of trying to infer an ID from a card or a web page.
-    try {
-      final external = await _tmdb.externalIds(widget.item.id, type: _type);
-      final wikidataId = external['wikidata_id']?.toString() ?? '';
-      if (wikidataId.isNotEmpty) {
-        candidates.addAll(await _kinopoisk.byWikidataId(wikidataId));
-      }
-    } catch (_) {}
-
     final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
     final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
     final queries = <String>{
@@ -81,11 +70,36 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       if (originalTitle.length >= 2) originalTitle,
       if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
     };
-    for (final query in queries) {
-      try {
-        candidates.addAll(await _kinopoisk.search(query));
-      } catch (_) {}
+
+    // Resolve title variants concurrently. The previous sequential lookups
+    // could leave the play button stuck on "Получаем ID…" for minutes.
+    final candidateBatches = await Future.wait(
+      queries.map((query) async {
+        try {
+          return await _kinopoisk.search(query).timeout(const Duration(seconds: 14));
+        } catch (e) {
+          debugPrint('[KinoKino] Kinopoisk title lookup failed for "$query": $e');
+          return <Map<String, dynamic>>[];
+        }
+      }),
+    );
+    final candidates = <Map<String, dynamic>>[
+      for (final batch in candidateBatches) ...batch,
+    ];
+
+    // TMDB's Wikidata cross-reference is a fast exact-match fallback.
+    try {
+      final external = await _tmdb.externalIds(widget.item.id, type: _type)
+          .timeout(const Duration(seconds: 8));
+      final wikidataId = external['wikidata_id']?.toString() ?? '';
+      if (wikidataId.isNotEmpty) {
+        candidates.addAll(await _kinopoisk.byWikidataId(wikidataId)
+            .timeout(const Duration(seconds: 8)));
+      }
+    } catch (e) {
+      debugPrint('[KinoKino] Wikidata ID lookup failed: $e');
     }
+
     return _selectKinopoiskMatch(
       candidates,
       details: details,
@@ -660,19 +674,32 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     if (id == null || id <= 0) {
       setState(() => _resolvingKinopoisk = true);
       try {
-        final details = _details;
-        final selected = await _findKinopoiskMatch(details);
+        final selected = await _findKinopoiskMatch(_details)
+            .timeout(const Duration(seconds: 18));
         final rawId = selected?['filmId'] ?? selected?['kinopoiskId'] ??
             selected?['kinopoisk_id'] ?? selected?['id'];
         id = rawId is num ? rawId.toInt() : int.tryParse('$rawId');
         if (id != null && id > 0 && mounted) {
           setState(() => _kinopoiskId = id);
         }
+      } catch (e) {
+        debugPrint('[KinoKino] could not resolve Kinopoisk ID: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Не удалось получить ID фильма. Проверь интернет и нажми «Начать просмотр» ещё раз.'),
+          ));
+        }
       } finally {
         if (mounted) setState(() => _resolvingKinopoisk = false);
       }
     }
-    if (!mounted || id == null || id <= 0) return;
+    if (!mounted) return;
+    if (id == null || id <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Фильм не найден в каталоге Kinopoisk. Попробуй позже.'),
+      ));
+      return;
+    }
     await Navigator.push(context, MaterialPageRoute(
       builder: (_) => ZagonkaScreen(
         title: _displayTitle,
