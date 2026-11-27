@@ -36,7 +36,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   @override
   void initState() {
     super.initState();
-    AdFilterEngine.instance.initialize().catchError((Object error) {
+    AdFilterEngine.instance.initialize().then((_) {
+      debugPrint('[KinoKino] network filter engine ready: ${AdFilterEngine.instance.ruleCount} rules');
+    }).catchError((Object error) {
       debugPrint('[KinoKino] filter-list initialization failed: $error');
     });
   }
@@ -632,7 +634,15 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     _interceptAdResource(controller, request),
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
-                  if (_isAdvertisingUrl(target)) {
+                  final source = _sourceUrlByController[controller] ?? _pageUrl.toString();
+                  final listBlocked = target != null &&
+                      AdFilterEngine.instance.shouldBlock(
+                        rawUrl: target,
+                        sourceUrl: source,
+                        isMainFrame: action.isForMainFrame,
+                        headers: null,
+                      );
+                  if (_isAdvertisingUrl(target) || listBlocked) {
                     debugPrint('[KinoKino] blocked ad navigation: $target');
                     return NavigationActionPolicy.CANCEL;
                   }
@@ -690,7 +700,15 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     _interceptAdResource(controller, request),
                 shouldOverrideUrlLoading: (controller, action) async {
                   final target = action.request.url?.toString();
-                  if (_isAdvertisingUrl(target)) {
+                  final source = _sourceUrlByController[controller] ?? _pageUrl.toString();
+                  final listBlocked = target != null &&
+                      AdFilterEngine.instance.shouldBlock(
+                        rawUrl: target,
+                        sourceUrl: source,
+                        isMainFrame: action.isForMainFrame,
+                        headers: null,
+                      );
+                  if (_isAdvertisingUrl(target) || listBlocked) {
                     debugPrint('[KinoKino player] blocked ad navigation: $target');
                     return NavigationActionPolicy.CANCEL;
                   }
