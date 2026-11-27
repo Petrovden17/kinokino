@@ -1,15 +1,20 @@
-import 'package:dio/dio.dart';
+import '../services/catalog_api_gateway.dart';
 
 /// Watchmode supplies availability metadata and provider links, not video streams.
 class WatchmodeService {
-  WatchmodeService()
-      : _dio = Dio(BaseOptions(
-          baseUrl: 'https://kinokino-tmdb.get46-get47.workers.dev/watchmode/v1',
-          connectTimeout: const Duration(seconds: 15),
-          receiveTimeout: const Duration(seconds: 20),
-        ));
+  WatchmodeService() : _gateway = CatalogApiGateway();
 
-  final Dio _dio;
+  final CatalogApiGateway _gateway;
+
+  Future<dynamic> _get(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) {
+    final normalizedPath = path.startsWith('/watchmode/v1/')
+        ? path
+        : '/watchmode/v1$path';
+    return _gateway.get(normalizedPath, queryParameters: queryParameters);
+  }
 
   Future<List<Map<String, dynamic>>> freeSources({
     required int tmdbId,
@@ -17,7 +22,7 @@ class WatchmodeService {
     String region = 'NL',
   }) async {
     final field = mediaType == 'tv' ? 'tmdb_tv_id' : 'tmdb_movie_id';
-    final search = await _dio.get(
+    final search = await _get(
       '/search/',
       queryParameters: {'search_field': field, 'search_value': tmdbId},
     );
@@ -32,7 +37,7 @@ class WatchmodeService {
     final watchmodeId = match['id'];
     if (watchmodeId == null) return const [];
 
-    final response = await _dio.get(
+    final response = await _get(
       '/title/$watchmodeId/sources/',
       queryParameters: {'regions': region},
     );
