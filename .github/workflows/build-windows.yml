@@ -2,7 +2,7 @@ name: Build KinoKino for Windows
 
 concurrency:
   group: kinokino-windows-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 permissions:
   contents: write
