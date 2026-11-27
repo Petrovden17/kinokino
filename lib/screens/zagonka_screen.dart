@@ -14,11 +14,13 @@ class ZagonkaScreen extends StatefulWidget {
     required this.title,
     this.kinopoiskId,
     this.isSeries = false,
+    this.tvMode = false,
   });
 
   final String title;
   final int? kinopoiskId;
   final bool isSeries;
+  final bool tvMode;
 
   @override
   State<ZagonkaScreen> createState() => _ZagonkaScreenState();
@@ -103,6 +105,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       _sourceAttemptIndex = nextIndex;
       _pageLoaded = false;
       _playerLoading = false;
+      _playerWindowId = null;
+      _playerWindowOpened = false;
       _error = null;
     });
     await _bootstrapController?.loadUrl(
@@ -415,6 +419,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           target.style.setProperty('display', 'block', 'important');
           target.style.setProperty('visibility', 'visible', 'important');
           target.style.setProperty('opacity', '1', 'important');
+          target.setAttribute('tabindex', '0');
+          try { target.focus({preventScroll:true}); } catch (_) {}
           console.log('[KinoKino] embedded player isolated in the original page');
           return true;
         };
@@ -474,6 +480,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             branch.style.setProperty('visibility', 'visible', 'important');
             branch = parent;
           }
+          candidate.setAttribute('tabindex', '0');
           Object.entries({
             position:'fixed', left:'50%', top:'50%', transform:'translate(-50%, -50%)',
             'z-index':'2147483647', visibility:'visible', opacity:'1',
@@ -481,6 +488,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             'font-size':'16px', padding:'14px 24px', 'border-radius':'12px',
             background:'#202020', color:'#fff', border:'1px solid #666'
           }).forEach(([key,value]) => candidate.style.setProperty(key,value,'important'));
+          candidate.style.setProperty('outline', '3px solid #FFD21F', 'important');
+          try { candidate.focus({preventScroll:true}); } catch (_) {}
           if (!launchNotified) {
             launchNotified = true;
             notify('launch');
@@ -706,6 +715,21 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           _leaveFullscreen();
         }
       },
+      child: Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (!widget.tvMode || event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.escape) {
+          if (_playerWindowId != null) {
+            setState(() { _playerWindowId = null; _playerWindowOpened = false; });
+            _leaveFullscreen();
+          } else {
+            Navigator.of(context).maybePop();
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
       child: Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -808,8 +832,22 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     '[KinoKino bootstrap] error main=${request.isForMainFrame}: ${error.description}; ${request.url}',
                   );
                   if (request.isForMainFrame == true && mounted) {
-                    setState(() => _error =
-                        'Не удалось подготовить плеер. Проверь подключение и попробуй ещё раз.');
+                    final failedUri = Uri.tryParse(request.url.toString());
+                    final currentUri = Uri.parse(_pageUrl.toString());
+                    if (failedUri?.host == currentUri.host) {
+                      _tryNextPlayerSource('network error: ${error.description}');
+                    }
+                  }
+                },
+                onReceivedHttpError: (_, request, response) {
+                  if (request.isForMainFrame == true &&
+                      response.statusCode >= 400 &&
+                      mounted) {
+                    final failedUri = Uri.tryParse(request.url.toString());
+                    final currentUri = Uri.parse(_pageUrl.toString());
+                    if (failedUri?.host == currentUri.host) {
+                      _tryNextPlayerSource('HTTP ${response.statusCode}');
+                    }
                   }
                 },
                   onConsoleMessage: (_, message) =>
@@ -985,6 +1023,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               ),
             ),
         ],
+      ),
       ),
       ),
     );
