@@ -81,7 +81,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!tvMode) {
+    if (!widget.tvMode) {
       return Scaffold(
         body: Center(
           child: SingleChildScrollView(
