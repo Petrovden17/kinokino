@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 
-
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({
     super.key,
@@ -385,12 +384,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Keep the source page alive for cookies/session and popup creation,
-          // but never expose its catalogue or film page on screen.
-          // Keep the opener WebView alive for cookies/session and the native
-          // windowId, but never let its catalogue page paint over the real player.
-          // Opacity preserves the platform view; Offstage/removal can destroy the
-          // WebView window relationship on Android.
+          // Keep the provider's real page visible so its own controls and video
+          // initialisation run normally. If it opens a native player window, keep
+          // this opener alive (at opacity zero) to preserve cookies and session.
           Positioned.fill(
             child: IgnorePointer(
               ignoring: _playerWindowId != null,
