@@ -65,10 +65,13 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   ) async {
     final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
     final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
+    final releaseYear = _yearFromDetails(details, widget.item.releaseDate);
     final queries = <String>{
       if (localizedTitle.length >= 2) localizedTitle,
       if (originalTitle.length >= 2) originalTitle,
       if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
+      if (releaseYear > 0 && localizedTitle.length >= 2) '$localizedTitle $releaseYear',
+      if (releaseYear > 0 && originalTitle.length >= 2) '$originalTitle $releaseYear',
     };
 
     // Resolve title variants concurrently. The previous sequential lookups
