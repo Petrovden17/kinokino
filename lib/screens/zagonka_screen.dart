@@ -430,13 +430,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 // Attach the original popup WebView in this screen. It
                 // retains opener/session/referrer state and the site's user gesture.
                 onCreateWindow: (_, action) async {
-                  if (!mounted || _playerWindowId != null) return false;
-                  debugPrint('[KinoKino] attaching original player window: ${action.request.url}');
-                  setState(() {
-                    _playerWindowId = action.windowId;
-                    _playerWindowOpened = true;
-                  });
-                  return true;
+                  // The desired KinoKino player is embedded in the current page.
+                  // Reject all new windows so ad pop-ups/pop-unders never load.
+                  debugPrint('[KinoKino] blocked new window: ${action.request.url}');
+                  return false;
                 },
                 onReceivedError: (_, request, error) {
                   debugPrint(
