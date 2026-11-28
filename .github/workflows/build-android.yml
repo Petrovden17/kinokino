@@ -65,7 +65,7 @@ jobs:
           source = gradle.read_text(encoding="utf-8")
 
           source, min_count = re.subn(
-              r'minSdk\\s*=\\s*(?:flutter\\.minSdkVersion|[0-9]+)',
+              r'minSdk\s*=\s*(?:flutter\.minSdkVersion|[0-9]+)',
               'minSdk = 21',
               source,
               count=1,
@@ -74,7 +74,7 @@ jobs:
               raise SystemExit("Could not explicitly set minSdk to 21 (Android 5.0+; includes Android 9+)")
 
           source, ndk_count = re.subn(
-              r'ndkVersion\\s*=\\s*[^\\n]+',
+              r'ndkVersion\s*=\s*[^\n]+',
               'ndkVersion = "28.2.13676358"',
               source,
               count=1,
@@ -85,7 +85,7 @@ jobs:
           if "useLegacyPackaging" not in source:
               source = source.replace(
                   "    buildTypes {",
-                  '    packaging {\\n        jniLibs {\\n            useLegacyPackaging = false\\n        }\\n    }\\n\\n    buildTypes {',
+                  '    packaging {\n        jniLibs {\n            useLegacyPackaging = false\n        }\n    }\n\n    buildTypes {',
                   1,
               )
           if "useLegacyPackaging = false" not in source:
