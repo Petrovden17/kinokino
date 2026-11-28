@@ -15,28 +15,44 @@ class AppUpdateService {
   final Dio _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15), receiveTimeout: const Duration(minutes: 5)));
 
   Future<AppUpdateInfo?> checkForUpdate() async {
-    if (!Platform.isWindows) return null;
-    final response = await _dio.get(releasesApi, options: Options(headers: {'Accept': 'application/vnd.github+json'}));
+    if (!Platform.isWindows && !Platform.isAndroid) {
+      throw UnsupportedError('Проверка обновлений недоступна на этой платформе.');
+    }
+    final response = await _dio.get(
+      releasesApi,
+      options: Options(headers: {'Accept': 'application/vnd.github+json'}),
+    );
     final data = response.data;
-    if (data is! List) return null;
-    final releases = data.whereType<Map>().where((release) => release['draft'] != true);
+    if (data is! List) throw const FormatException('GitHub вернул некорректный список релизов.');
+
+    final isAndroid = Platform.isAndroid;
+    final tagPattern = isAndroid ? RegExp(r'^build-(\\d+)$') : RegExp(r'^beta-(\\d+)$');
+    final assetName = isAndroid ? 'app-release.apk' : 'KinoKino-Beta-Windows-x64.zip';
     Map? latestRelease;
     var latestBuild = -1;
-    for (final release in releases) {
+    for (final release in data.whereType<Map>().where((release) => release['draft'] != true)) {
       final tag = (release['tag_name'] ?? '').toString();
-      final match = RegExp(r'^beta-(\d+)$').firstMatch(tag);
+      final match = tagPattern.firstMatch(tag);
       final build = int.tryParse(match?.group(1) ?? '');
-      if (build != null && build > latestBuild) { latestBuild = build; latestRelease = release; }
+      if (build != null && build > latestBuild) {
+        latestBuild = build;
+        latestRelease = release;
+      }
     }
     if (latestRelease == null || latestBuild <= currentBuild) return null;
+
     final tag = (latestRelease['tag_name'] ?? '').toString();
     final assets = latestRelease['assets'] as List? ?? const [];
     for (final asset in assets.whereType<Map>()) {
-      if (asset['name'] == 'KinoKino-Beta-Windows-x64.zip' && asset['browser_download_url'] != null) {
-        return AppUpdateInfo(tag: tag, downloadUrl: asset['browser_download_url'].toString(), notes: (latestRelease['body'] ?? '').toString());
+      if (asset['name'] == assetName && asset['browser_download_url'] != null) {
+        return AppUpdateInfo(
+          tag: tag,
+          downloadUrl: asset['browser_download_url'].toString(),
+          notes: (latestRelease['body'] ?? '').toString(),
+        );
       }
     }
-    return null;
+    throw StateError('Релиз $tag найден, но файл $assetName не опубликован.');
   }
 
   Future<void> downloadAndInstall(AppUpdateInfo update) async {
