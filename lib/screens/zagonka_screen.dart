@@ -947,7 +947,12 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       icon: Icon(icon)));
   }
   Widget _buildTvPlayerControls() {
-    return Positioned(left: 28, right: 28, bottom: 24, child: SafeArea(child: Material(
+    return Positioned(left: 28, right: 28, bottom: 24, child: Focus(
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent || event is KeyRepeatEvent) _scheduleTvControlsHide();
+        return KeyEventResult.ignored;
+      },
+      child: SafeArea(child: Material(
       color: const Color(0xE8171A20), borderRadius: BorderRadius.circular(22), elevation: 18,
       child: Padding(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12), child: Column(mainAxisSize: MainAxisSize.min, children: [
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -962,7 +967,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         ]),
         const SizedBox(height: 4),
         Text('← / → — выбор   •   OK — нажать   •   Скорость: ' + _tvPlaybackSpeed.toString() + '×', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-      ])))));
+      ]))))));
   }
 
   @override
@@ -1040,6 +1045,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                           _tvPlayerReady = true;
                           _tvControlsVisible = true;
                         });
+                        if (widget.tvMode) _enterFullscreen();
                         _scheduleTvControlsHide();
                       }
                       return {'accepted': true};
