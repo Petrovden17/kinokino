@@ -713,7 +713,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       }
     }
     if (!mounted) return;
-    if (!mounted) return;
     if (id == null || id <= 0) {
       debugPrint('[KinoKino] no Kinopoisk ID for TMDB item ${widget.item.id}; trying title/IMDb search in KinoBox.');
     }
