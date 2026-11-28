@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../services/kinopoisk_service.dart';
+import '../services/watchmode_service.dart';
 import '../services/internet_archive_service.dart';
 import '../services/local_database.dart';
 import '../widgets/poster_card.dart';
@@ -261,7 +262,51 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     });
     // Kinopoisk is a second connected catalogue. Resolve its related titles
     // in the background so it cannot delay the details screen.
-    if (_similar.length < 12) unawaited(_loadKinopoiskSimilar(details));
+    if (_similar.length < 20) {
+      unawaited(_loadKinopoiskSimilar(details));
+      unawaited(_loadWatchmodeSimilar());
+    }
+  }
+
+  Future<MediaItem?> _mapRelatedCandidate(Map<String, dynamic> source) async {
+    final imdbId = (source['imdbId'] ?? source['imdb_id'] ?? '').toString();
+    final rawTitle = source['nameRu'] ?? source['nameEn'] ??
+        source['nameOriginal'] ?? source['name'] ?? source['title'] ??
+        source['title_name'] ?? '';
+    final title = rawTitle.toString().trim();
+    final rawYear = source['year'] ?? source['startYear'] ??
+        source['release_year'];
+    final year = rawYear is num ? rawYear.toInt() : int.tryParse('$rawYear');
+    List<MediaItem> matches = const [];
+    if (RegExp(r'^tt[0-9]{5,12}$').hasMatch(imdbId)) {
+      matches = await _tmdb.findByExternalId(imdbId, mediaType: _type);
+    }
+    if (matches.isEmpty && title.length >= 2) {
+      matches = await _tmdb.searchRelated(
+        title, mediaType: _type, year: year,
+      );
+    }
+    if (matches.isEmpty) return null;
+    return matches.first;
+  }
+
+  Future<void> _mergeExternalSimilar(
+    List<Map<String, dynamic>> sourceItems, String sourceName,
+  ) async {
+    final tasks = sourceItems.take(15).map(_mapRelatedCandidate);
+    final mapped = await Future.wait(tasks);
+    if (!mounted) return;
+    final merged = <String, MediaItem>{
+      for (final item in _similar)
+        '${item.mediaType}:${item.id}': item,
+      for (final item in mapped.whereType<MediaItem>())
+        if (item.id != widget.item.id)
+          '${item.mediaType}:${item.id}': item,
+    };
+    if (merged.length > _similar.length) {
+      setState(() => _similar = merged.values.take(24).toList());
+      debugPrint('[KinoKino] Added similar titles from $sourceName: ${mapped.whereType<MediaItem>().length}');
+    }
   }
 
   Future<void> _loadKinopoiskSimilar(Map<String, dynamic>? details) async {
@@ -274,20 +319,27 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           ? rawId.toInt()
           : int.tryParse('$rawId') ?? 0;
       if (kinopoiskId <= 0) return;
-
       final sourceItems = await _kinopoisk.similars(kinopoiskId)
           .timeout(const Duration(seconds: 15));
-      final tasks = sourceItems.take(12).map((source) async {
-        final imdbId = (source['imdbId'] ?? source['imdb_id'] ?? '').toString();
-        final rawTitle = source['nameRu'] ?? source['nameEn'] ??
-            source['nameOriginal'] ?? source['name'] ?? '';
-        final title = rawTitle.toString().trim();
-        final rawYear = source['year'] ?? source['startYear'];
-        final year = rawYear is num
-            ? rawYear.toInt()
-            : int.tryParse('$rawYear');
-        List<MediaItem> matches = const [];
-        if (RegExp(r'^tt[0-9]{5,12}  List<MediaItem> _relatedFallback(Map<String, dynamic> details, List<String> keys) {
+      await _mergeExternalSimilar(sourceItems, 'Kinopoisk');
+    } catch (e) {
+      debugPrint('[KinoKino] Kinopoisk related titles unavailable: $e');
+    }
+  }
+
+  Future<void> _loadWatchmodeSimilar() async {
+    try {
+      final sourceItems = await WatchmodeService().similarTitles(
+        tmdbId: widget.item.id,
+        mediaType: _type,
+      ).timeout(const Duration(seconds: 20));
+      await _mergeExternalSimilar(sourceItems, 'Watchmode');
+    } catch (e) {
+      debugPrint('[KinoKino] Watchmode related titles unavailable: $e');
+    }
+  }
+
+  List<MediaItem> _relatedFallback(Map<String, dynamic> details, List<String> keys) {
     final found = <int, MediaItem>{};
     for (final key in keys) {
       final section = details[key];
