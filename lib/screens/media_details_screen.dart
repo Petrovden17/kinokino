@@ -240,25 +240,52 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     }
     await Future.wait(pending);
 
-    // If TMDB has no recommendation rows for a title, use a genre-based
-    // discovery fallback. Do not copy the Similar list into Recommendations:
-    // the two sections must remain meaningfully distinct.
-    if (recommendations.isEmpty && details != null) {
-      final genres = (details['genres'] as List? ?? const [])
+    // TMDB can return empty related lists for less popular titles. In that
+    // case, discover titles in the same genres for BOTH sections. Keep the
+    // lists independent: recommendations prioritize rating, similar titles
+    // prioritize popularity.
+    final genreIds = <int>{
+      ...widget.item.genreIds,
+      ...((details?['genres'] as List? ?? const [])
           .whereType<Map>()
           .map((genre) => (genre['id'] as num?)?.toInt())
-          .whereType<int>()
-          .toList();
-      if (genres.isNotEmpty) {
+          .whereType<int>()),
+    }.where((id) => id > 0).toList();
+
+    Future<List<MediaItem>> discoverFallback({
+      required String sortBy,
+      double? minRating,
+    }) async {
+      final found = <String, MediaItem>{};
+      // Try several genres instead of relying on the first genre alone.
+      for (final genreId in genreIds.take(4)) {
         try {
-          recommendations = await _tmdb.discover(
+          final batch = await _tmdb.discover(
             type: _type,
-            genreId: genres.first,
-            sortBy: 'vote_average.desc',
-            minRating: 5.5,
+            genreId: genreId,
+            sortBy: sortBy,
+            minRating: minRating,
           );
-        } catch (_) {}
+          for (final candidate in batch) {
+            if (candidate.id == widget.item.id) continue;
+            found['${candidate.mediaType}:${candidate.id}'] = candidate;
+          }
+          if (found.length >= 12) break;
+        } catch (e) {
+          debugPrint('[KinoKino] related discovery fallback failed for genre $genreId: $e');
+        }
       }
+      return found.values.take(20).toList();
+    }
+
+    if (recommendations.isEmpty) {
+      recommendations = await discoverFallback(
+        sortBy: 'vote_average.desc',
+        minRating: 5.5,
+      );
+    }
+    if (similar.isEmpty) {
+      similar = await discoverFallback(sortBy: 'popularity.desc');
     }
     final recommendationsById = <String, MediaItem>{
       for (final item in recommendations)
