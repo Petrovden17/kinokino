@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter/scheduler.dart' show timeDilation;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -46,7 +47,7 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
   }
 
   void _scheduleUpdateChecks() {
-    if (defaultTargetPlatform != TargetPlatform.windows) return;
+    if (defaultTargetPlatform != TargetPlatform.windows && defaultTargetPlatform != TargetPlatform.android) return;
     _checkIfUpdateCheckDue();
     _updateTimer?.cancel();
     _updateTimer = Timer.periodic(const Duration(minutes: 1), (_) => _checkIfUpdateCheckDue());
@@ -87,16 +88,23 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
               onPressed: () async {
                 Navigator.pop(dialogContext);
                 try {
-                  await _updates.downloadAndInstall(update);
+                  if (defaultTargetPlatform == TargetPlatform.android) {
+                    final uri = Uri.tryParse(update.downloadUrl);
+                    if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+                      throw StateError('Не удалось открыть ссылку загрузки APK.');
+                    }
+                  } else {
+                    await _updates.downloadAndInstall(update);
+                  }
                 } catch (e) {
                   if (!mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Не удалось установить обновление: $e')),
+                    SnackBar(content: Text('Не удалось выполнить обновление: $e')),
                   );
                 }
               },
               icon: const Icon(Icons.download),
-              label: const Text('Обновить'),
+              label: Text(defaultTargetPlatform == TargetPlatform.android ? 'Скачать APK' : 'Обновить'),
             ),
           ],
         ),
