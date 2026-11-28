@@ -266,7 +266,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           setState(() {
             _apkReceived = received;
             _apkTotal = total;
-            _apkProgress = total > 0 ? (received / total).clamp(0.0, 1.0) : null;
+            _apkProgress = total > 0 ? (received / total).clamp(0.0, 1.0).toDouble() : null;
             _notice = total > 0
                 ? 'Скачиваем обновление: ${(_apkProgress! * 100).round()}% '
                     '(${_formatBytes(received)} из ${_formatBytes(total)})'
