@@ -220,22 +220,44 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     int? kinopoiskId;
     List<Map<String, dynamic>> kpSeasons = [];
     List<Map<String, dynamic>> kpVideos = [];
-    // Keep similar titles and recommendations separate so neither endpoint
-    // can hide the other and each section can be loaded independently.
-    List<MediaItem> recommendations = [];
-    List<MediaItem> similar = [];
-    try {
-      recommendations = await _tmdb.recommendations(widget.item.id, type: _type);
-    } catch (_) {}
-    try {
-      similar = await _tmdb.similar(widget.item.id, type: _type);
-    } catch (_) {}
-    if (details != null) {
-      if (recommendations.isEmpty) {
-        recommendations = _relatedFallback(details, const ['recommendations', 'similar']);
-      }
-      if (similar.isEmpty) {
-        similar = _relatedFallback(details, const ['similar', 'recommendations']);
+    // TMDB embeds both lists in the details response. Use those first, then
+    // request only missing sections. Fetch missing endpoints concurrently so
+    // a slow recommendation request cannot delay similar titles (or vice versa).
+    var recommendations = details == null
+        ? <MediaItem>[]
+        : _relatedFallback(details, const ['recommendations']);
+    var similar = details == null
+        ? <MediaItem>[]
+        : _relatedFallback(details, const ['similar']);
+    final pending = <Future<void>>[];
+    if (recommendations.isEmpty) {
+      pending.add(_tmdb.recommendations(widget.item.id, type: _type)
+          .then((items) { recommendations = items; }).catchError((_) {}));
+    }
+    if (similar.isEmpty) {
+      pending.add(_tmdb.similar(widget.item.id, type: _type)
+          .then((items) { similar = items; }).catchError((_) {}));
+    }
+    await Future.wait(pending);
+
+    // If TMDB has no recommendation rows for a title, use a genre-based
+    // discovery fallback. Do not copy the Similar list into Recommendations:
+    // the two sections must remain meaningfully distinct.
+    if (recommendations.isEmpty && details != null) {
+      final genres = (details['genres'] as List? ?? const [])
+          .whereType<Map>()
+          .map((genre) => (genre['id'] as num?)?.toInt())
+          .whereType<int>()
+          .toList();
+      if (genres.isNotEmpty) {
+        try {
+          recommendations = await _tmdb.discover(
+            type: _type,
+            genreId: genres.first,
+            sortBy: 'vote_average.desc',
+            minRating: 5.5,
+          );
+        } catch (_) {}
       }
     }
     final recommendationsById = <String, MediaItem>{
@@ -260,17 +282,19 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   }
 
   List<MediaItem> _relatedFallback(Map<String, dynamic> details, List<String> keys) {
-    final found = <String, MediaItem>{};
+    final found = <int, MediaItem>{};
     for (final key in keys) {
       final section = details[key];
-      final rows = (section is Map ? section['results'] : null) as List? ?? const [];
+      final rows = section is Map ? section['results'] : null;
+      if (rows is! List) continue;
       for (final row in rows.whereType<Map>()) {
         final data = Map<String, dynamic>.from(row);
-        data.putIfAbsent('media_type', () => _type);
+        // The details endpoint determines the media type even when TMDB omits
+        // media_type from its nested related-results payload.
+        data['media_type'] = _type;
         final item = MediaItem.fromJson(data);
-        if (item.id != widget.item.id && item.hasConfirmedRelease &&
-            (item.mediaType == 'movie' || item.mediaType == 'tv')) {
-          found['${item.mediaType}:${item.id}'] = item;
+        if (item.id != widget.item.id && item.id > 0 && item.hasConfirmedRelease) {
+          found[item.id] = item;
         }
       }
     }
