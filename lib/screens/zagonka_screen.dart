@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview_forge/flutter_inappwebview_forge.dart';
 
 import '../services/ad_filter_engine.dart';
+import '../widgets/tv_player_controls.dart';
 
 class ZagonkaScreen extends StatefulWidget {
   const ZagonkaScreen({
@@ -14,11 +15,13 @@ class ZagonkaScreen extends StatefulWidget {
     required this.title,
     this.kinopoiskId,
     this.isSeries = false,
+    this.tvMode = false,
   });
 
   final String title;
   final int? kinopoiskId;
   final bool isSeries;
+  final bool tvMode;
 
   @override
   State<ZagonkaScreen> createState() => _ZagonkaScreenState();
@@ -33,6 +36,12 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   bool _isFullscreen = false;
   int _sourceAttemptIndex = 0;
   int _playerCheckToken = 0;
+  Timer? _tvControlsTimer;
+  bool _tvControlsVisible = true;
+  bool _tvPlayerReady = false;
+  bool _tvPlaying = true;
+  bool _tvSubtitlesEnabled = false;
+  double _tvSpeed = 1.0;
   String? _error;
   final Expando<String> _sourceUrlByController = Expando<String>('kinoSourceUrl');
 
@@ -686,8 +695,56 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
     }
   }
 
+
+  void _showTvControls() {
+    if (!widget.tvMode || !mounted) return;
+    if (!_tvControlsVisible) setState(() => _tvControlsVisible = true);
+    _tvControlsTimer?.cancel();
+    _tvControlsTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && widget.tvMode) setState(() => _tvControlsVisible = false);
+    });
+  }
+
+  Future<void> _sendTvPlayerCommand(String action, {double? value}) async {
+    final controller = _bootstrapController;
+    if (controller == null) return;
+    final valuePart = value == null ? '' : ', value: $value';
+    final script = "(() => { const message = {channel:'kino-tv-player', action:'$action'$valuePart}; window.postMessage(message, '*'); document.querySelectorAll('iframe').forEach((frame) => { try { frame.contentWindow?.postMessage(message, '*'); } catch (_) {} }); })();";
+    try { await controller.evaluateJavascript(source: script); } catch (e) {
+      debugPrint('[KinoKino TV] player command failed: $e');
+    }
+  }
+
+  void _tvPlayPause() {
+    _tvPlaying = !_tvPlaying;
+    setState(() {});
+    _sendTvPlayerCommand('playPause');
+    _showTvControls();
+  }
+
+  void _tvSeek(bool forward) {
+    _sendTvPlayerCommand(forward ? 'seekForward' : 'seekBack');
+    _showTvControls();
+  }
+
+  void _tvChangeSpeed() {
+    const speeds = <double>[1.0, 1.25, 1.5, 1.75, 2.0, 0.75];
+    final index = speeds.indexOf(_tvSpeed);
+    _tvSpeed = speeds[(index + 1) % speeds.length];
+    setState(() {});
+    _sendTvPlayerCommand('speed', value: _tvSpeed);
+    _showTvControls();
+  }
+
+  void _tvToggleSubtitles() {
+    _tvSubtitlesEnabled = !_tvSubtitlesEnabled;
+    _sendTvPlayerCommand('subtitles', value: _tvSubtitlesEnabled ? 1 : 0);
+    _showTvControls();
+  }
+
   @override
   void dispose() {
+    _tvControlsTimer?.cancel();
     SystemChrome.setPreferredOrientations(const []);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
@@ -708,7 +765,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       },
       child: Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: (node, event) {
+          if (widget.tvMode && event is KeyDownEvent) _showTvControls();
+          return KeyEventResult.ignored;
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: _showTvControls,
+          child: Stack(
         fit: StackFit.expand,
         children: [
           // Keep the source page alive for cookies/session and popup creation,
@@ -755,7 +821,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                         _playerCheckToken++;
                         setState(() {
                           _playerLoading = false;
+                          _tvPlayerReady = true;
                         });
+                        _showTvControls();
                       }
                       return {'accepted': true};
                     },
@@ -925,6 +993,17 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 ),
               ),
             ),
+          if (widget.tvMode && _tvPlayerReady && _tvControlsVisible)
+            Positioned.fill(child: TvPlayerControls(
+              onBack: () => Navigator.of(context).maybePop(),
+              onPlayPause: _tvPlayPause,
+              onSeekBack: () => _tvSeek(false),
+              onSeekForward: () => _tvSeek(true),
+              onSpeed: _tvChangeSpeed,
+              onSubtitles: _tvToggleSubtitles,
+              speed: _tvSpeed,
+              playing: _tvPlaying,
+            )),
           if (!_playerWindowOpened && (!_pageLoaded || _playerLoading))
             const Positioned.fill(
               child: ColoredBox(color: Colors.black),
@@ -986,6 +1065,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             ),
         ],
       ),
+          ),
+        ),
       ),
     );
   }
