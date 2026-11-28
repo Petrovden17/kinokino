@@ -70,6 +70,24 @@ class KinopoiskService {
     }
   }
 
+  /// Returns actual Kinopoisk similar titles through the existing secured proxy.
+  Future<List<Map<String, dynamic>>> similars(int kinopoiskId) async {
+    if (kinopoiskId <= 0) return const [];
+    final response = await _client.functions.invoke('kinopoisk-proxy', body: {
+      'action': 'similars',
+      'film_id': kinopoiskId,
+    });
+    final payload = response.data;
+    final rows = payload is List
+        ? payload
+        : payload is Map
+            ? (payload['items'] ?? payload['films'] ?? payload['similars'] ?? const [])
+            : const [];
+    return rows is List
+        ? rows.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
+        : const [];
+  }
+
   /// Resolve an exact IMDb identifier through Wikidata's public SPARQL API.
   Future<List<Map<String, dynamic>>> byImdbId(String imdbId) async {
     final id = imdbId.trim();
