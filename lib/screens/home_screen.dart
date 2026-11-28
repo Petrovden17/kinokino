@@ -19,9 +19,10 @@ import 'media_details_screen.dart';
 import 'creator_console_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key, required this.profileService, required this.settingsService});
+  const HomeScreen({super.key, required this.profileService, required this.settingsService, this.tvMode = false});
   final ProfileService profileService;
   final SettingsService settingsService;
+  final bool tvMode;
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -249,6 +250,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _open(MediaItem item) async {
     await Navigator.push(context, MaterialPageRoute(builder: (_) => MediaDetailsScreen(
       item: item,
+      tvMode: widget.tvMode,
     )));
     if (mounted) setState(() {});
   }
@@ -575,7 +577,7 @@ class _HomeScreenState extends State<HomeScreen> {
           return false;
         },
         child: FocusTraversalGroup(
-          child: SafeArea(child: IndexedStack(index: _selectedTab, children: pages)),
+          child: SafeArea(child: FocusTraversalGroup(policy: ReadingOrderTraversalPolicy(), child: IndexedStack(index: _selectedTab, children: pages))),
         ),
       ),
       bottomNavigationBar: NavigationBar(
