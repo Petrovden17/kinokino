@@ -77,7 +77,7 @@ class _KinoKinoAppState extends State<KinoKinoApp> {
         builder: (dialogContext) => AlertDialog(
           title: const Text('Доступно обновление KinoKino'),
           content: SingleChildScrollView(child: Text(
-            'Найдена новая версия ${update.tag}. Приложение скачает её и перезапустится автоматически.\n\n${update.notes.isEmpty ? 'Исправления и улучшения.' : update.notes}',
+            '${defaultTargetPlatform == TargetPlatform.android ? 'Найдена новая версия ${update.tag}. APK откроется для загрузки. После скачивания подтвердите установку.' : 'Найдена новая версия ${update.tag}. Приложение скачает её и перезапустится автоматически.'}\n\n${update.notes.isEmpty ? 'Исправления и улучшения.' : update.notes}',
           )),
           actions: [
             TextButton(
