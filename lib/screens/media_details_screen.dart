@@ -264,6 +264,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     // in the background so it cannot delay the details screen.
     if (_similar.length < 20) {
       unawaited(_loadKinopoiskSimilar(details));
+    }
+    if (_recommendations.isEmpty || _similar.length < 20) {
       unawaited(_loadWatchmodeSimilar());
     }
   }
