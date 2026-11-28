@@ -17,23 +17,6 @@ class KinopoiskService {
     },
   ));
 
-  Future<Map<String, dynamic>> _invoke(
-    String action, {
-    String? query,
-    String? imdbId,
-    int? filmId,
-  }) async {
-    final body = <String, dynamic>{'action': action};
-    if (query != null) body['query'] = query;
-    if (imdbId != null) body['imdb_id'] = imdbId;
-    if (filmId != null) body['film_id'] = filmId;
-    final response = await _client.functions.invoke('kinopoisk-proxy', body: body);
-    final data = response.data;
-    if (data is Map<String, dynamic>) return data;
-    if (data is Map) return Map<String, dynamic>.from(data);
-    throw const FormatException('Некорректный ответ Kinopoisk API.');
-  }
-
   /// Returns a previously verified TMDB → Kinopoisk mapping, if available.
   Future<Map<String, dynamic>?> cachedMatch(
     int tmdbId, {required String mediaType, String? fallbackTitle}
@@ -88,36 +71,10 @@ class KinopoiskService {
     }
   }
 
-  /// Extracts result rows from the response variants used by Kinopoisk API
-  /// versions and proxy deployments.
-  List<Map<String, dynamic>> _resultRows(Map<String, dynamic> data) {
-    dynamic rows = data['films'] ?? data['items'] ?? data['results'];
-    if (rows is! List && data['data'] is Map) {
-      final nested = Map<String, dynamic>.from(data['data'] as Map);
-      rows = nested['films'] ?? nested['items'] ?? nested['results'];
-    }
-    if (rows is! List && data['data'] is List) rows = data['data'];
-    if (rows is! List) return const [];
-    return rows.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
-  }
-
-  /// Fast search against the primary Kinopoisk proxy only. Used for the
-  /// first playback lookup; Wikidata is a slower fallback, not a per-query step.
-  Future<List<Map<String, dynamic>>> searchKinopoisk(String query) async {
-    final data = await _invoke('search', query: query);
-    return _resultRows(data);
-  }
-
   /// Public catalog lookup backed only by Wikidata; no Kinopoisk API token.
   Future<List<Map<String, dynamic>>> searchWikidata(String query) =>
       _searchWikidata(query);
 
-  Future<List<Map<String, dynamic>>> search(String query) =>
-      _searchWikidata(query);
-
-  /// Resolves an IMDb ID through Wikidata's public SPARQL endpoint.
-  /// This is independent of the private Kinopoisk API and requires no key.
   Future<List<Map<String, dynamic>>> byImdbId(String imdbId) async {
     final id = imdbId.trim();
     if (!RegExp(r'^tt[0-9]{5,12}
@@ -227,14 +184,7 @@ class KinopoiskService {
     return results;
   }
 
-  Future<Map<String, dynamic>> film(int id) => _invoke('film', filmId: id);
-
-  Future<List<Map<String, dynamic>>> seasons(int id) async {
-    final data = await _invoke('seasons', filmId: id);
-    final items = data['items'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
-  }
+}
 
   Future<List<Map<String, dynamic>>> videos(int id) async {
     final data = await _invoke('videos', filmId: id);
