@@ -1,7 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Resolves Kinopoisk IDs and keeps a shared TMDB → Kinopoisk cache.
+/// Resolves source-catalog IDs through public Wikidata data.
+/// No private Kinopoisk API key or endpoint is used.
 class KinopoiskService {
   KinopoiskService({SupabaseClient? client})
       : _client = client ?? Supabase.instance.client;
@@ -17,7 +18,6 @@ class KinopoiskService {
     },
   ));
 
-  /// Returns a previously verified TMDB → Kinopoisk mapping, if available.
   Future<Map<String, dynamic>?> cachedMatch(
     int tmdbId, {required String mediaType, String? fallbackTitle}
   ) async {
@@ -40,8 +40,7 @@ class KinopoiskService {
     };
   }
 
-  /// Stores a resolved mapping through the trusted Edge Function.
-  /// Cache writes are best-effort and must never block playback.
+  /// Best-effort shared cache write. Failure never blocks opening the source.
   Future<void> cacheMatch({
     required int tmdbId,
     required String mediaType,
@@ -66,134 +65,15 @@ class KinopoiskService {
         'match_method': matchMethod,
         'confidence': confidence,
       });
-    } catch (error) {
-      // A cache outage must not prevent a valid Kinopoisk match from opening.
+    } catch (_) {
+      // The public lookup still works when shared cache storage is unavailable.
     }
   }
 
-  /// Public catalog lookup backed only by Wikidata; no Kinopoisk API token.
-  Future<List<Map<String, dynamic>>> searchWikidata(String query) =>
-      _searchWikidata(query);
-
+  /// Resolve an exact IMDb identifier through Wikidata's public SPARQL API.
   Future<List<Map<String, dynamic>>> byImdbId(String imdbId) async {
     final id = imdbId.trim();
-    if (!RegExp(r'^tt[0-9]{5,12}
-
-  Future<List<Map<String, dynamic>>> byWikidataId(String entityId) async {
-    final id = entityId.trim();
-    if (!id.startsWith('Q') || id.length < 2 ||
-        int.tryParse(id.substring(1)) == null) return const [];
-    return _entitiesToKinopoisk([id]);
-  }
-
-  Future<List<Map<String, dynamic>>> _searchWikidata(String query) async {
-    final ids = <String>{};
-    for (final language in const ['ru', 'en']) {
-      final response = await _wikidata.get('', queryParameters: {
-        'action': 'wbsearchentities',
-        'search': query,
-        'language': language,
-        'uselang': language,
-        'type': 'item',
-        'limit': 25,
-        'format': 'json',
-      });
-      final rows = response.data is Map
-          ? (response.data['search'] as List? ?? const [])
-          : const <dynamic>[];
-      for (final row in rows.whereType<Map>()) {
-        final id = row['id']?.toString() ?? '';
-        if (id.startsWith('Q') && id.length > 1 &&
-            int.tryParse(id.substring(1)) != null) {
-          ids.add(id);
-        }
-      }
-    }
-    if (ids.isEmpty) return const [];
-    return _entitiesToKinopoisk(ids.take(50).toList());
-  }
-
-  Future<List<Map<String, dynamic>>> _entitiesToKinopoisk(List<String> ids) async {
-    final entityResponse = await _wikidata.get('', queryParameters: {
-      'action': 'wbgetentities',
-      'ids': ids.join('|'),
-      'props': 'labels|claims',
-      'languages': 'ru|en',
-      'format': 'json',
-    });
-    final entities = entityResponse.data is Map
-        ? (entityResponse.data['entities'] as Map? ?? const {})
-        : const {};
-    final results = <Map<String, dynamic>>[];
-
-    for (final entry in entities.entries) {
-      final entity = entry.value;
-      if (entity is! Map) continue;
-      final claims = entity['claims'] as Map? ?? const {};
-      final kpClaims = claims['P2603'] as List? ?? const [];
-      if (kpClaims.isEmpty) continue;
-      final firstClaim = kpClaims.first as Map?;
-      final mainSnak = firstClaim?['mainsnak'] as Map?;
-      final dataValue = mainSnak?['datavalue'] as Map?;
-      final filmId = dataValue?['value']?.toString().trim() ?? '';
-      if (int.tryParse(filmId) == null) continue;
-
-      String label(String language) {
-        final labels = entity['labels'] as Map? ?? const {};
-        return ((labels[language] as Map?)?['value'] ?? '').toString();
-      }
-
-      String claimEntityId(String property) {
-        final rows = claims[property] as List? ?? const [];
-        if (rows.isEmpty) return '';
-        final claim = rows.first as Map?;
-        final snak = claim?['mainsnak'] as Map?;
-        final value = (snak?['datavalue'] as Map?)?['value'];
-        return value is Map ? (value['id']?.toString() ?? '') : '';
-      }
-
-      int yearFromClaim(String property) {
-        final rows = claims[property] as List? ?? const [];
-        if (rows.isEmpty) return 0;
-        final claim = rows.first as Map?;
-        final snak = claim?['mainsnak'] as Map?;
-        final value = (snak?['datavalue'] as Map?)?['value']?.toString() ?? '';
-        for (var index = 0; index + 4 <= value.length; index++) {
-          final candidate = value.substring(index, index + 4);
-          final year = int.tryParse(candidate);
-          if (year != null && year >= 1800 && year <= 2200) return year;
-        }
-        return 0;
-      }
-
-      final ru = label('ru');
-      final en = label('en');
-      final instance = claimEntityId('P31');
-      final isSeries = const {'Q5398426', 'Q1259759', 'Q15416'}.contains(instance);
-      final releaseYear = yearFromClaim('P577');
-      results.add({
-        'filmId': int.parse(filmId),
-        'nameRu': ru,
-        'nameEn': en,
-        'nameOriginal': en.isNotEmpty ? en : ru,
-        'name': ru.isNotEmpty ? ru : en,
-        'year': releaseYear != 0 ? releaseYear : yearFromClaim('P571'),
-        'type': isSeries ? 'TV_SERIES' : (instance == 'Q11424' ? 'FILM' : ''),
-      });
-    }
-    return results;
-  }
-
-}
-
-  Future<List<Map<String, dynamic>>> videos(int id) async {
-    final data = await _invoke('videos', filmId: id);
-    final items = data['items'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
-  }
-}
-).hasMatch(id)) return const [];
+    if (!RegExp(r'^tt[0-9]{5,12}$').hasMatch(id)) return const [];
     final query = '''
       SELECT ?item ?itemLabel ?kpId ?date ?instance WHERE {
         ?item wdt:P345 "$id".
@@ -241,12 +121,11 @@ class KinopoiskService {
 
   Future<List<Map<String, dynamic>>> byWikidataId(String entityId) async {
     final id = entityId.trim();
-    if (!id.startsWith('Q') || id.length < 2 ||
-        int.tryParse(id.substring(1)) == null) return const [];
+    if (!RegExp(r'^Q[0-9]+$').hasMatch(id)) return const [];
     return _entitiesToKinopoisk([id]);
   }
 
-  Future<List<Map<String, dynamic>>> _searchWikidata(String query) async {
+  Future<List<Map<String, dynamic>>> searchWikidata(String query) async {
     final ids = <String>{};
     for (final language in const ['ru', 'en']) {
       final response = await _wikidata.get('', queryParameters: {
@@ -263,10 +142,7 @@ class KinopoiskService {
           : const <dynamic>[];
       for (final row in rows.whereType<Map>()) {
         final id = row['id']?.toString() ?? '';
-        if (id.startsWith('Q') && id.length > 1 &&
-            int.tryParse(id.substring(1)) != null) {
-          ids.add(id);
-        }
+        if (RegExp(r'^Q[0-9]+$').hasMatch(id)) ids.add(id);
       }
     }
     if (ids.isEmpty) return const [];
@@ -274,15 +150,15 @@ class KinopoiskService {
   }
 
   Future<List<Map<String, dynamic>>> _entitiesToKinopoisk(List<String> ids) async {
-    final entityResponse = await _wikidata.get('', queryParameters: {
+    final response = await _wikidata.get('', queryParameters: {
       'action': 'wbgetentities',
       'ids': ids.join('|'),
       'props': 'labels|claims',
       'languages': 'ru|en',
       'format': 'json',
     });
-    final entities = entityResponse.data is Map
-        ? (entityResponse.data['entities'] as Map? ?? const {})
+    final entities = response.data is Map
+        ? (response.data['entities'] as Map? ?? const {})
         : const {};
     final results = <Map<String, dynamic>>[];
 
@@ -318,12 +194,8 @@ class KinopoiskService {
         final claim = rows.first as Map?;
         final snak = claim?['mainsnak'] as Map?;
         final value = (snak?['datavalue'] as Map?)?['value']?.toString() ?? '';
-        for (var index = 0; index + 4 <= value.length; index++) {
-          final candidate = value.substring(index, index + 4);
-          final year = int.tryParse(candidate);
-          if (year != null && year >= 1800 && year <= 2200) return year;
-        }
-        return 0;
+        final match = RegExp(r'(19[0-9]{2}|20[0-9]{2})').firstMatch(value);
+        return int.tryParse(match?.group(1) ?? '') ?? 0;
       }
 
       final ru = label('ru');
@@ -339,24 +211,9 @@ class KinopoiskService {
         'name': ru.isNotEmpty ? ru : en,
         'year': releaseYear != 0 ? releaseYear : yearFromClaim('P571'),
         'type': isSeries ? 'TV_SERIES' : (instance == 'Q11424' ? 'FILM' : ''),
+        'wikidataId': entry.key.toString(),
       });
     }
     return results;
-  }
-
-  Future<Map<String, dynamic>> film(int id) => _invoke('film', filmId: id);
-
-  Future<List<Map<String, dynamic>>> seasons(int id) async {
-    final data = await _invoke('seasons', filmId: id);
-    final items = data['items'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
-  }
-
-  Future<List<Map<String, dynamic>>> videos(int id) async {
-    final data = await _invoke('videos', filmId: id);
-    final items = data['items'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
   }
 }
