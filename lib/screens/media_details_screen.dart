@@ -9,6 +9,7 @@ import '../services/local_database.dart';
 import '../widgets/poster_card.dart';
 import 'player_screen.dart';
 import 'zagonka_screen.dart';
+import 'tv_zagonka_screen.dart';
 class MediaDetailsScreen extends StatefulWidget {
   const MediaDetailsScreen({super.key, required this.item, this.preferredAudioLanguage = 'auto', this.preferredVideoQuality = 'auto', this.tvMode = false});
   final MediaItem item;
@@ -737,12 +738,18 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       return;
     }
     await Navigator.push(context, MaterialPageRoute(
-      builder: (_) => ZagonkaScreen(
-        title: _displayTitle,
-        kinopoiskId: id,
-        isSeries: _type == 'tv',
-        tvMode: widget.tvMode,
-      ),
+      builder: (_) => widget.tvMode
+          ? TvZagonkaScreen(
+              title: _displayTitle,
+              kinopoiskId: id,
+              isSeries: _type == 'tv',
+            )
+          : ZagonkaScreen(
+              title: _displayTitle,
+              kinopoiskId: id,
+              isSeries: _type == 'tv',
+              tvMode: false,
+            ),
     ));
   }
 
