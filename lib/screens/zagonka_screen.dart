@@ -527,6 +527,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               /смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text);
           });
           if (!candidate) return false;
+          if (autoLaunch && launchActivated) return true;
           if (!launchNotified) {
             launchNotified = true;
             notify('launch');
