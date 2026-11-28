@@ -25,11 +25,11 @@ class WatchmodeService {
         : null;
     final rows = results is List ? results.whereType<Map>().toList() : <Map>[];
     if (rows.isEmpty) return const [];
-    final match = rows.firstWhere(
+    final exactMatches = rows.where(
       (row) => row['tmdb_id']?.toString() == tmdbId.toString(),
-      orElse: () => rows.first,
-    );
-    final watchmodeId = match['id'];
+    ).toList();
+    if (exactMatches.isEmpty) return const [];
+    final watchmodeId = exactMatches.first['id'];
     if (watchmodeId == null) return const [];
 
     Map<String, dynamic>? details;
