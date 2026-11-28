@@ -89,6 +89,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           .timeout(const Duration(seconds: 8));
       final imdbId = external['imdb_id']?.toString() ?? '';
       if (imdbId.isNotEmpty) {
+        _imdbId = imdbId;
+        if (mounted) setState(() {});
+      }
         final imdbMatches = await _kinopoisk.byImdbId(imdbId)
             .timeout(const Duration(seconds: 10));
         final selectedByImdb = _selectKinopoiskMatch(
@@ -213,34 +216,12 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     } catch (e) {
       error = e.toString();
     }
-    // Kinopoisk supplements catalogue metadata. Its private token remains server-side.
+    // Resolve source IDs only when the user taps Watch. A missing optional
+    // Kinopoisk mapping must not hold the whole details page behind API timeouts.
     Map<String, dynamic>? kpFilm;
     int? kinopoiskId;
     List<Map<String, dynamic>> kpSeasons = [];
     List<Map<String, dynamic>> kpVideos = [];
-    String? imdbId;
-    try {
-      final external = await _tmdb.externalIds(widget.item.id, type: _type)
-          .timeout(const Duration(seconds: 8));
-      imdbId = external['imdb_id']?.toString();
-    } catch (e) {
-      debugPrint('[KinoKino] IMDb ID lookup unavailable: $e');
-    }
-    try {
-      final selected = await _findKinopoiskMatch(details);
-      if (selected != null) {
-        final rawId = selected['filmId'] ?? selected['kinopoiskId'] ??
-            selected['kinopoisk_id'] ?? selected['id'];
-        final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
-        if (id > 0) {
-          // Keep the resolved public catalog ID for source navigation. All
-          // metadata and episode lists are supplied by TMDB, not Kinopoisk API.
-          kinopoiskId = id;
-        }
-      }
-    } catch (_) {
-      // Keep the TMDB catalogue usable if the optional metadata API is unavailable.
-    }
     // Keep similar titles and recommendations separate so neither endpoint
     // can hide the other and each section can be loaded independently.
     List<MediaItem> recommendations = [];
