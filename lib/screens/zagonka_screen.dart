@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:collection';
 import 'dart:typed_data';
 
@@ -385,8 +386,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               player.init();
               console.log('[KinoKino] KinoBox search initialized', search);
             };
-            if (${JSON.stringify(imdb)}) {
-              runSearch({imdb: ${JSON.stringify(imdb)}});
+            if (${jsonEncode(imdb)}) {
+              runSearch({imdb: ${jsonEncode(imdb)}});
               // Some source indexes know the title before they know its IMDb ID.
               // Retry by title/year if the exact IMDb lookup did not create a player.
               setTimeout(() => {
@@ -395,10 +396,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     const rect = node.getBoundingClientRect();
                     return rect.width > 100 && rect.height > 60;
                   });
-                if (!hasEmbed) runSearch({title: ${JSON.stringify(title)}, year: $year});
+                if (!hasEmbed) runSearch({title: ${jsonEncode(title)}, year: $year});
               }, 12000);
             } else {
-              runSearch({title: ${JSON.stringify(title)}, year: $year});
+              runSearch({title: ${jsonEncode(title)}, year: $year});
             }
           } catch (error) {
             console.error('[KinoKino] KinoBox search init failed', error);
