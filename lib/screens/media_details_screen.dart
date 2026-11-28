@@ -291,21 +291,34 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   }
 
   Future<void> _mergeExternalSimilar(
-    List<Map<String, dynamic>> sourceItems, String sourceName,
-  ) async {
+    List<Map<String, dynamic>> sourceItems,
+    String sourceName, {
+    bool useAsRecommendations = false,
+  }) async {
     final tasks = sourceItems.take(15).map(_mapRelatedCandidate);
-    final mapped = await Future.wait(tasks);
-    if (!mounted) return;
+    final mapped = (await Future.wait(tasks)).whereType<MediaItem>()
+        .where((item) => item.id != widget.item.id).toList();
+    if (!mounted || mapped.isEmpty) return;
+
+    if (useAsRecommendations && _recommendations.isEmpty) {
+      final merged = <String, MediaItem>{
+        for (final item in mapped)
+          '${item.mediaType}:${item.id}': item,
+      };
+      setState(() => _recommendations = merged.values.take(20).toList());
+      debugPrint('[KinoKino] Filled recommendations from $sourceName: ${mapped.length}');
+      return;
+    }
+
     final merged = <String, MediaItem>{
       for (final item in _similar)
         '${item.mediaType}:${item.id}': item,
-      for (final item in mapped.whereType<MediaItem>())
-        if (item.id != widget.item.id)
-          '${item.mediaType}:${item.id}': item,
+      for (final item in mapped)
+        '${item.mediaType}:${item.id}': item,
     };
     if (merged.length > _similar.length) {
       setState(() => _similar = merged.values.take(24).toList());
-      debugPrint('[KinoKino] Added similar titles from $sourceName: ${mapped.whereType<MediaItem>().length}');
+      debugPrint('[KinoKino] Added similar titles from $sourceName: ${mapped.length}');
     }
   }
 
@@ -333,7 +346,11 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         tmdbId: widget.item.id,
         mediaType: _type,
       ).timeout(const Duration(seconds: 20));
-      await _mergeExternalSimilar(sourceItems, 'Watchmode');
+      await _mergeExternalSimilar(
+        sourceItems,
+        'Watchmode',
+        useAsRecommendations: _recommendations.isEmpty,
+      );
     } catch (e) {
       debugPrint('[KinoKino] Watchmode related titles unavailable: $e');
     }
