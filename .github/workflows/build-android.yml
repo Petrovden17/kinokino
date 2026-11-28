@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - main
+      - android/android9plus-from-build-213
     paths:
       - ".github/workflows/build-android.yml"
       - "pubspec.yaml"
@@ -53,6 +54,55 @@ jobs:
               raise SystemExit("Could not set the new Android application ID")
           gradle.write_text(source, encoding="utf-8")
           PY
+
+      - name: Configure Android 9+ and modern native-library compatibility
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle = Path("android/app/build.gradle.kts")
+          source = gradle.read_text(encoding="utf-8")
+
+          source, min_count = re.subn(
+              r'minSdk\\s*=\\s*(?:flutter\\.minSdkVersion|[0-9]+)',
+              'minSdk = 21',
+              source,
+              count=1,
+          )
+          if min_count != 1:
+              raise SystemExit("Could not explicitly set minSdk to 21 (Android 5.0+; includes Android 9+)")
+
+          source, ndk_count = re.subn(
+              r'ndkVersion\\s*=\\s*[^\\n]+',
+              'ndkVersion = "28.2.13676358"',
+              source,
+              count=1,
+          )
+          if ndk_count != 1:
+              raise SystemExit("Could not set Android NDK r28")
+
+          if "useLegacyPackaging" not in source:
+              source = source.replace(
+                  "    buildTypes {",
+                  '    packaging {\\n        jniLibs {\\n            useLegacyPackaging = false\\n        }\\n    }\\n\\n    buildTypes {',
+                  1,
+              )
+          if "useLegacyPackaging = false" not in source:
+              raise SystemExit("Could not enable uncompressed native library packaging")
+
+          gradle.write_text(source, encoding="utf-8")
+          print("Configured minSdk=21, NDK r28 and 16 KB-friendly JNI packaging")
+          PY
+
+          echo "Generated Android Gradle configuration:"
+          grep -nE 'ndkVersion|minSdk|useLegacyPackaging' android/app/build.gradle.kts
+
+      - name: Verify Android 9+ and APK native alignment
+        run: |
+          set -euo pipefail
+          grep -q 'minSdk = 21' android/app/build.gradle.kts
+          grep -q 'ndkVersion = "28.2.13676358"' android/app/build.gradle.kts
 
       - name: Restore persistent Android signing key
         uses: actions/cache@v4
@@ -185,6 +235,12 @@ jobs:
 
       - name: Build Android APK
         run: flutter build apk --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }} --dart-define=APP_BUILD=${{ github.run_number }}
+
+      - name: Verify APK ZIP alignment for 16 KB page devices
+        run: |
+          APK="build/app/outputs/flutter-apk/app-release.apk"
+          SDK_BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          "$SDK_BUILD_TOOLS/zipalign" -c -P 16 -v 4 "$APK"
 
       - name: Upload APK
         if: always() && hashFiles('build/app/outputs/flutter-apk/app-release.apk') != ''
