@@ -13,11 +13,15 @@ class ZagonkaScreen extends StatefulWidget {
     super.key,
     required this.title,
     this.kinopoiskId,
+    this.imdbId,
+    this.year,
     this.isSeries = false,
   });
 
   final String title;
   final int? kinopoiskId;
+  final String? imdbId;
+  final int? year;
   final bool isSeries;
 
   @override
@@ -39,6 +43,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   @override
   void initState() {
     super.initState();
+    // Without a Kinopoisk ID, only KinoBox supports direct IMDb/title search.
+    if (widget.kinopoiskId == null || widget.kinopoiskId! <= 0) {
+      _sourceAttemptIndex = _playerSourceHosts.indexOf('kinobox.tv');
+    }
     AdFilterEngine.instance.initialize().then((_) {
       debugPrint('[KinoKino] network filter engine ready: ${AdFilterEngine.instance.ruleCount} rules');
     }).catchError((Object error) {
@@ -56,7 +64,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   WebUri _urlForSource(int index) {
     final id = widget.kinopoiskId;
     final host = _playerSourceHosts[index];
-    if (id == null || id <= 0) return WebUri('https://$host/');
+    if (id == null || id <= 0) {
+      return WebUri('https://kinobox.tv/');
+    }
     if (host == 'kinobox.tv') {
       final type = widget.isSeries ? 'serials' : 'films';
       return WebUri('https://kinobox.tv/#/$type/$id');
@@ -352,6 +362,45 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   // popup/new window: after the user taps the site's real play control, find
   // the newly-created video/iframe and expand that element in the same WebView.
   // This preserves the document, cookies, referrer and playback session.
+  Future<void> _initializeKinoboxTitleSearch(
+    InAppWebViewController controller,
+  ) async {
+    final imdb = (widget.imdbId ?? '').trim();
+    final title = widget.title.trim();
+    final year = widget.year ?? 0;
+    final script = '''
+      (() => {
+        if (window.__kinoTitleSearchStarted) return;
+        window.__kinoTitleSearchStarted = true;
+        document.documentElement.style.cssText = 'background:#000!important;height:100%;margin:0';
+        document.body.innerHTML = '<div id="kino-title-search-player" style="width:100vw;height:100vh;background:#000"></div>';
+        const loader = document.createElement('script');
+        loader.src = 'https://kinobox.tv/kinobox.js';
+        loader.onload = () => {
+          try {
+            const search = {
+              imdb: ${JSON.stringify(imdb)},
+              title: ${JSON.stringify(title)},
+              year: $year
+            };
+            const player = new Kinobox('#kino-title-search-player', {search});
+            player.init();
+            console.log('[KinoKino] KinoBox title/IMDb search initialized', search);
+          } catch (error) {
+            console.error('[KinoKino] KinoBox search init failed', error);
+          }
+        };
+        loader.onerror = () => console.error('[KinoKino] kinobox.js failed to load');
+        document.head.appendChild(loader);
+      })();
+    ''';
+    try {
+      await controller.evaluateJavascript(source: script);
+    } catch (e) {
+      debugPrint('[KinoKino] title/IMDb player initialization failed: $e');
+    }
+  }
+
   Future<void> _activateSitePlayer(InAppWebViewController controller) async {
     const script = r"""
       (() => {
@@ -790,6 +839,9 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                   if (!_pageLoaded) {
                     _pageLoaded = true;
                     if (mounted) setState(() => _playerLoading = true);
+                    if (widget.kinopoiskId == null || widget.kinopoiskId! <= 0) {
+                      await _initializeKinoboxTitleSearch(controller);
+                    }
                     await _activateSitePlayer(controller);
                     if (mounted) setState(() {});
                     _schedulePlayerCheck(controller, const Duration(seconds: 12));
