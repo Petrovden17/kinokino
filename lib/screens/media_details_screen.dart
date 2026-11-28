@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -96,7 +97,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         }).toList();
         if (valid.isNotEmpty) {
           final selected = valid.first;
-          await _saveKinopoiskMatch(selected, title, year, 'imdb', .99);
+          _saveKinopoiskMatch(selected, title, year, 'imdb', .99);
           return selected;
         }
       }
@@ -162,7 +163,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     return selected;
   }
 
-  Future<void> _saveKinopoiskMatch(
+  void _saveKinopoiskMatch(
     Map<String, dynamic> selected,
     String title,
     int year,
@@ -173,7 +174,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         selected['kinopoisk_id'] ?? selected['id'];
     final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
     if (id <= 0) return;
-    await _kinopoisk.cacheMatch(
+    unawaited(_kinopoisk.cacheMatch(
       tmdbId: widget.item.id,
       mediaType: _type,
       kinopoiskId: id,
@@ -183,7 +184,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       wikidataId: selected['wikidataId']?.toString(),
       matchMethod: method,
       confidence: confidence,
-    );
+    ));
   }
 
   Map<String, dynamic>? _selectKinopoiskMatch(
