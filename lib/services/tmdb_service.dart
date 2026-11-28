@@ -35,16 +35,30 @@ class TmdbService {
     final response = await _dio.get('/$type/$id/external_ids');
     return Map<String, dynamic>.from(response.data);
   }
-  Future<List<MediaItem>> recommendations(int id, {String type = 'movie'}) => _relatedList('/$type/$id/recommendations');
-  Future<List<MediaItem>> similar(int id, {String type = 'movie'}) => _relatedList('/$type/$id/similar');
-  Future<List<MediaItem>> _relatedList(String path) async {
+  Future<List<MediaItem>> recommendations(int id, {String type = 'movie'}) =>
+      _relatedList('/$type/$id/recommendations', type: type, excludeId: id);
+  Future<List<MediaItem>> similar(int id, {String type = 'movie'}) =>
+      _relatedList('/$type/$id/similar', type: type, excludeId: id);
+
+  Future<List<MediaItem>> _relatedList(
+    String path, {required String type, required int excludeId}) async {
     final response = await _dio.get(path);
-    final results = (response.data['results'] as List? ?? const []);
-    return results.whereType<Map>()
-        .map((row) => MediaItem.fromJson(Map<String, dynamic>.from(row)))
-        .where((item) => item.id != 0 && item.hasConfirmedRelease &&
-            (item.mediaType == 'movie' || item.mediaType == 'tv'))
-        .toList();
+    final payload = response.data;
+    if (payload is! Map) return const [];
+    final results = payload['results'];
+    if (results is! List) return const [];
+    final unique = <int, MediaItem>{};
+    for (final row in results.whereType<Map>()) {
+      final json = Map<String, dynamic>.from(row);
+      // TMDB's movie and TV related endpoints do not always include
+      // media_type. The endpoint itself is authoritative for the type.
+      json['media_type'] = type;
+      final item = MediaItem.fromJson(json);
+      if (item.id == 0 || item.id == excludeId || !item.hasConfirmedRelease) continue;
+      if (item.mediaType != 'movie' && item.mediaType != 'tv') continue;
+      unique[item.id] = item;
+    }
+    return unique.values.toList();
   }
   Future<Map<String, dynamic>> seasonDetails(int id, int seasonNumber) async {
     final response = await _dio.get('/tv/$id/season/$seasonNumber');
