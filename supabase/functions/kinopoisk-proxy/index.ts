@@ -99,6 +99,7 @@ Deno.serve(async (req: Request) => {
         case "film": path = `/v2.2/films/${filmId}`; break;
         case "seasons": path = `/v2.2/films/${filmId}/seasons`; break;
         case "videos": path = `/v2.2/films/${filmId}/videos`; break;
+        case "similars": path = `/v2.2/films/${filmId}/similars`; break;
         default: return json({ error: "Unsupported action" }, 400);
       }
     }
