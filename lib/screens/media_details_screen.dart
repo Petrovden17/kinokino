@@ -66,7 +66,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     Map<String, dynamic>? details,
   ) async {
     final title = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
-    final original = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
     final year = _yearFromDetails(details, widget.item.releaseDate);
 
     // A cached mapping is optional. Playback resolution must never depend on
