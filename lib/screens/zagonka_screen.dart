@@ -378,14 +378,28 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         loader.src = 'https://kinobox.tv/kinobox.js';
         loader.onload = () => {
           try {
-            const search = {
-              imdb: ${JSON.stringify(imdb)},
-              title: ${JSON.stringify(title)},
-              year: $year
+            const container = document.getElementById('kino-title-search-player');
+            const runSearch = (search) => {
+              container.innerHTML = '';
+              const player = new Kinobox('#kino-title-search-player', {search});
+              player.init();
+              console.log('[KinoKino] KinoBox search initialized', search);
             };
-            const player = new Kinobox('#kino-title-search-player', {search});
-            player.init();
-            console.log('[KinoKino] KinoBox title/IMDb search initialized', search);
+            if (${JSON.stringify(imdb)}) {
+              runSearch({imdb: ${JSON.stringify(imdb)}});
+              // Some source indexes know the title before they know its IMDb ID.
+              // Retry by title/year if the exact IMDb lookup did not create a player.
+              setTimeout(() => {
+                const hasEmbed = Array.from(document.querySelectorAll('#kino-title-search-player iframe, #kino-title-search-player video'))
+                  .some((node) => {
+                    const rect = node.getBoundingClientRect();
+                    return rect.width > 100 && rect.height > 60;
+                  });
+                if (!hasEmbed) runSearch({title: ${JSON.stringify(title)}, year: $year});
+              }, 12000);
+            } else {
+              runSearch({title: ${JSON.stringify(title)}, year: $year});
+            }
           } catch (error) {
             console.error('[KinoKino] KinoBox search init failed', error);
           }
@@ -844,7 +858,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                     }
                     await _activateSitePlayer(controller);
                     if (mounted) setState(() {});
-                    _schedulePlayerCheck(controller, const Duration(seconds: 12));
+                    _schedulePlayerCheck(
+                      controller,
+                      Duration(seconds: widget.kinopoiskId == null || widget.kinopoiskId! <= 0 ? 28 : 12),
+                    );
                   }
                 },
                 // Attach the original popup WebView in this screen. It
