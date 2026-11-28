@@ -45,7 +45,7 @@ class WatchmodeService {
     dynamic related = details?['similar_titles'] ??
         details?['similar'] ??
         details?['related_titles'];
-    if (related is! List) {
+    if (related is! List || related.isEmpty) {
       try {
         final response = await _dio.get('/title/$watchmodeId/similar/');
         related = response.data is Map
