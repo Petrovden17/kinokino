@@ -275,11 +275,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         },
       );
       if (!mounted) return;
+      final downloadedBytes = await File(path).length();
+      if (!mounted) return;
       setState(() {
         _downloadingApk = false;
         _downloadedApkPath = path;
         _apkProgress = 1;
-        _notice = 'APK ${update.tag} скачан (${_formatBytes(await File(path).length())}). Запускаем установщик…';
+        _apkReceived = downloadedBytes;
+        _apkTotal = downloadedBytes;
+        _notice = 'APK ${update.tag} скачан (${_formatBytes(downloadedBytes)}). Запускаем установщик…';
       });
       final launched = await _updates.installAndroidApk(path);
       if (!mounted) return;
