@@ -15,7 +15,7 @@ class AppTheme {
     final scheme = ColorScheme.fromSeed(
       seedColor: selectedAccent, brightness: Brightness.dark, surface: selectedSurface,
     ).copyWith(
-      primary: gold, secondary: gold, tertiary: aqua,
+      primary: selectedAccent, secondary: selectedAccent, tertiary: aqua,
       surface: selectedSurface, onSurface: const Color(0xFFF4F6FC),
     );
     return ThemeData(
@@ -47,12 +47,12 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: gold, width: 1.5),
+          borderSide: BorderSide(color: selectedAccent, width: 1.5),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: gold, foregroundColor: Colors.white,
+          backgroundColor: selectedAccent, foregroundColor: Colors.black,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         ),
@@ -64,7 +64,7 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: surfaceRaised, selectedColor: gold.withValues(alpha: .22),
+        backgroundColor: surfaceRaised, selectedColor: selectedAccent.withValues(alpha: .22),
         side: BorderSide(color: Colors.white.withValues(alpha: .08)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         labelStyle: const TextStyle(color: Colors.white),
