@@ -12,6 +12,7 @@ on:
     branches:
       - main
       - android/android9plus-from-build-213
+      - android/catalog-settings-polish-from-213
     paths:
       - ".github/workflows/build-android.yml"
       - "pubspec.yaml"
