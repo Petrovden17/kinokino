@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_settings.dart';
 import '../services/settings_service.dart';
@@ -237,8 +238,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _checkForUpdates() async {
     if (_checkingUpdates) return;
-    if (!Platform.isWindows) {
-      setState(() => _notice = 'Автоматическая проверка обновлений доступна в Windows.');
+    if (!Platform.isWindows && !Platform.isAndroid) {
+      setState(() => _notice = 'Проверка обновлений для этой платформы пока не поддерживается.');
       return;
     }
     setState(() {
@@ -253,26 +254,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() => _notice = 'У вас установлена последняя версия KinoKino.');
         return;
       }
-      setState(() => _notice = 'Доступно обновление ${update.tag}.');
-      final install = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Доступно обновление KinoKino'),
-          content: SingleChildScrollView(
-            child: Text('Найдена версия ${update.tag}. Приложение скачает архив и перезапустится автоматически.\n\n${update.notes.isEmpty ? 'Исправления и улучшения.' : update.notes}'),
+      if (Platform.isAndroid) {
+        final download = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Доступно обновление KinoKino'),
+            content: SingleChildScrollView(child: Text(
+              'Найдена версия ${update.tag}. APK будет загружен через браузер. После загрузки откройте файл и подтвердите установку.\\n\\n${update.notes.isEmpty ? 'Исправления и улучшения.' : update.notes}',
+            )),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Позже')),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                icon: const Icon(Icons.download),
+                label: const Text('Скачать APK'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Позже')),
-            FilledButton.icon(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              icon: const Icon(Icons.download),
-              label: const Text('Установить'),
+        );
+        if (download == true) {
+          final uri = Uri.tryParse(update.downloadUrl);
+          if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+            throw StateError('Не удалось открыть ссылку загрузки APK.');
+          }
+          if (mounted) setState(() => _notice = 'Откройте загруженный APK и подтвердите обновление приложения.');
+        }
+      } else {
+        setState(() => _notice = 'Доступно обновление ${update.tag}.');
+        final install = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Доступно обновление KinoKino'),
+            content: SingleChildScrollView(
+              child: Text('Найдена версия ${update.tag}. Приложение скачает архив и перезапустится автоматически.\\n\\n${update.notes.isEmpty ? 'Исправления и улучшения.' : update.notes}'),
             ),
-          ],
-        ),
-      );
-      if (install == true) {
-        await _updates.downloadAndInstall(update);
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Позже')),
+              FilledButton.icon(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                icon: const Icon(Icons.download),
+                label: const Text('Установить'),
+              ),
+            ],
+          ),
+        );
+        if (install == true) await _updates.downloadAndInstall(update);
       }
     } catch (e) {
       if (mounted) setState(() => _notice = 'Не удалось проверить обновления: $e');
@@ -284,7 +310,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Настройки')),
-    body: ListView(padding: const EdgeInsets.all(16), children: [
+    body: SafeArea(top: false, child: ListView(padding: const EdgeInsets.fromLTRB(16, 4, 16, 28), children: [
       if (_notice != null) Padding(
         padding: const EdgeInsets.only(bottom: 14),
         child: Container(
@@ -435,6 +461,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             : const Icon(Icons.system_update_alt),
         onTap: _checkingUpdates ? null : _checkForUpdates,
       ),
-    ]),
+    ])),
   );
 }
