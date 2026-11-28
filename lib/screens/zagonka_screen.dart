@@ -409,7 +409,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   // the newly-created video/iframe and expand that element in the same WebView.
   // This preserves the document, cookies, referrer and playback session.
   Future<void> _activateSitePlayer(InAppWebViewController controller) async {
-    const script = r"""
+    final script = r"""
       (() => {
         if (window.__kinoInlinePlayerWatcher) return;
         window.__kinoInlinePlayerWatcher = true;
