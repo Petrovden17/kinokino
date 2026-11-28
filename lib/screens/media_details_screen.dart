@@ -63,82 +63,126 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   Future<Map<String, dynamic>?> _findKinopoiskMatch(
     Map<String, dynamic>? details,
   ) async {
-    // Use the verified TMDB → Kinopoisk mapping first. This avoids repeating
-    // fragile title searches every time the user opens a film and makes the
-    // already-imported catalogue actually participate in playback.
+    final title = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
+    final original = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
+    final year = _yearFromDetails(details, widget.item.releaseDate);
+
+    // 1) A verified local mapping is the fastest and most reliable path.
     try {
       final cached = await _kinopoisk.cachedMatch(
         widget.item.id,
         mediaType: _type,
-        fallbackTitle: (details?['title'] ?? details?['name'] ?? widget.item.title).toString(),
-      ).timeout(const Duration(seconds: 5));
-      final cachedId = cached?['filmId'];
-      final parsedCachedId = cachedId is num ? cachedId.toInt() : int.tryParse('$cachedId') ?? 0;
-      if (parsedCachedId > 0) return cached;
+        fallbackTitle: title,
+      ).timeout(const Duration(seconds: 8));
+      final rawId = cached?['filmId'] ?? cached?['kinopoiskId'] ?? cached?['id'];
+      final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
+      if (id > 0) return cached;
     } catch (e) {
-      debugPrint('[KinoKino] cached Kinopoisk mapping unavailable: $e');
+      debugPrint('[KinoKino] cached mapping lookup failed: $e');
     }
 
-    final localizedTitle = (details?['title'] ?? details?['name'] ?? widget.item.title).toString().trim();
-    final originalTitle = (details?['original_title'] ?? details?['original_name'] ?? '').toString().trim();
-    final releaseYear = _yearFromDetails(details, widget.item.releaseDate);
-    final queries = <String>{
-      if (localizedTitle.length >= 2) localizedTitle,
-      if (originalTitle.length >= 2) originalTitle,
-      if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
-      if (releaseYear > 0 && localizedTitle.length >= 2) '$localizedTitle $releaseYear',
-      if (releaseYear > 0 && originalTitle.length >= 2) '$originalTitle $releaseYear',
-    };
-
-    // Resolve title variants concurrently. The previous sequential lookups
-    // could leave the play button stuck on "Получаем ID…" for minutes.
-    final candidateBatches = await Future.wait(
-      queries.map((query) async {
-        try {
-          return await _kinopoisk.search(query).timeout(const Duration(seconds: 14));
-        } catch (e) {
-          debugPrint('[KinoKino] Kinopoisk title lookup failed for "$query": $e');
-          return <Map<String, dynamic>>[];
-        }
-      }),
-    );
-    final candidates = <Map<String, dynamic>>[
-      for (final batch in candidateBatches) ...batch,
-    ];
-
-    // Prefer exact IMDb cross-reference over title-only matching.
-    // A failure in one external-ID provider must not disable the other.
-    Map<String, dynamic> external = {};
+    // 2) Exact IMDb cross-reference first. It avoids ambiguous title matching.
     try {
-      external = await _tmdb.externalIds(widget.item.id, type: _type)
-          .timeout(const Duration(seconds: 8));
-    } catch (e) {
-      debugPrint('[KinoKino] TMDB external IDs lookup failed: $e');
-    }
-    final imdbId = external['imdb_id']?.toString() ?? '';
-    if (imdbId.isNotEmpty) {
-      try {
-        candidates.addAll(await _kinopoisk.byImdbId(imdbId)
-            .timeout(const Duration(seconds: 8)));
-      } catch (e) {
-        debugPrint('[KinoKino] IMDb-to-Kinopoisk lookup failed: $e');
+      final external = await _tmdb.externalIds(widget.item.id, type: _type)
+          .timeout(const Duration(seconds: 7));
+      final imdbId = external['imdb_id']?.toString() ?? '';
+      if (imdbId.isNotEmpty) {
+        final imdbMatches = await _kinopoisk.byImdbId(imdbId)
+            .timeout(const Duration(seconds: 8));
+        final valid = imdbMatches.where((item) {
+          final raw = item['filmId'] ?? item['kinopoiskId'] ?? item['id'];
+          final id = raw is num ? raw.toInt() : int.tryParse('$raw') ?? 0;
+          return id > 0;
+        }).toList();
+        if (valid.isNotEmpty) {
+          final selected = valid.first;
+          await _saveKinopoiskMatch(selected, title, year, 'imdb', .99);
+          return selected;
+        }
       }
+      final wikidataId = external['wikidata_id']?.toString() ?? '';
+      if (wikidataId.startsWith('Q')) {
+        final matches = await _kinopoisk.byWikidataId(wikidataId)
+            .timeout(const Duration(seconds: 8));
+        if (matches.isNotEmpty) {
+          final selected = _selectKinopoiskMatch(
+            matches, details: details, year: year, isSeries: _type == 'tv',
+          );
+          if (selected != null) {
+            await _saveKinopoiskMatch(selected, title, year, 'wikidata', .97);
+            return selected;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[KinoKino] external-ID lookup failed; falling back to title: $e');
     }
-    final wikidataId = external['wikidata_id']?.toString() ?? '';
-    if (wikidataId.isNotEmpty) {
+
+    // 3) Search the primary provider only. Do not start several expensive
+    // Wikidata requests for every spelling of the same title.
+    final queries = <String>{
+      if (title.length >= 2) title,
+      if (original.length >= 2 && original.toLowerCase() != title.toLowerCase()) original,
+      if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
+    };
+    final candidates = <Map<String, dynamic>>[];
+    for (final query in queries) {
       try {
-        candidates.addAll(await _kinopoisk.byWikidataId(wikidataId)
-            .timeout(const Duration(seconds: 8)));
+        candidates.addAll(await _kinopoisk.searchKinopoisk(query)
+            .timeout(const Duration(seconds: 10)));
       } catch (e) {
-        debugPrint('[KinoKino] Wikidata ID lookup failed: $e');
+        debugPrint('[KinoKino] primary title lookup failed for "$query": $e');
+      }
+      final selected = _selectKinopoiskMatch(
+        candidates, details: details, year: year, isSeries: _type == 'tv',
+      );
+      if (selected != null) {
+        await _saveKinopoiskMatch(selected, title, year, 'title', .90);
+        return selected;
       }
     }
 
-    return _selectKinopoiskMatch(
-      candidates,
-      details: details,
-      year: _yearFromDetails(details, widget.item.releaseDate),
-      isSeries: _type == 'tv',
+    // 4) Last-resort public index lookup, performed once rather than once per
+    // title variant. A temporary outage here no longer blocks primary search.
+    for (final query in queries.take(1)) {
+      try {
+        final fallback = await _kinopoisk.search(query)
+            .timeout(const Duration(seconds: 14));
+        candidates.addAll(fallback);
+      } catch (e) {
+        debugPrint('[KinoKino] public-index fallback failed: $e');
+      }
+    }
+    final selected = _selectKinopoiskMatch(
+      candidates, details: details, year: year, isSeries: _type == 'tv',
+    );
+    if (selected != null) {
+      await _saveKinopoiskMatch(selected, title, year, 'title_fallback', .85);
+    }
+    return selected;
+  }
+
+  Future<void> _saveKinopoiskMatch(
+    Map<String, dynamic> selected,
+    String title,
+    int year,
+    String method,
+    double confidence,
+  ) async {
+    final rawId = selected['filmId'] ?? selected['kinopoiskId'] ??
+        selected['kinopoisk_id'] ?? selected['id'];
+    final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
+    if (id <= 0) return;
+    await _kinopoisk.cacheMatch(
+      tmdbId: widget.item.id,
+      mediaType: _type,
+      kinopoiskId: id,
+      title: title,
+      releaseYear: year > 0 ? year : null,
+      imdbId: selected['imdbId']?.toString(),
+      wikidataId: selected['wikidataId']?.toString(),
+      matchMethod: method,
+      confidence: confidence,
     );
   }
 
