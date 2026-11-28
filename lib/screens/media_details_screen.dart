@@ -332,7 +332,8 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         debugPrint('[KinoKino] Related title search failed: $e');
       }
     }
-    return matches.where((item) => item.id != widget.item.id).firstOrNull;
+    final validMatches = matches.where((item) => item.id != widget.item.id).toList();
+    return validMatches.isEmpty ? null : validMatches.first;
   }
 
   Future<void> _mergeExternalSimilar(
