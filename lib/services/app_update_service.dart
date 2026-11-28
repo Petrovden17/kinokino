@@ -78,7 +78,6 @@ class AppUpdateService {
       deleteOnError: true,
       options: Options(
         headers: const {'Accept': 'application/octet-stream'},
-        responseType: ResponseType.bytes,
       ),
     );
     final apk = File(path);
