@@ -65,7 +65,7 @@ jobs:
           gradle = Path("android/app/build.gradle.kts")
           source = gradle.read_text(encoding="utf-8")
           source, count = re.subn(
-              r'ndkVersion\\s*=\\s*[^\\n]+',
+              r'ndkVersion\s*=\s*[^\n]+',
               'ndkVersion = "28.2.13676358"',
               source,
               count=1,
@@ -94,7 +94,7 @@ jobs:
           versions = []
           for path in candidates:
               text = path.read_text(encoding="utf-8")
-              versions += re.findall(r'com\\.android\\.application["\\s:=]+([0-9]+\\.[0-9]+\\.[0-9]+)', text)
+              versions += re.findall(r'com\.android\.application["\s:=]+([0-9]+\.[0-9]+\.[0-9]+)', text)
           if versions and not any(tuple(map(int, v.split("."))) >= (8, 5, 1) for v in versions):
               raise SystemExit("Android Gradle Plugin 8.5.1+ is required for 16 KB APK alignment")
           PY
