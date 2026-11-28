@@ -170,10 +170,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 
   Future<void> _installBetaRelease() async {
-    if (!Platform.isWindows) {
-      setState(() => _notice = 'Установка бета-версий сейчас доступна только в Windows.');
-      return;
-    }
     final release = _betaRelease;
     final asset = release?['beta_asset'];
     final url = asset is Map ? (asset['browser_download_url'] ?? '').toString() : '';
@@ -182,13 +178,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _notice = 'Бета-сборка пока не опубликована. Нажми «Проверить» позже.');
       return;
     }
-    setState(() { _betaInstalling = true; _notice = 'Загружаем и устанавливаем бета-версию…'; });
+    setState(() { _betaInstalling = true; _notice = 'Подготавливаем бета-версию…'; });
     try {
-      await _updates.downloadAndInstall(AppUpdateInfo(
-        tag: tag,
-        downloadUrl: url,
-        notes: (release?['body'] ?? '').toString(),
-      ));
+      if (Platform.isAndroid) {
+        final uri = Uri.tryParse(url);
+        if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+          throw StateError('Не удалось открыть ссылку загрузки APK.');
+        }
+        if (mounted) setState(() => _notice = 'Бета-версия $tag загружается. Откройте APK и подтвердите установку.');
+      } else {
+        await _updates.downloadAndInstall(AppUpdateInfo(
+          tag: tag,
+          downloadUrl: url,
+          notes: (release?['body'] ?? '').toString(),
+        ));
+      }
     } catch (e) {
       if (mounted) setState(() => _notice = 'Не удалось установить бета-версию: $e');
     } finally {
@@ -213,7 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Text(_betaLoading
               ? 'Проверяем тестовые сборки…'
               : release == null
-                  ? 'Пока нет опубликованной тестовой сборки. Новая бета появится после успешной сборки Windows.'
+                  ? 'Пока нет опубликованной тестовой сборки. Новая бета появится после успешной сборки для вашей платформы.'
                   : 'Последняя сборка: $name'),
           const SizedBox(height: 10),
           Wrap(spacing: 8, runSpacing: 8, children: [
