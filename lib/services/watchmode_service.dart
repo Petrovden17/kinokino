@@ -57,10 +57,25 @@ class WatchmodeService {
         return const [];
       }
     }
-    return related is List
-        ? related.whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row)).toList()
-        : const [];
+    if (related is! List) return const [];
+    final mapped = <Map<String, dynamic>>[];
+    for (final row in related.take(15)) {
+      if (row is Map) {
+        mapped.add(Map<String, dynamic>.from(row));
+        continue;
+      }
+      final relatedId = int.tryParse(row.toString());
+      if (relatedId == null || relatedId <= 0) continue;
+      try {
+        final response = await _dio.get('/title/$relatedId/details/');
+        if (response.data is Map) {
+          mapped.add(Map<String, dynamic>.from(response.data));
+        }
+      } catch (_) {
+        // Skip unavailable Watchmode entries; other catalogue sources remain.
+      }
+    }
+    return mapped;
   }
 
   Future<List<Map<String, dynamic>>> freeSources({
