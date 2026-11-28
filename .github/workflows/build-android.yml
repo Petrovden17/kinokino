@@ -5,7 +5,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   push:
@@ -251,3 +251,13 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish Android beta release
+        if: ${{ success() }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: KinoKino Android Beta ${{ github.run_number }}
+          prerelease: true
+          generate_release_notes: true
+          files: build/app/outputs/flutter-apk/app-release.apk
