@@ -131,8 +131,8 @@ class TmdbService {
     }
     if (year != null) {
       results.sort((a, b) {
-        final ay = int.tryParse(a.releaseDate.take(4).toString()) ?? 0;
-        final by = int.tryParse(b.releaseDate.take(4).toString()) ?? 0;
+        final ay = a.releaseDate.length >= 4 ? int.tryParse(a.releaseDate.substring(0, 4)) ?? 0 : 0;
+        final by = b.releaseDate.length >= 4 ? int.tryParse(b.releaseDate.substring(0, 4)) ?? 0 : 0;
         return (ay == year ? 0 : (ay - year).abs() + 1)
             .compareTo(by == year ? 0 : (by - year).abs() + 1);
       });
