@@ -88,6 +88,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       final external = await _tmdb.externalIds(widget.item.id, type: _type)
           .timeout(const Duration(seconds: 8));
       final imdbId = external['imdb_id']?.toString() ?? '';
+      _imdbId = imdbId.isEmpty ? null : imdbId;
       if (imdbId.isNotEmpty) {
           if (mounted) setState(() {});
         final imdbMatches = await _kinopoisk.byImdbId(imdbId)
@@ -250,7 +251,6 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       _details = details;
       _kpFilm = kpFilm;
       _kinopoiskId = kinopoiskId;
-      _imdbId = imdbId;
       _kpSeasons = kpSeasons;
       _kpVideos = kpVideos;
       _recommendations = recommendationsById.values.toList();
