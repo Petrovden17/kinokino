@@ -492,6 +492,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             if (finished) return;
             finished = true;
             setTimeout(() => notify('ready'), 500);
+            // Ask Android WebView to enter native fullscreen video mode.
+            try { if (typeof target.requestFullscreen === 'function') target.requestFullscreen().catch(() => {}); } catch (_) {}
           };
           if (isFrame) {
             target.addEventListener('load', ready, {once:true});
@@ -770,7 +772,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   void _scheduleTvControlsHide() {
     _tvControlsTimer?.cancel();
     if (!widget.tvMode || !_tvPlayerReady) return;
-    _tvControlsTimer = Timer(const Duration(seconds: 6), () {
+    _tvControlsTimer = Timer(const Duration(seconds: 5), () {
       if (mounted && _tvPlayerReady && _tvControlsVisible) {
         setState(() => _tvControlsVisible = false);
       }
@@ -781,6 +783,21 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    // Do not steal D-pad events from the visible Flutter player buttons.
+    if (_tvPlayerReady && _tvControlsVisible) {
+      _scheduleTvControlsHide();
+      return KeyEventResult.ignored;
+    }
+    // First remote activity after auto-hide reveals the bar; its first button
+    // receives autofocus and becomes the D-pad focus target.
+    if (_tvPlayerReady && !_tvControlsVisible) {
+      setState(() {
+        _tvControlsVisible = true;
+        _tvPointerVisible = false;
+      });
+      _scheduleTvControlsHide();
+      return KeyEventResult.handled;
+    }
     if (_tvPointerVisible) _scheduleTvPointerHide();
     if (key == LogicalKeyboardKey.select ||
         key == LogicalKeyboardKey.enter ||
@@ -934,7 +951,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       color: const Color(0xE8171A20), borderRadius: BorderRadius.circular(22), elevation: 18,
       child: Padding(padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12), child: Column(mainAxisSize: MainAxisSize.min, children: [
         Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          _tvControlButton(icon: Icons.replay_10_rounded, label: 'Назад на 10 секунд', onPressed: () => _sendTvPlayerCommand('seekBack')),
+          _tvControlButton(icon: Icons.replay_10_rounded, label: 'Назад на 10 секунд', autofocus: true, onPressed: () => _sendTvPlayerCommand('seekBack')),
           _tvControlButton(icon: Icons.play_arrow_rounded, label: 'Пауза / воспроизведение', onPressed: () => _sendTvPlayerCommand('playPause')),
           _tvControlButton(icon: Icons.forward_10_rounded, label: 'Вперёд на 10 секунд', onPressed: () => _sendTvPlayerCommand('seekForward')),
           const SizedBox(width: 12),
@@ -1050,6 +1067,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
                 onLoadStart: (controller, url) {
                   if (url != null) _sourceUrlByController[controller] = url.toString();
                 },
+                onEnterFullscreen: (_) => _enterFullscreen(),
+                onExitFullscreen: (_) => _leaveFullscreen(),
                 onLoadStop: (controller, url) async {
                   if (url != null) _sourceUrlByController[controller] = url.toString();
                   debugPrint('[KinoKino bootstrap] loaded: $url');
@@ -1217,7 +1236,8 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
             const Positioned.fill(
               child: ColoredBox(color: Colors.black),
             ),
-          if (widget.tvMode && _pageLoaded && _error == null)
+          if (widget.tvMode && _pageLoaded && _error == null &&
+              (!_tvPlayerReady || !_tvControlsVisible))
             Positioned.fill(
               child: Focus(
                 autofocus: true,
