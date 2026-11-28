@@ -88,6 +88,15 @@ class KinopoiskService {
     }
   }
 
+  /// Fast search against the primary Kinopoisk proxy only. Used for the
+  /// first playback lookup; Wikidata is a slower fallback, not a per-query step.
+  Future<List<Map<String, dynamic>>> searchKinopoisk(String query) async {
+    final data = await _invoke('search', query: query);
+    final items = data['films'] as List? ?? const [];
+    return items.whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
   Future<List<Map<String, dynamic>>> search(String query) async {
     final results = <Map<String, dynamic>>[];
     try {
