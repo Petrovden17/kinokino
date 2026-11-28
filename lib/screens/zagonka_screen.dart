@@ -280,6 +280,17 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           forMainFrameOnly: false,
           source: r"""
             (() => {
+              window.addEventListener('message', (event) => {
+                const data = event.data;
+                if (!data || data.channel !== 'kino-tv-player') return;
+                document.querySelectorAll('video').forEach((video) => { try {
+                  if (data.action === 'playPause') video.paused ? video.play() : video.pause();
+                  if (data.action === 'seekBack') video.currentTime = Math.max(0, video.currentTime - 10);
+                  if (data.action === 'seekForward') video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 10);
+                  if (data.action === 'speed' && Number.isFinite(data.value)) video.playbackRate = data.value;
+                  if (data.action === 'subtitles') Array.from(video.textTracks || []).forEach(track => track.mode = data.value ? 'showing' : 'disabled');
+                } catch (_) {} });
+              });
               const denyPopup = () => null;
               try {
                 Object.defineProperty(window, 'open', {
