@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart';
 
 class AppUpdateInfo {
   const AppUpdateInfo({required this.tag, required this.downloadUrl, required this.notes});
@@ -53,6 +54,57 @@ class AppUpdateService {
       }
     }
     throw StateError('Релиз $tag найден, но файл $assetName не опубликован.');
+  }
+
+  static const MethodChannel _androidInstaller =
+      MethodChannel('kinokino/android_installer');
+
+  Future<String> downloadAndroidApk(
+    AppUpdateInfo update, {
+    void Function(int received, int total)? onProgress,
+  }) async {
+    if (!Platform.isAndroid) {
+      throw UnsupportedError('Загрузка APK доступна только на Android.');
+    }
+    final temp = await getTemporaryDirectory();
+    final directory = Directory('${temp.path}/apk_updates');
+    await directory.create(recursive: true);
+    final safeTag = update.tag.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final path = '${directory.path}/kinokino-$safeTag.apk';
+    await _dio.download(
+      update.downloadUrl,
+      path,
+      onReceiveProgress: onProgress,
+      deleteOnError: true,
+      options: Options(
+        headers: const {'Accept': 'application/octet-stream'},
+        responseType: ResponseType.bytes,
+      ),
+    );
+    final apk = File(path);
+    if (!await apk.exists() || await apk.length() < 1024 * 1024) {
+      await apk.delete().catchError((_) => apk);
+      throw StateError('Скачанный APK повреждён или слишком мал.');
+    }
+    final handle = await apk.open();
+    final signature = await handle.read(4);
+    await handle.close();
+    if (signature.length < 4 || signature[0] != 0x50 || signature[1] != 0x4b) {
+      await apk.delete().catchError((_) => apk);
+      throw const FormatException('Загруженный файл не является APK-архивом.');
+    }
+    return path;
+  }
+
+  Future<bool> installAndroidApk(String path) async {
+    if (!Platform.isAndroid) {
+      throw UnsupportedError('Установка APK доступна только на Android.');
+    }
+    return await _androidInstaller.invokeMethod<bool>(
+          'installApk',
+          {'path': path},
+        ) ??
+        false;
   }
 
   Future<void> downloadAndInstall(AppUpdateInfo update) async {
