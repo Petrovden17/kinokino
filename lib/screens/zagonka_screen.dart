@@ -795,6 +795,16 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
       return KeyEventResult.ignored;
     }
     final key = event.logicalKey;
+    // On Android TV, Back always leaves the player route and returns to the app.
+    // Never delegate Back to WebView history or expose the source website.
+    if (key == LogicalKeyboardKey.escape ||
+        key == LogicalKeyboardKey.goBack ||
+        key == LogicalKeyboardKey.browserBack) {
+      _tvControlsTimer?.cancel();
+      _tvPointerTimer?.cancel();
+      Navigator.of(context).maybePop();
+      return KeyEventResult.handled;
+    }
     // Do not steal D-pad events from the visible Flutter player buttons.
     if (_tvPlayerReady && _tvControlsVisible) {
       _scheduleTvControlsHide();
@@ -994,9 +1004,10 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: _playerWindowId == null,
+      // TV Back exits this screen to the app; it must never navigate WebView history.
+      canPop: widget.tvMode || _playerWindowId == null,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _playerWindowId != null) {
+        if (!widget.tvMode && !didPop && _playerWindowId != null) {
           setState(() {
             _playerWindowId = null;
             _playerWindowOpened = false;
