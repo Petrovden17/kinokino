@@ -109,21 +109,12 @@ class KinopoiskService {
     return _resultRows(data);
   }
 
-  Future<List<Map<String, dynamic>>> search(String query) async {
-    final results = <Map<String, dynamic>>[];
-    try {
-      final data = await _invoke('search', query: query);
-      results.addAll(_resultRows(data));
-    } catch (_) {
-      // Keep resolving IDs through the public index if the private API fails.
-    }
-    try {
-      results.addAll(await _searchWikidata(query));
-    } catch (_) {
-      // A temporary Wikidata outage must not discard Kinopoisk API results.
-    }
-    return results;
-  }
+  /// Public catalog lookup backed only by Wikidata; no Kinopoisk API token.
+  Future<List<Map<String, dynamic>>> searchWikidata(String query) =>
+      _searchWikidata(query);
+
+  Future<List<Map<String, dynamic>>> search(String query) =>
+      _searchWikidata(query);
 
   Future<List<Map<String, dynamic>>> byImdbId(String imdbId) async {
     final id = imdbId.trim();
