@@ -10,10 +10,11 @@ import '../widgets/poster_card.dart';
 import 'player_screen.dart';
 import 'zagonka_screen.dart';
 class MediaDetailsScreen extends StatefulWidget {
-  const MediaDetailsScreen({super.key, required this.item, this.preferredAudioLanguage = 'auto', this.preferredVideoQuality = 'auto'});
+  const MediaDetailsScreen({super.key, required this.item, this.preferredAudioLanguage = 'auto', this.preferredVideoQuality = 'auto', this.tvMode = false});
   final MediaItem item;
   final String preferredAudioLanguage;
   final String preferredVideoQuality;
+  final bool tvMode;
   @override State<MediaDetailsScreen> createState() => _MediaDetailsScreenState();
 }
 class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
@@ -309,6 +310,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
               item: items[i],
               preferredAudioLanguage: widget.preferredAudioLanguage,
               preferredVideoQuality: widget.preferredVideoQuality,
+              tvMode: widget.tvMode,
             ))),
         ),
       )),
@@ -738,6 +740,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         title: _displayTitle,
         kinopoiskId: id,
         isSeries: _type == 'tv',
+        tvMode: widget.tvMode,
       ),
     ));
   }
