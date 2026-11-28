@@ -306,7 +306,34 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         source['release_year'];
     final year = rawYear is num ? rawYear.toInt() : int.tryParse('$rawYear');
     List<MediaItem> matches = const [];
-    if (RegExp(r'^tt[0-9]{5,12}
+    if (RegExp(r'^tt[0-9]{5,12}$').hasMatch(imdbId)) {
+      try {
+        matches = await _tmdb.findByExternalId(imdbId, mediaType: _type)
+            .timeout(const Duration(seconds: 12));
+      } catch (e) {
+        debugPrint('[KinoKino] IMDb-to-TMDB mapping failed: $e');
+      }
+    }
+    if (matches.isNotEmpty) {
+      return matches.firstWhere(
+        (item) => item.id != widget.item.id,
+        orElse: () => matches.first,
+      );
+    }
+
+    if (title.isNotEmpty) {
+      try {
+        matches = await _tmdb.searchRelated(
+          title,
+          mediaType: _type,
+          year: year,
+        ).timeout(const Duration(seconds: 12));
+      } catch (e) {
+        debugPrint('[KinoKino] Related title search failed: $e');
+      }
+    }
+    return matches.where((item) => item.id != widget.item.id).firstOrNull;
+  }
 
   Future<void> _mergeExternalSimilar(
     List<Map<String, dynamic>> sourceItems,
