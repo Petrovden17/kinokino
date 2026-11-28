@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/app_settings.dart';
 import '../services/settings_service.dart';
@@ -22,6 +21,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late AppSettings _value;
   String? _notice;
   bool _checkingUpdates = false;
+  bool _downloadingApk = false;
+  double? _apkProgress;
+  int _apkReceived = 0;
+  int _apkTotal = 0;
+  String? _downloadedApkPath;
   bool _isCreator = false;
   bool _betaLoading = false;
   bool _betaInstalling = false;
@@ -181,11 +185,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() { _betaInstalling = true; _notice = 'Подготавливаем бета-версию…'; });
     try {
       if (Platform.isAndroid) {
-        final uri = Uri.tryParse(url);
-        if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-          throw StateError('Не удалось открыть ссылку загрузки APK.');
-        }
-        if (mounted) setState(() => _notice = 'Бета-версия $tag загружается. Откройте APK и подтвердите установку.');
+        await _downloadAndInstallAndroid(AppUpdateInfo(
+          tag: tag,
+          downloadUrl: url,
+          notes: (release?['body'] ?? '').toString(),
+        ));
       } else {
         await _updates.downloadAndInstall(AppUpdateInfo(
           tag: tag,
@@ -240,8 +244,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 МБ';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
+  }
+
+  Future<void> _downloadAndInstallAndroid(AppUpdateInfo update) async {
+    if (!Platform.isAndroid || _downloadingApk) return;
+    setState(() {
+      _downloadingApk = true;
+      _apkProgress = 0;
+      _apkReceived = 0;
+      _apkTotal = 0;
+      _notice = 'Скачиваем обновление ${update.tag}…';
+    });
+    try {
+      final path = await _updates.downloadAndroidApk(
+        update,
+        onProgress: (received, total) {
+          if (!mounted) return;
+          setState(() {
+            _apkReceived = received;
+            _apkTotal = total;
+            _apkProgress = total > 0 ? (received / total).clamp(0.0, 1.0) : null;
+            _notice = total > 0
+                ? 'Скачиваем обновление: ${(_apkProgress! * 100).round()}% '
+                    '(${_formatBytes(received)} из ${_formatBytes(total)})'
+                : 'Скачиваем обновление: ${_formatBytes(received)}';
+          });
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _downloadingApk = false;
+        _downloadedApkPath = path;
+        _apkProgress = 1;
+        _notice = 'APK ${update.tag} скачан (${_formatBytes(await File(path).length())}). Запускаем установщик…';
+      });
+      final launched = await _updates.installAndroidApk(path);
+      if (!mounted) return;
+      setState(() {
+        _notice = launched
+            ? 'Открылось системное окно Android. Подтверди установку обновления.'
+            : 'Разреши KinoKino устанавливать приложения в настройках Android, затем нажми «Установить скачанный APK».';
+      });
+    } catch (e) {
+      if (mounted) setState(() => _notice = 'Не удалось скачать или подготовить APK: $e');
+    } finally {
+      if (mounted) setState(() => _downloadingApk = false);
+    }
+  }
+
+  Future<void> _installDownloadedAndroidApk() async {
+    final path = _downloadedApkPath;
+    if (path == null || !await File(path).exists()) {
+      if (mounted) setState(() => _notice = 'Скачанный APK не найден. Проверь обновления ещё раз.');
+      return;
+    }
+    try {
+      final launched = await _updates.installAndroidApk(path);
+      if (mounted) setState(() => _notice = launched
+          ? 'Открылось системное окно Android. Подтверди установку.'
+          : 'Разреши установку приложений для KinoKino в настройках Android, затем повтори попытку.');
+    } catch (e) {
+      if (mounted) setState(() => _notice = 'Не удалось запустить установщик: $e');
+    }
+  }
+
   Future<void> _checkForUpdates() async {
-    if (_checkingUpdates) return;
+    if (_checkingUpdates || _downloadingApk) return;
     if (!Platform.isWindows && !Platform.isAndroid) {
       setState(() => _notice = 'Проверка обновлений для этой платформы пока не поддерживается.');
       return;
@@ -264,25 +335,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           builder: (dialogContext) => AlertDialog(
             title: const Text('Доступно обновление KinoKino'),
             content: SingleChildScrollView(child: Text(
-              'Найдена версия ${update.tag}. APK будет загружен через браузер. После загрузки откройте файл и подтвердите установку.\\n\\n${update.notes.isEmpty ? 'Исправления и улучшения.' : update.notes}',
+              'Найдена версия ${update.tag}. APK будет скачан внутри приложения. Прогресс будет виден в настройках. После загрузки Android попросит подтвердить установку.\\n\\n${update.notes.isEmpty ? 'Исправления и улучшения.' : update.notes}',
             )),
             actions: [
               TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Позже')),
               FilledButton.icon(
                 onPressed: () => Navigator.pop(dialogContext, true),
                 icon: const Icon(Icons.download),
-                label: const Text('Скачать APK'),
+                label: const Text('Скачать и установить'),
               ),
             ],
           ),
         );
-        if (download == true) {
-          final uri = Uri.tryParse(update.downloadUrl);
-          if (uri == null || !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-            throw StateError('Не удалось открыть ссылку загрузки APK.');
-          }
-          if (mounted) setState(() => _notice = 'Откройте загруженный APK и подтвердите обновление приложения.');
-        }
+        if (download == true) await _downloadAndInstallAndroid(update);
       } else {
         setState(() => _notice = 'Доступно обновление ${update.tag}.');
         final install = await showDialog<bool>(
@@ -324,11 +389,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: (_notice!.contains('последняя версия') ? Colors.green : Theme.of(context).colorScheme.primary).withValues(alpha: .45)),
           ),
-          child: Row(children: [
-            Icon(_notice!.contains('последняя версия') ? Icons.check_circle_outline : Icons.info_outline,
-                color: _notice!.contains('последняя версия') ? Colors.greenAccent : Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 10),
-            Expanded(child: SelectableText(_notice!, style: const TextStyle(fontWeight: FontWeight.w600))),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Icon(_notice!.contains('последняя версия') ? Icons.check_circle_outline : Icons.info_outline,
+                  color: _notice!.contains('последняя версия') ? Colors.greenAccent : Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 10),
+              Expanded(child: SelectableText(_notice!, style: const TextStyle(fontWeight: FontWeight.w600))),
+            ]),
+            if (_downloadingApk) ...[
+              const SizedBox(height: 12),
+              LinearProgressIndicator(value: _apkProgress),
+              const SizedBox(height: 6),
+              Text(_apkTotal > 0
+                  ? '${(_apkProgress! * 100).round()}% · ${_formatBytes(_apkReceived)} / ${_formatBytes(_apkTotal)}'
+                  : '${_formatBytes(_apkReceived)} загружено'),
+            ],
           ]),
         ),
       ),
@@ -465,6 +540,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             : const Icon(Icons.system_update_alt),
         onTap: _checkingUpdates ? null : _checkForUpdates,
       ),
+      if (Platform.isAndroid && _downloadedApkPath != null) ...[
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: _downloadingApk ? null : _installDownloadedAndroidApk,
+          icon: const Icon(Icons.install_mobile),
+          label: const Text('Установить скачанный APK'),
+        ),
+      ],
     ])),
   );
 }
