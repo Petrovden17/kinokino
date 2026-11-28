@@ -110,7 +110,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
             matches, details: details, year: year, isSeries: _type == 'tv',
           );
           if (selected != null) {
-            await _saveKinopoiskMatch(selected, title, year, 'wikidata', .97);
+            _saveKinopoiskMatch(selected, title, year, 'wikidata', .97);
             return selected;
           }
         }
@@ -138,7 +138,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
         candidates, details: details, year: year, isSeries: _type == 'tv',
       );
       if (selected != null) {
-        await _saveKinopoiskMatch(selected, title, year, 'title', .90);
+        _saveKinopoiskMatch(selected, title, year, 'title', .90);
         return selected;
       }
     }
@@ -158,7 +158,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       candidates, details: details, year: year, isSeries: _type == 'tv',
     );
     if (selected != null) {
-      await _saveKinopoiskMatch(selected, title, year, 'title_fallback', .85);
+      _saveKinopoiskMatch(selected, title, year, 'title_fallback', .85);
     }
     return selected;
   }
