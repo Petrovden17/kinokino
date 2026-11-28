@@ -88,22 +88,32 @@ class KinopoiskService {
     }
   }
 
+  /// Extracts result rows from the response variants used by Kinopoisk API
+  /// versions and proxy deployments.
+  List<Map<String, dynamic>> _resultRows(Map<String, dynamic> data) {
+    dynamic rows = data['films'] ?? data['items'] ?? data['results'];
+    if (rows is! List && data['data'] is Map) {
+      final nested = Map<String, dynamic>.from(data['data'] as Map);
+      rows = nested['films'] ?? nested['items'] ?? nested['results'];
+    }
+    if (rows is! List && data['data'] is List) rows = data['data'];
+    if (rows is! List) return const [];
+    return rows.whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
   /// Fast search against the primary Kinopoisk proxy only. Used for the
   /// first playback lookup; Wikidata is a slower fallback, not a per-query step.
   Future<List<Map<String, dynamic>>> searchKinopoisk(String query) async {
     final data = await _invoke('search', query: query);
-    final items = data['films'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
+    return _resultRows(data);
   }
 
   Future<List<Map<String, dynamic>>> search(String query) async {
     final results = <Map<String, dynamic>>[];
     try {
       final data = await _invoke('search', query: query);
-      final items = data['films'] as List? ?? const [];
-      results.addAll(items.whereType<Map>()
-          .map((item) => Map<String, dynamic>.from(item)));
+      results.addAll(_resultRows(data));
     } catch (_) {
       // Keep resolving IDs through the public index if the private API fails.
     }
@@ -119,9 +129,7 @@ class KinopoiskService {
     final id = imdbId.trim();
     if (!RegExp(r'^tt[0-9]{5,12}$').hasMatch(id)) return const [];
     final data = await _invoke('imdb', imdbId: id);
-    final items = data['items'] as List? ?? data['films'] as List? ?? const [];
-    return items.whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item)).toList();
+    return _resultRows(data);
   }
 
   Future<List<Map<String, dynamic>>> byWikidataId(String entityId) async {
