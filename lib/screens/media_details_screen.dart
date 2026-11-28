@@ -115,29 +115,9 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       debugPrint('[KinoKino] TMDB Wikidata ID lookup failed: $e');
     }
 
-    // Public Wikidata title search is the fallback. Search both localized
-    // and original titles; no private proxy request is made.
-    final queries = <String>{
-      if (title.length >= 2) title,
-      if (original.length >= 2 && original.toLowerCase() != title.toLowerCase()) original,
-      if (widget.item.title.trim().length >= 2) widget.item.title.trim(),
-    };
-    final candidates = <Map<String, dynamic>>[];
-    for (final query in queries) {
-      try {
-        candidates.addAll(await _kinopoisk.searchWikidata(query)
-            .timeout(const Duration(seconds: 14)));
-      } catch (e) {
-        debugPrint('[KinoKino] public Wikidata lookup failed for "$query": $e');
-      }
-      final selected = _selectKinopoiskMatch(
-        candidates, details: details, year: year, isSeries: _type == 'tv',
-      );
-      if (selected != null) {
-        _saveKinopoiskMatch(selected, title, year, 'wikidata_title', 85);
-        return selected;
-      }
-    }
+    // If no public Kinopoisk mapping exists, the watch screen performs
+    // a direct IMDb/title search in KinoBox. Do not spend another 30+ seconds
+    // searching Wikidata labels for an ID that may not exist yet.
     return null;
   }
 
