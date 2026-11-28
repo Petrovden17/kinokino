@@ -56,6 +56,49 @@ jobs:
           gradle.write_text(source, encoding="utf-8")
           PY
 
+      - name: Configure 16 KB page-size compatibility
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle = Path("android/app/build.gradle.kts")
+          source = gradle.read_text(encoding="utf-8")
+          source, count = re.subn(
+              r'ndkVersion\s*=\s*[^\n]+',
+              'ndkVersion = "28.2.13676358"',
+              source,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit("Could not configure Android NDK r28 for 16 KB page sizes")
+          if "useLegacyPackaging" not in source:
+              marker = "    buildTypes {"
+              if marker not in source:
+                  raise SystemExit("Could not find Android buildTypes block")
+              source = source.replace(
+                  marker,
+                  """    packaging {
+                  jniLibs {
+                      useLegacyPackaging = false
+                  }
+              }
+
+              buildTypes {""",
+                  1,
+              )
+          gradle.write_text(source, encoding="utf-8")
+
+          root = Path("android")
+          candidates = list(root.glob("settings.gradle*")) + list(root.glob("build.gradle*"))
+          versions = []
+          for path in candidates:
+              text = path.read_text(encoding="utf-8")
+              versions += re.findall(r'com\.android\.application["\s:=]+([0-9]+\.[0-9]+\.[0-9]+)', text)
+          if versions and not any(tuple(map(int, v.split("."))) >= (8, 5, 1) for v in versions):
+              raise SystemExit("Android Gradle Plugin 8.5.1+ is required for 16 KB APK alignment")
+          PY
+
       - name: Restore persistent Android signing key
         uses: actions/cache@v4
         with:
@@ -187,6 +230,12 @@ jobs:
 
       - name: Build Android APK
         run: flutter build apk --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }} --dart-define=APP_BUILD=${{ github.run_number }}
+
+      - name: Verify APK 16 KB ZIP alignment
+        run: |
+          ZIPALIGN="$(find "$ANDROID_HOME/build-tools" -name zipalign -type f | sort -V | tail -n 1)"
+          test -n "$ZIPALIGN"
+          "$ZIPALIGN" -c -P 16 -v 4 build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK
         if: always() && hashFiles('build/app/outputs/flutter-apk/app-release.apk') != ''
