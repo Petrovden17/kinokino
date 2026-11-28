@@ -117,9 +117,22 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       debugPrint('[KinoKino] TMDB Wikidata ID lookup failed: $e');
     }
 
-    // If no public Kinopoisk mapping exists, the watch screen performs
-    // a direct IMDb/title search in KinoBox. Do not spend another 30+ seconds
-    // searching Wikidata labels for an ID that may not exist yet.
+    // IMDb/Wikidata properties are incomplete for many catalogue entries.
+    // As a final connected-source lookup, search Wikidata labels in Russian
+    // and English and keep only candidates passing the title/year/type matcher.
+    try {
+      final candidates = await _kinopoisk.searchWikidata(title)
+          .timeout(const Duration(seconds: 10));
+      final selected = _selectKinopoiskMatch(
+        candidates, details: details, year: year, isSeries: _type == 'tv',
+      );
+      if (selected != null) {
+        _saveKinopoiskMatch(selected, title, year, 'wikidata_label_search', 80);
+        return selected;
+      }
+    } catch (e) {
+      debugPrint('[KinoKino] Kinopoisk label lookup unavailable: $e');
+    }
     return null;
   }
 
