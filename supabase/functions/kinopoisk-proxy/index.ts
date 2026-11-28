@@ -25,6 +25,54 @@ Deno.serve(async (req: Request) => {
   try {
     const body = await req.json();
     const action = String(body?.action ?? "");
+
+    // Persist verified TMDB → Kinopoisk matches so later opens do not need
+    // another remote search. Use the service role only inside this function.
+    if (action === "cache") {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL");
+      const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      const tmdbId = Number(body?.tmdb_id);
+      const kinopoiskId = Number(body?.kinopoisk_id);
+      const mediaType = String(body?.media_type ?? "");
+      const confidence = Number(body?.confidence);
+      if (!supabaseUrl || !serviceKey) return json({ error: "Cache storage is not configured" }, 503);
+      if (!Number.isSafeInteger(tmdbId) || tmdbId <= 0 ||
+          !Number.isSafeInteger(kinopoiskId) || kinopoiskId <= 0 ||
+          !["movie", "tv"].includes(mediaType) ||
+          !Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+        return json({ error: "Invalid cache mapping" }, 400);
+      }
+      const cached = await fetch(
+        supabaseUrl.replace(/\\/$/, "") + "/rest/v1/kinokino_id_map?on_conflict=tmdb_id,media_type",
+        {
+          method: "POST",
+          headers: {
+            "apikey": serviceKey,
+            "Authorization": "Bearer " + serviceKey,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify({
+            tmdb_id: tmdbId,
+            media_type: mediaType,
+            kinopoisk_id: kinopoiskId,
+            title: String(body?.title ?? "").slice(0, 200),
+            release_year: Number.isInteger(Number(body?.release_year)) ? Number(body.release_year) : null,
+            imdb_id: body?.imdb_id ? String(body.imdb_id).slice(0, 20) : null,
+            wikidata_id: body?.wikidata_id ? String(body.wikidata_id).slice(0, 20) : null,
+            match_method: String(body?.match_method ?? "title").slice(0, 40),
+            confidence,
+            status: "matched",
+          }),
+        },
+      );
+      if (!cached.ok) {
+        const detail = await cached.text();
+        return json({ error: "Could not cache Kinopoisk mapping", detail: detail.slice(0, 300) }, 502);
+      }
+      return json({ cached: true });
+    }
+
     const filmId = Number(body?.film_id);
     let path: string;
     if (action === "search") {
