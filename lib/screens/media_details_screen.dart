@@ -89,8 +89,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
           .timeout(const Duration(seconds: 8));
       final imdbId = external['imdb_id']?.toString() ?? '';
       if (imdbId.isNotEmpty) {
-        _imdbId = imdbId;
-        if (mounted) setState(() {});
+          if (mounted) setState(() {});
         final imdbMatches = await _kinopoisk.byImdbId(imdbId)
             .timeout(const Duration(seconds: 10));
         final selectedByImdb = _selectKinopoiskMatch(
