@@ -22,6 +22,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
   final _kinopoisk = KinopoiskService();
   Map<String, dynamic>? _kpFilm;
   int? _kinopoiskId;
+  String? _imdbId;
   List<Map<String, dynamic>> _kpSeasons = [];
   List<Map<String, dynamic>> _kpVideos = [];
 
@@ -237,6 +238,14 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     int? kinopoiskId;
     List<Map<String, dynamic>> kpSeasons = [];
     List<Map<String, dynamic>> kpVideos = [];
+    String? imdbId;
+    try {
+      final external = await _tmdb.externalIds(widget.item.id, type: _type)
+          .timeout(const Duration(seconds: 8));
+      imdbId = external['imdb_id']?.toString();
+    } catch (e) {
+      debugPrint('[KinoKino] IMDb ID lookup unavailable: $e');
+    }
     try {
       final selected = await _findKinopoiskMatch(details);
       if (selected != null) {
@@ -282,6 +291,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       _details = details;
       _kpFilm = kpFilm;
       _kinopoiskId = kinopoiskId;
+      _imdbId = imdbId;
       _kpSeasons = kpSeasons;
       _kpVideos = kpVideos;
       _recommendations = recommendationsById.values.toList();
@@ -744,18 +754,16 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
       }
     }
     if (!mounted) return;
+    if (!mounted) return;
     if (id == null || id <= 0) {
-      debugPrint('[KinoKino] no Kinopoisk ID resolved for TMDB item ${widget.item.id}; player was not opened.');
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Не удалось найти фильм в каталоге источников. Попробуй позже или выбери другой фильм.'),
-        duration: Duration(seconds: 4),
-      ));
-      return;
+      debugPrint('[KinoKino] no Kinopoisk ID for TMDB item ${widget.item.id}; trying title/IMDb search in KinoBox.');
     }
     await Navigator.push(context, MaterialPageRoute(
       builder: (_) => ZagonkaScreen(
         title: _displayTitle,
         kinopoiskId: id,
+        imdbId: _imdbId,
+        year: _releaseYear,
         isSeries: _type == 'tv',
       ),
     ));
