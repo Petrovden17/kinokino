@@ -271,7 +271,7 @@ class KinopoiskService {
       final instance = row['instance'] is Map ? row['instance']['value']?.toString() ?? '' : '';
       final filmId = int.tryParse(rawKpId);
       if (!entityId.startsWith('Q') || filmId == null || filmId <= 0) continue;
-      final year = RegExp(r'^(\\d{4})').firstMatch(date)?.group(1) ?? '';
+      final year = RegExp(r'^(\d{4})').firstMatch(date)?.group(1) ?? '';
       final isSeries = instance.endsWith('/Q5398426') ||
           instance.endsWith('/Q1259759') || instance.endsWith('/Q15416');
       results.add({
