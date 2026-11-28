@@ -86,6 +86,18 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     try {
       final external = await _tmdb.externalIds(widget.item.id, type: _type)
           .timeout(const Duration(seconds: 8));
+      final imdbId = external['imdb_id']?.toString() ?? '';
+      if (imdbId.isNotEmpty) {
+        final imdbMatches = await _kinopoisk.byImdbId(imdbId)
+            .timeout(const Duration(seconds: 10));
+        final selectedByImdb = _selectKinopoiskMatch(
+          imdbMatches, details: details, year: year, isSeries: _type == 'tv',
+        );
+        if (selectedByImdb != null) {
+          _saveKinopoiskMatch(selectedByImdb, title, year, 'imdb_wikidata', 99);
+          return selectedByImdb;
+        }
+      }
       final wikidataId = external['wikidata_id']?.toString() ?? '';
       if (wikidataId.startsWith('Q')) {
         final matches = await _kinopoisk.byWikidataId(wikidataId)
