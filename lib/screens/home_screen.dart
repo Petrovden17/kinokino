@@ -418,11 +418,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(children: [
           Text('KinoKino', style: TextStyle(fontSize: tvLayout ? 32 : 25, fontWeight: FontWeight.w900)),
           const Spacer(),
-          IconButton(
-            tooltip: 'Удиви меня',
-            onPressed: _surpriseMe,
-            icon: const Icon(Icons.casino_outlined, color: Color(0xFFFFD21F)),
-          ),
           IconButton(onPressed: () => setState(() => _selectedTab = 2), icon: const Icon(Icons.search)),
           IconButton(onPressed: () => _openPage(SettingsScreen(service: widget.settingsService)), icon: const Icon(Icons.settings_outlined)),
         ]),
@@ -473,10 +468,52 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _catalogPage() => CustomScrollView(slivers: [
-    const SliverToBoxAdapter(child: Padding(padding: EdgeInsets.fromLTRB(18, 20, 18, 8),
-      child: Text('Каталог', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w900)))),
+    SliverToBoxAdapter(child: Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 17, 12, 17),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF263B58), Color(0xFF171D2C), Color(0xFF302442)],
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Colors.white.withValues(alpha: .09)),
+        ),
+        child: Row(children: [
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('ТВОЯ СЛЕДУЮЩАЯ ИСТОРИЯ',
+              style: TextStyle(color: AppTheme.aqua, fontSize: 9, letterSpacing: 1.5, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 5),
+            const Text('Каталог', style: TextStyle(fontSize: 27, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 3),
+            Text('Фильмы, сериалы и подборки по настроению',
+              style: TextStyle(color: Colors.white.withValues(alpha: .68), fontSize: 11)),
+          ])),
+          const SizedBox(width: 8),
+          FilledButton.tonalIcon(
+            onPressed: _loading ? null : _surpriseMe,
+            icon: const Icon(Icons.casino_outlined, size: 18),
+            label: const Text('Удиви меня'),
+            style: FilledButton.styleFrom(
+              foregroundColor: const Color(0xFFFFD21F),
+              backgroundColor: const Color(0x22FFD21F),
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 12),
+            ),
+          ),
+        ]),
+      ),
+    )),
     SliverToBoxAdapter(child: _filters()),
-    SliverToBoxAdapter(child: _heading('Фильмы и сериалы')),
+    SliverToBoxAdapter(child: Padding(
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
+      child: Row(children: [
+        const Text('Фильмы и сериалы', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+        const Spacer(),
+        Text('${_items.length} результатов',
+          style: TextStyle(color: Colors.white.withValues(alpha: .55), fontSize: 11)),
+      ]),
+    )),
     _grid(),
   ]);
 
