@@ -480,6 +480,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         let waitingForPlayer = false;
         let launchNotified = false;
         let launchActivated = false;
+        const autoLaunch = __KINO_TV_AUTO_LAUNCH__;
         const notify = (state) => {
           try { window.flutter_inappwebview.callHandler('playerState', {state}); } catch (_) {}
         };
@@ -526,8 +527,23 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
               /смотреть онлайн|смотреть фильм|смотреть сери|смотреть|watch online|watch now|play|воспроизвести|запустить/.test(text);
           });
           if (!candidate) return false;
-          // Isolate only the launch control until it is tapped. Once the actual
-          // embedded player appears, detect() replaces this view with the player.
+          if (autoLaunch && launchActivated) return true;
+          if (!launchNotified) {
+            launchNotified = true;
+            notify('launch');
+          }
+          if (autoLaunch && !launchActivated) {
+            // Android TV opens the site's actual launch control automatically.
+            // This preserves the source site's session and player initialization.
+            launchActivated = true;
+            notify('loading');
+            setTimeout(() => {
+              try { candidate.click(); } catch (_) {}
+              setTimeout(detect, 350);
+            }, 120);
+            return true;
+          }
+          // Keep the original visible launch control for non-TV platforms.
           let branch = candidate;
           while (branch && branch !== document.body && branch.parentElement) {
             const parent = branch.parentElement;
@@ -547,10 +563,6 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
           }).forEach(([key,value]) => candidate.style.setProperty(key,value,'important'));
           candidate.style.setProperty('outline', '3px solid #FFD21F', 'important');
           try { candidate.focus({preventScroll:true}); } catch (_) {}
-          if (!launchNotified) {
-            launchNotified = true;
-            notify('launch');
-          }
           return true;
         };
         document.addEventListener('click', (event) => {
@@ -578,7 +590,7 @@ class _ZagonkaScreenState extends State<ZagonkaScreen> {
         detect();
         setInterval(detect, 700);
       })();
-    """;
+    """.replaceAll("__KINO_TV_AUTO_LAUNCH__", widget.tvMode ? "true" : "false");
     try {
       await controller.evaluateJavascript(source: script);
       if (widget.tvMode) {
