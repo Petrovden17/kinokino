@@ -169,7 +169,7 @@ class _MediaDetailsScreenState extends State<MediaDetailsScreen> {
     int year,
     String method,
     double confidence,
-  ) async {
+  ) {
     final rawId = selected['filmId'] ?? selected['kinopoiskId'] ??
         selected['kinopoisk_id'] ?? selected['id'];
     final id = rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0;
