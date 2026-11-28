@@ -56,7 +56,7 @@ class MediaItem {
   // Explicit TMDB media_type wins; related endpoints may omit it or include
   // fields that otherwise make a movie look like a TV result.
   factory MediaItem.fromJson(Map<String, dynamic> json) => MediaItem(
-    id: json['id'] as int? ?? 0,
+    id: json['id'] is num ? (json['id'] as num).toInt() : int.tryParse((json['id'] ?? '').toString()) ?? 0,
     title: (json['title'] ?? json['name'] ?? 'Без названия').toString(),
     overview: (json['overview'] ?? '').toString(),
     posterPath: json['poster_path'] as String?,
